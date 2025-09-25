@@ -33,19 +33,34 @@
         <button class="panel-close" @click="closePanel" aria-label="Close">✕</button>
       </div>
       <div class="panel-content">
-        <div v-if="capacityLoading">Loading capacity…</div>
-        <div v-else-if="capacityError" style="color:#b00020">{{ capacityError }}</div>
+  <!-- Capacity -->
+  <div v-if="capacityLoading">Loading capacity…</div>
+  <div v-else-if="capacityError" style="color:#b00020">{{ capacityError }}</div>
+  <template v-else>
+    <p v-if="capacityYear">Latest year: {{ capacityYear }}</p>
+    <div class="chart-box">
+      <canvas ref="capacityChart"></canvas>
+    </div>
+    <!-- <div style="margin-top:10px;">
+      <small>Installed capacity in MW by technology</small>
+    </div> -->
+  </template>
+  <div style="margin-top: 40px;"><span><h3>Generation by technology</h3></span></div>
+  <!-- Generation (NOT nested under capacity anymore) -->
+  <div v-if="generationLoading" style="margin-top:16px;">Loading generation…</div>
+  <div v-else-if="generationError" style="margin-top:16px;color:#b00020">{{ generationError }}</div>
+  <template v-else>
+    <p v-if="generationDateLabel" style="margin-top:16px;">{{ generationDateLabel }}</p>
+    <div class="chart-box chart-box--sm">
+      <canvas ref="generationChart"></canvas>
+    </div>
+    <div style="margin-top:10px;">
+      <small>Hourly generation (MW) by technology</small>
+    </div>
+  </template>
+</div>
 
-        <template v-else>
-          <p v-if="capacityYear">Latest year: {{ capacityYear }}</p>
-          <div class="chart-box">
-            <canvas ref="capacityChart"></canvas>
-          </div>
-          <div style="margin-top:10px;">
-            <small>Installed capacity in MW by technology</small>
-          </div>
-        </template>
-      </div>
+
     </aside>
   </transition>
 
@@ -108,8 +123,16 @@
 </template>
 
 <script>
+const SUPPORTED_PRICE_ISO2 = new Set([
+  // Adjust this list to what your API supports
+  'AL','AT','BA','BE','BG','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB',
+  'GR','HR','HU','IE','IS','IT','LT','LU','LV','ME','MK','MT','NL','NO','PL',
+  'PT','RO','RS','SE','SI','SK','TR','UA'
+])
+import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import Chart from 'chart.js/auto'
+import 'chartjs-adapter-date-fns' // <- add this for the time scale
 import axios from 'axios'
 import { scaleSequential } from 'd3-scale'
 import {
@@ -134,6 +157,24 @@ export default {
       capacityYear: null,
       capacityItems: [],
       capacityChartInstance: null,
+      generationLoading: false,
+      generationError: null,
+      generationDateLabel: null,
+      generationItems: [],
+      generationChartInstance: null,
+      psrColors: {
+        'Solar':        { border: '#f5b000', fill: 'rgba(245,176,0,0.45)' },
+        'Wind Onshore': { border: '#2ca02c', fill: 'rgba(44,160,44,0.45)' },
+        'Nuclear':      { border: '#8e44ad', fill: 'rgba(142,68,173,0.45)' },
+        'Fossil Gas':   { border: '#ff7f0e', fill: 'rgba(255,127,14,0.45)' },
+        'Fossil Hard coal': { border: '#4d4d4d', fill: 'rgba(77,77,77,0.45)' },
+        'Fossil Brown coal/Lignite': { border: '#7f6a4d', fill: 'rgba(127,106,77,0.45)' },
+        'Hydro Run-of-river and pondage': { border: '#1f77b4', fill: 'rgba(31,119,180,0.45)' },
+        'Hydro Water Reservoir':          { border: '#4aa3d2', fill: 'rgba(74,163,210,0.45)' },
+        'Hydro Pumped Storage':           { border: '#7fb3d5', fill: 'rgba(127,179,213,0.45)' },
+        'Biomass':     { border: '#6ba292', fill: 'rgba(107,162,146,0.45)' },
+        'Waste':       { border: '#b56576', fill: 'rgba(181,101,118,0.45)' }
+      },
 
       // Prices (ISO-2 keyed)
       countryPriceByISO2: {},        // { FR: 53.8, BG: 71.15, ... }
@@ -229,6 +270,10 @@ export default {
   },
 
   methods: {
+    priceSupported(iso2, feature) {
+      // if you prefer: return feature?.properties?.CONTINENT === 'Europe'
+      return SUPPORTED_PRICE_ISO2.has(iso2)
+    },
     openModal(payload) { this.selectedFeature = payload; this.isModalOpen = true },
     closeModal() { this.isModalOpen = false },
 
@@ -240,6 +285,10 @@ export default {
       this.capacityYear = null
       this.capacityItems = []
       this.destroyCapacityChart()
+      this.generationError = null
+      this.generationDateLabel = null
+      this.generationItems = []
+      this.destroyGenerationChart()
     },
 
     getCountryISO2(feature) {
@@ -292,21 +341,24 @@ export default {
     },
 
     async fetchCurrentPriceForCountry(iso2) {
-      const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&period=today`
-      const { data } = await axios.get(url)
-      const price = this.pickCurrentPrice(data.items)
-      const currency = (data.items?.[0]?.currency) || 'EUR'
+      if (!this.priceSupported(iso2)) return null
 
-      this.priceByISO2[iso2] = { price, currency, ts: Date.now() }
+      try {
+        const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&period=today`
+        const { data } = await axios.get(url)
+        const price = this.pickCurrentPrice(data.items)
+        const currency = (data.items?.[0]?.currency) || 'EUR'
 
-      if (Number.isFinite(price)) {
-        this.countryPriceByISO2 = { ...this.countryPriceByISO2, [iso2]: price }
+        this.priceByISO2[iso2] = { price, currency, ts: Date.now() }
+        if (Number.isFinite(price)) {
+          this.countryPriceByISO2 = { ...this.countryPriceByISO2, [iso2]: price }
+        }
+        return price
+      } catch (e) {
+        // 400/404 → mark as unsupported/no data and do not rethrow
+        this.priceByISO2[iso2] = { price: null, currency: 'EUR', ts: Date.now(), error: e?.response?.status }
+        return null
       }
-
-      if (iso2 === 'FR') {
-        console.log('[FR] picked price =', price, 'currency=', currency)
-      }
-      return price
     },
 
     async refreshAllPrices() {
@@ -316,11 +368,12 @@ export default {
 
       for (const feature of this.countriesGeoJson.features) {
         const iso2 = this.getCountryISO2(feature)
-        if (!iso2) continue
+        if (!iso2 || !this.priceSupported(iso2, feature)) continue
+
         tasks.push(
           this.fetchCurrentPriceForCountry(iso2)
             .then(price => { if (Number.isFinite(price)) updates[iso2] = price })
-            .catch(() => {})
+            .catch(() => {/* swallow per-country errors */})
         )
       }
 
@@ -375,9 +428,19 @@ export default {
         },
         async click() {
           vm.openModal({ name, value: getVal(), properties: feature.properties })
-          if (iso2) await vm.fetchCapacity(iso2)
-          else vm.capacityError = 'Missing ISO-2 code for this feature'
+          await new Promise(r => setTimeout(r, 220)) // wait for panel-slide transition
+          if (iso2) {
+            await Promise.all([vm.fetchCapacity(iso2), vm.fetchGeneration(iso2)])
+            // if chart exists, ensure a final update after layout settles
+            await vm.$nextTick()
+            vm.generationChartInstance?.resize()
+            vm.generationChartInstance?.update()
+          } else {
+            vm.capacityError = 'Missing ISO-2 code for this feature'
+            vm.generationError = 'Missing ISO-2 code for this feature'
+          }
         }
+
       })
     },
 
@@ -430,7 +493,107 @@ export default {
 
     onKeydown(e) {
       if (e.key === 'Escape' && this.isModalOpen) this.closePanel()
+    },
+  //****************GENERATION*****************//
+async fetchGeneration(iso2) {
+  this.generationLoading = true
+  this.generationError = null
+  this.generationItems = []
+  this.generationDateLabel = null
+  this.destroyGenerationChart()
+
+  try {
+    const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+    const { data } = await axios.get(url)
+    this.generationItems = Array.isArray(data.items) ? data.items : []
+    //this.generationDateLabel = data.date_label 
+    
+  } catch (e) {
+    this.generationError = 'Failed to load generation data'
+  } finally {
+    this.generationLoading = false
+    await this.$nextTick()
+    // изчакай панела (transition) да се разположи
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    if (!this.generationError && this.generationItems.length) {
+      this.renderGenerationChart()
+      this.generationChartInstance?.resize()
+      this.generationChartInstance?.update()
     }
+  }
+},
+
+renderGenerationChart() {
+  const canvas = this.$refs.generationChart
+  if (!canvas) return
+  this.destroyGenerationChart()
+
+  // чисто копие без Proxy
+  const items = JSON.parse(JSON.stringify(this.generationItems))
+
+  // уникални timestamp-и (epoch ms)
+  const timestamps = Array.from(new Set(items.map(i => Date.parse(i.datetime_utc))))
+    .sort((a, b) => a - b)
+
+  // групиране по технология
+  const byTech = new Map()
+  for (const it of items) {
+    const key = it.psr_name || it.psr_type || 'Unknown'
+    if (!byTech.has(key)) byTech.set(key, new Map())
+    byTech.get(key).set(Date.parse(it.datetime_utc), Number(it.generation_mw) || 0)
+  }
+
+  const datasets = []
+  for (const [tech, series] of byTech.entries()) {
+    const color = this.psrColors[tech] || { border: '#999', fill: 'rgba(153,153,153,0.35)' }
+    const data = timestamps.map(ts => ({ x: ts, y: series.get(ts) ?? 0 }))
+    datasets.push({
+      label: tech,
+      data,
+      borderColor: color.border,
+      backgroundColor: color.fill,
+      pointRadius: 0,
+      borderWidth: 1,
+      tension: 0.25,
+      fill: true,
+      stack: 'gen' // явна купчина за stacked area
+    })
+  }
+
+  const cfg = {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      normalized: true,
+      parsing: { xAxisKey: 'x', yAxisKey: 'y' }, // казваме му кои ключове да чете
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'hour', tooltipFormat: 'HH:mm' }
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: { callback: v => Intl.NumberFormat().format(v) },
+          title: { display: true, text: 'MW' }
+        }
+      }
+    }
+  }
+
+  const ctx = canvas.getContext('2d')
+  this.generationChartInstance = markRaw(new Chart(ctx, cfg))
+},
+
+destroyGenerationChart() {
+  if (this.generationChartInstance?.destroy) this.generationChartInstance.destroy()
+  this.generationChartInstance = null
+}
+
   },
 
   async mounted() {
@@ -442,6 +605,7 @@ export default {
     window.removeEventListener('keydown', this.onKeydown)
     this.destroyCapacityChart()
     if (this.priceTimer) clearInterval(this.priceTimer)
+    this.destroyGenerationChart()
   }
 }
 </script>
@@ -576,11 +740,16 @@ export default {
   .left-panel { width: min(420px, 50vw); } /* adjusted for wider panel */
   .map-row { height: 640px; } /* proportionally increased */
 }
-
+.chart-box--sm {
+  height: 360px;
+  min-height: 360px;
+  width: 100%;
+}
 @media (max-width: 600px) {
   .map-row { flex-direction: column; height: auto; }
   .left-panel, .map { height: auto; }
   .chart-box { height: 350px; } /* smaller but still bigger than original */
+  .chart-box--sm { height: 300px; }
 }
 
 .chart-box { 
