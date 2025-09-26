@@ -1,109 +1,161 @@
 <template>
   <div id="app">
+    <!-- Loading overlay for initial load -->
+    <div v-if="initialLoading" class="initial-loading-overlay">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <p>Loading energy data...</p>
+      </div>
+    </div>
     <div class="header">
       <h1>Energy App by Entra Energy</h1>
-      <!-- <div class="controls">
+      <div class="controls">
+        <!-- Add toggle for heatmap type -->
         <label>
-          <input type="checkbox" v-model="showTooltips"> Show Country Tooltips
+          <input type="radio" v-model="heatmapType" value="prices"> Price Heatmap
         </label>
-        <select v-model="selectedColorScheme" @change="updateColorScheme">
-          <option value="viridis">Viridis</option>
-          <option value="plasma">Plasma</option>
-          <option value="inferno">Inferno</option>
-          <option value="turbo">Turbo</option>
-          <option value="spectral">Spectral</option>
-        </select>
-        <button @click="randomizeData">Randomize Data</button>
-      </div> -->
+        <label>
+          <input type="radio" v-model="heatmapType" value="capacity"> Capacity Heatmap
+        </label>
+        <!-- <button @click="refreshHeatmapData" :disabled="isRefreshing">
+          {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
+        </button> -->
+      </div>
     </div>
 
     <!-- FLEX ROW: sidebar + map -->
     <div class="map-row">
-  <!-- Modal side sheet over the map -->
-  <transition name="panel-slide" appear>
-    <aside
-      v-if="isModalOpen"
-      class="left-panel"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Country details"
-    >
-      <div class="panel-header">
-        <h3>{{ selectedFeature && selectedFeature.name }}</h3>
-        <button class="panel-close" @click="closePanel" aria-label="Close">✕</button>
+      <!-- Modal side sheet over the map -->
+      <transition name="panel-slide" appear>
+        <aside
+          v-if="isModalOpen"
+          class="left-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Country details"
+        >
+          <div class="panel-header">
+            <h3>{{ selectedFeature && selectedFeature.name }}</h3>
+            <button class="panel-close" @click="closePanel" aria-label="Close">✕</button>
+          </div>
+          <div class="panel-content">
+            <!-- Capacity -->
+            <div v-if="capacityLoading">Loading capacity…</div>
+            <div v-else-if="capacityError" style="color:#b00020">{{ capacityError }}</div>
+            <template v-else>
+              <p v-if="capacityYear">Latest year: {{ capacityYear }}</p>
+              <div class="chart-box">
+                <canvas ref="capacityChart"></canvas>
+              </div>
+            </template>
+            <div style="margin-top: 40px;"><span><h3>Generation by technology</h3></span></div>
+            <!-- Generation -->
+            <div v-if="generationLoading" style="margin-top:16px;">Loading generation…</div>
+            <div v-else-if="generationError" style="margin-top:16px;color:#b00020">{{ generationError }}</div>
+            <template v-else>
+              <p v-if="generationDateLabel" style="margin-top:16px;">{{ generationDateLabel }}</p>
+              <div class="chart-box chart-box--sm">
+                <canvas ref="generationChart"></canvas>
+              </div>
+              <div style="margin-top:10px;">
+                <small>Hourly generation (MW) by technology</small>
+              </div>
+            </template>
+          </div>
+        </aside>
+      </transition>
+
+      <!-- Scrim blocks interaction and closes panel on click -->
+      <div
+        v-if="isModalOpen"
+        class="panel-scrim"
+        @click="closePanel"
+        aria-hidden="true"
+      ></div>
+
+      <!-- Map column -->
+      <div class="map-col">
+        <LMap
+          :zoom="zoom"
+          :center="center"
+          :options="mapOptions"
+          :use-global-leaflet="false"
+          class="map"
+          @ready="onMapReady"
+        >
+          <LTileLayer
+            :url="tileUrl"
+            :attribution="attribution"
+            :options="{ noWrap: true, bounds: [[-90, -180], [90, 180]] }"
+          />
+          <LGeoJson
+            v-if="countriesGeoJson"
+            :geojson="countriesGeoJson"
+            :options="geoJsonOptions"
+            :options-style="optionsStyle"
+          />
+        </LMap>
       </div>
-      <div class="panel-content">
-  <!-- Capacity -->
-  <div v-if="capacityLoading">Loading capacity…</div>
-  <div v-else-if="capacityError" style="color:#b00020">{{ capacityError }}</div>
-  <template v-else>
-    <p v-if="capacityYear">Latest year: {{ capacityYear }}</p>
-    <div class="chart-box">
-      <canvas ref="capacityChart"></canvas>
     </div>
-    <!-- <div style="margin-top:10px;">
-      <small>Installed capacity in MW by technology</small>
-    </div> -->
-  </template>
-  <div style="margin-top: 40px;"><span><h3>Generation by technology</h3></span></div>
-  <!-- Generation (NOT nested under capacity anymore) -->
-  <div v-if="generationLoading" style="margin-top:16px;">Loading generation…</div>
-  <div v-else-if="generationError" style="margin-top:16px;color:#b00020">{{ generationError }}</div>
-  <template v-else>
-    <p v-if="generationDateLabel" style="margin-top:16px;">{{ generationDateLabel }}</p>
-    <div class="chart-box chart-box--sm">
-      <canvas ref="generationChart"></canvas>
+    
+    <!-- FIXED: Remove the extra template wrapper -->
+    <!-- Enhanced time slider section (now properly visible) -->
+    <div v-if="heatmapType === 'prices'" class="time-slider-container">
+      <h3>Historical Prices - Last 48 Hours</h3>
+      <div class="slider-info">
+        <span class="time-display">{{ currentTimeDisplay }}</span>
+        <span class="price-display">{{ averagePriceDisplay }}</span>
+      </div>
+      
+      <!-- Enhanced smooth draggable slider -->
+      <div class="slider-wrapper">
+        <div class="custom-slider">
+          <!-- Native range input for smooth dragging -->
+          <input 
+            v-model="currentTimeIndex"
+            type="range" 
+            :min="0" 
+            :max="maxTimeIndex"
+            :disabled="!hasTimeData || isRefreshing"
+            class="smooth-range-slider"
+            @input="onSliderChange"
+            @change="onSliderChange"
+          />
+          
+          <!-- Custom visual track and progress -->
+          <div class="slider-track"></div>
+          <div class="slider-progress" :style="progressStyle"></div>
+        </div>
+        
+        <!-- Time tick marks BELOW the slider -->
+        <div v-if="hasTimeData" class="time-ticks-below">
+          <div 
+            v-for="(tick, index) in timeTicks" 
+            :key="index"
+            class="time-tick-below"
+            :style="{ left: tick.position }"
+            @click="jumpToTick(tick.index)"
+          >
+            <div class="tick-mark-below"></div>
+            <div class="tick-label-below">{{ tick.label }}</div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-if="!hasTimeData && heatmapType === 'prices'" class="no-data-message">
+        Click "Refresh Data" to load historical price data
+      </div>
     </div>
-    <div style="margin-top:10px;">
-      <small>Hourly generation (MW) by technology</small>
-    </div>
-  </template>
-</div>
 
-
-    </aside>
-  </transition>
-
-  <!-- Scrim blocks interaction and closes panel on click -->
-  <div
-    v-if="isModalOpen"
-    class="panel-scrim"
-    @click="closePanel"
-    aria-hidden="true"
-  ></div>
-
-  <!-- Map column -->
-  <div class="map-col">
-    <LMap
-      :zoom="zoom"
-      :center="center"
-      :options="mapOptions"
-      :use-global-leaflet="false"
-      class="map"
-      @ready="onMapReady"
-    >
-      <LTileLayer
-        :url="tileUrl"
-        :attribution="attribution"
-        :options="{ noWrap: true, bounds: [[-90, -180], [90, 180]] }"
-      />
-      <LGeoJson
-        v-if="countriesGeoJson"
-        :geojson="countriesGeoJson"
-        :options="geoJsonOptions"
-        :options-style="optionsStyle"
-      />
-    </LMap>
-  </div>
-</div>
-    <div class="legend">
-      <h3>Energy Data Legend</h3>
+    <!-- Capacity Legend - only show for capacity heatmap -->
+    <div v-if="heatmapType === 'capacity'" class="legend">
+      <h3>{{ legendTitle }}</h3>
       <div class="color-scale">
         <div class="scale-bar" :style="scaleBarStyle"></div>
-            <div class="scale-labels">
-            <span>{{ minValue.toFixed(2) }}</span>
-            <span>{{ maxValue.toFixed(2) }} {{ sampleCurrency }}/MWh</span>
-            </div>
+        <div class="scale-labels">
+          <span>{{ minValue.toFixed(2) }}</span>
+          <span>{{ maxValue.toFixed(2) }} {{ legendUnit }}</span>
+        </div>
       </div>
       <div class="legend-items">
         <div 
@@ -115,7 +167,7 @@
             class="color-box" 
             :style="{ backgroundColor: country.color }"
           ></span>
-          <!-- {{ country.name }}: {{ country.value.toFixed(1) }} TWh -->
+          {{ country.name }}: {{ country.value.toFixed(0) }} {{ legendUnit }}
         </div>
       </div>
     </div>
@@ -124,15 +176,25 @@
 
 <script>
 const SUPPORTED_PRICE_ISO2 = new Set([
-  // Adjust this list to what your API supports
   'AL','AT','BA','BE','BG','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB',
   'GR','HR','HU','IE','IS','IT','LT','LU','LV','ME','MK','MT','NL','NO','PL',
   'PT','RO','RS','SE','SI','SK','TR','UA'
 ])
+
+const SUPPORTED_CAPACITY_ISO2 = new Set([
+  'AL','AT','BA','BE','BG','CH','CZ','DE','DK','EE','ES','FI','FR','GB',
+  'GR','HR','HU','IE','IT','LT','LU','LV','NL','NO','PL','PT','RO','SE','SI','SK'
+])
+const BULK_REQUEST_CONFIG = {
+  timeout: 30000,
+  retry: 2,
+  retryDelay: 1000
+}
+
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import Chart from 'chart.js/auto'
-import 'chartjs-adapter-date-fns' // <- add this for the time scale
+import 'chartjs-adapter-date-fns'
 import axios from 'axios'
 import { scaleSequential } from 'd3-scale'
 import {
@@ -149,9 +211,24 @@ export default {
 
   data() {
     return {
-      // Inline panel state
+      // Heatmap type controls
+      heatmapType: 'prices',
+      isRefreshing: false,
+      initialLoading: true,
+      // Time slider data (removed playback-related properties)
+      currentTimeIndex: 0,
+      availableTimestamps: [], // Array of timestamps for the last 48 hours
+      historicalPriceData: {},  // { iso2: { timestamp: price, ... }, ... }
+      
+      // Capacity data (ISO-2 keyed)
+      countryCapacityByISO2: {},
+      capacityByISO2: {},
+      
+      // Existing data properties
+      europeBounds: [[34, -25], [72, 45]],
       isModalOpen: false,
       selectedFeature: null,
+      currentAbortController: null,
       capacityLoading: false,
       capacityError: null,
       capacityYear: null,
@@ -162,6 +239,10 @@ export default {
       generationDateLabel: null,
       generationItems: [],
       generationChartInstance: null,
+      priceCache: new Map(),
+      capacityCache: new Map(),
+      cacheTimestamp: null,
+      cacheValidityMs: 5 * 60 * 1000, // 5 minutes
       psrColors: {
         'Solar':        { border: '#f5b000', fill: 'rgba(245,176,0,0.45)' },
         'Wind Onshore': { border: '#2ca02c', fill: 'rgba(44,160,44,0.45)' },
@@ -176,15 +257,15 @@ export default {
         'Waste':       { border: '#b56576', fill: 'rgba(181,101,118,0.45)' }
       },
 
-      // Prices (ISO-2 keyed)
-      countryPriceByISO2: {},        // { FR: 53.8, BG: 71.15, ... }
-      priceByISO2: {},               // cache/meta { FR: { price, currency, ts } }
+      // Legacy price data (for backward compatibility)
+      countryPriceByISO2: {},
+      priceByISO2: {},
       pricePollingMs: 5 * 60 * 1000,
       priceTimer: null,
 
       // Map state
       zoom: 4,
-      center: [54, 15],
+      center: [54, 20],
       showTooltips: true,
       selectedColorScheme: 'viridis',
       tileUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -213,22 +294,134 @@ export default {
   },
 
   computed: {
-    sampleCurrency() {
-      const first = Object.values(this.priceByISO2)[0]
-      return (first && first.currency) || 'EUR'
+ progressStyle() {
+      const percentage = this.maxTimeIndex > 0 ? (this.currentTimeIndex / this.maxTimeIndex) * 100 : 0
+      return {
+        width: `${percentage}%`
+      }
     },
+    thumbStyle() {
+      const percentage = this.maxTimeIndex > 0 ? (this.currentTimeIndex / this.maxTimeIndex) * 100 : 0
+      return {
+        left: `calc(${percentage}% - 12px)` // Adjust for thumb width
+      }
+    },
+    // Time slider computed properties
+    hasTimeData() {
+      return this.availableTimestamps.length > 0
+    },
+    
+    maxTimeIndex() {
+      return Math.max(0, this.availableTimestamps.length - 1)
+    },
+    
+    currentTimestamp() {
+      return this.availableTimestamps[this.currentTimeIndex] || Date.now()
+    },
+    
+    currentTimeDisplay() {
+      if (!this.hasTimeData) return 'No data'
+      const date = new Date(this.currentTimestamp)
+      return date.toLocaleString('en-GB', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit', 
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    },
+    
+    // NEW: Time ticks for slider labels
+    timeTicks() {
+      if (!this.hasTimeData) return []
+      
+      const ticks = []
+      const totalTicks = 8 // Show 8 tick marks across the slider
+      
+      for (let i = 0; i <= totalTicks; i++) {
+        const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
+        const timestamp = this.availableTimestamps[tickIndex]
+        const date = new Date(timestamp)
+        
+        // Position as percentage from left
+        const position = `${(tickIndex / this.maxTimeIndex) * 100}%`
+        
+        // Format label based on time
+        let label
+        if (i === 0) {
+          label = '48h ago' // Leftmost (oldest)
+        } else if (i === totalTicks) {
+          label = 'Now' // Rightmost (newest)
+        } else {
+          // Show hours ago
+          const hoursAgo = Math.round((this.availableTimestamps[this.maxTimeIndex] - timestamp) / (60 * 60 * 1000))
+          label = `${hoursAgo}h`
+        }
+        
+        ticks.push({
+          position,
+          label,
+          timestamp,
+          index: tickIndex
+        })
+      }
+      
+      return ticks
+    },
+    
+    averagePriceDisplay() {
+      
+      if (this.heatmapType !== 'prices' || !this.hasTimeData) return ''
+      const prices = Object.values(this.currentDataByISO2).filter(p => Number.isFinite(p))
+      if (prices.length === 0) return 'No price data'
+      const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length
+      return `Avg: ${avg.toFixed(2)} EUR/MWh`
+    },
+
+    // Updated computed properties for dual heatmap functionality
+    currentDataByISO2() {
+      if (this.heatmapType === 'capacity') {
+        return this.countryCapacityByISO2
+      }
+      
+      // For prices, use historical data based on current time selection
+      const result = {}
+      const timestamp = this.currentTimestamp
+      // console.log("TIMESTAMP:", timestamp)
+      // console.log(this.historicalPriceData)
+
+      for (const [iso2, timeData] of Object.entries(this.historicalPriceData)) {
+        if (timeData && timeData[timestamp] !== undefined) {
+          result[iso2] = timeData[timestamp]
+        }
+      }
+      
+      return result
+    },
+    
+    legendTitle() {
+      return this.heatmapType === 'prices' ? 'Energy Price Legend' : 'Installed Capacity Legend'
+    },
+    
+    legendUnit() {
+      return this.heatmapType === 'prices' ? 'EUR/MWh' : 'MW'
+    },
+    
     minValue() {
-      const values = Object.values(this.countryPriceByISO2)
+      const values = Object.values(this.currentDataByISO2)
       return values.length ? Math.min(...values) : 0
     },
+    
     maxValue() {
-      const values = Object.values(this.countryPriceByISO2)
-      return values.length ? Math.max(...values) : 100
+      const values = Object.values(this.currentDataByISO2)
+      return values.length ? Math.max(...values) : (this.heatmapType === 'prices' ? 100 : 10000)
     },
+    
     colorScale() {
       return scaleSequential(this.colorInterpolators[this.selectedColorScheme])
         .domain([this.minValue, this.maxValue])
     },
+    
     scaleBarStyle() {
       const interpolator = this.colorInterpolators[this.selectedColorScheme]
       const steps = 20
@@ -239,23 +432,26 @@ export default {
       }
       return { background: `linear-gradient(to right, ${gradientStops.join(', ')})` }
     },
+    
     sampleCountries() {
       if (!this.countriesGeoJson) return []
       return this.countriesGeoJson.features.slice(0, 8).map(f => {
         const iso2 = this.getCountryISO2(f)
         const name = this.getCountryName(f)
-        const value = Number.isFinite(this.countryPriceByISO2[iso2]) ? this.countryPriceByISO2[iso2] : this.minValue
+        const value = Number.isFinite(this.currentDataByISO2[iso2]) ? this.currentDataByISO2[iso2] : this.minValue
         return { name, value, color: this.colorScale(value) }
       })
     },
+    
     geoJsonOptions() {
       return { onEachFeature: this.onEachFeature }
     },
+    
     optionsStyle() {
       const vm = this
       return function (feature) {
         const iso2 = vm.getCountryISO2(feature)
-        const value = iso2 ? vm.countryPriceByISO2?.[iso2] : undefined
+        const value = iso2 ? vm.currentDataByISO2?.[iso2] : undefined
         const has = Number.isFinite(value)
         return {
           fillColor: has ? vm.colorScale(value) : '#E6E6E6',
@@ -269,15 +465,233 @@ export default {
     }
   },
 
+  watch: {
+      heatmapType: {
+          handler(newType) {
+            // Only refresh if switching to a type without data
+            if (newType === 'prices' && !this.hasTimeData) {
+              this.refreshAllHistoricalPrices()
+            } else if (newType === 'capacity' && Object.keys(this.countryCapacityByISO2).length === 0) {
+              this.refreshAllCapacities()  
+            }
+            // Always update the color scheme when switching types
+            this.updateColorScheme()
+          },
+          immediate: false
+        },
+    
+      currentTimeIndex: {
+        handler() {
+          // Update map when time index changes
+          this.updateColorScheme()
+        }
+      }
+  },
+
   methods: {
+
+    jumpToTick(tickIndex) {
+      this.currentTimeIndex = tickIndex
+      this.onSliderChange()
+    },
+    // Time slider methods (removed playback methods)
+    generateLast48HoursTimestamps() {
+      const timestamps = []
+      const now = new Date()
+      const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
+      
+      for (let i = 47; i >= 0; i--) {
+        const timestamp = new Date(currentHour.getTime() - (i * 60 * 60 * 1000))
+        timestamps.push(timestamp.getTime())
+      }
+      
+      return timestamps
+    },
+    
+    onSliderChange() {
+      // Add smooth transition class temporarily
+      const slider = this.$el.querySelector('.enhanced-time-slider')
+      if (slider) {
+        slider.classList.add('transitioning')
+        setTimeout(() => {
+          slider.classList.remove('transitioning')
+        }, 200)
+      }
+    },
+
+    // Historical price data loading
+    async fetchHistoricalPricesForCountry(iso2) {
+      if (!this.priceSupported(iso2)) return null
+
+      // Check cache first
+      const cacheKey = `${iso2}_${this.getCurrentDateKey()}`
+      const now = Date.now()
+      
+      if (this.priceCache.has(cacheKey) && 
+          this.cacheTimestamp && 
+          (now - this.cacheTimestamp) < this.cacheValidityMs) {
+        console.log(`Using cached data for ${iso2}`)
+        return this.priceCache.get(cacheKey)
+      }
+
+      try {
+        const now = new Date()
+        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+        
+        const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
+        
+        const { data } = await axios.get(url, {
+          timeout: 10000, // 10 second timeout
+          signal: this.currentAbortController?.signal
+        })
+        
+        const timeData = {}
+        
+        if (Array.isArray(data.items)) {
+          for (const item of data.items) {
+            const timestamp = new Date(item.datetime_utc).getTime()
+            if (Number.isFinite(item.price)) {
+              const hourTimestamp = Math.floor(timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000)
+              timeData[hourTimestamp] = item.price
+            }
+          }
+        }
+        
+        // Cache the result
+        this.priceCache.set(cacheKey, timeData)
+        this.cacheTimestamp = now
+        
+        return timeData
+      } catch (e) {
+        console.error(`Failed to fetch historical prices for ${iso2}:`, e)
+        return null
+      }
+    },
+    getCurrentDateKey() {
+      return new Date().toISOString().split('T')[0]
+    },
+
+    async refreshAllHistoricalPrices() {
+      if (!this.countriesGeoJson) return
+      
+      // Generate timestamps
+      this.availableTimestamps = this.generateLast48HoursTimestamps()
+      this.currentTimeIndex = this.maxTimeIndex
+      
+      // Get all supported countries
+      const supportedCountries = []
+      for (const feature of this.countriesGeoJson.features) {
+        const iso2 = this.getCountryISO2(feature)
+        if (iso2 && this.priceSupported(iso2, feature)) {
+          supportedCountries.push(iso2)
+        }
+      }
+      
+      console.log(`Loading price data for ${supportedCountries.length} countries using bulk API`)
+      
+      // Process ALL countries in chunks of 20 (your API limit)
+      const chunkSize = 20
+      const newHistoricalData = {}
+      
+      const chunks = []
+      for (let i = 0; i < supportedCountries.length; i += chunkSize) {
+        chunks.push(supportedCountries.slice(i, i + chunkSize))
+      }
+      
+      console.log(`Making ${chunks.length} bulk API calls instead of ${supportedCountries.length} individual calls`)
+      
+      // Process all chunks concurrently (this is the key optimization!)
+      const chunkPromises = chunks.map(async (chunk, index) => {
+        try {
+          console.log(`Starting bulk call ${index + 1}/${chunks.length} for ${chunk.length} countries`)
+          const chunkData = await this.fetchBulkHistoricalPrices(chunk)
+          return { success: true, data: chunkData, chunkIndex: index }
+        } catch (error) {
+          console.error(`Bulk call ${index + 1} failed:`, error)
+          return { success: false, error, chunkIndex: index }
+        }
+      })
+      
+      // Wait for all chunks to complete
+      const results = await Promise.allSettled(chunkPromises)
+      
+      // Process results
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value.success) {
+          Object.assign(newHistoricalData, result.value.data)
+          console.log(`Chunk ${index + 1} completed: ${Object.keys(result.value.data).length} countries`)
+        }
+      })
+      
+      this.historicalPriceData = newHistoricalData
+      this.updateColorScheme()
+      
+      console.log(`Bulk loading completed: ${Object.keys(newHistoricalData).length} countries loaded`)
+    },
+
+    async fetchBulkHistoricalPrices(countries) {
+      if (countries.length === 0) return {}
+      
+      try {
+        const now = new Date()
+        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+        
+        const url = `http://85.14.6.37:16601/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
+        
+        console.log(`Bulk API call: ${url}`)
+        
+        const { data } = await axios.get(url, {
+          timeout: 15000, // Reduced timeout
+          signal: this.currentAbortController?.signal
+        })
+        
+        const historicalData = {}
+        
+        // Process the bulk response
+        if (data.data) {
+          for (const [iso2, countryData] of Object.entries(data.data)) {
+            if (countryData.items && Array.isArray(countryData.items)) {
+              const timeData = {}
+              
+              for (const item of countryData.items) {
+                const timestamp = new Date(item.datetime_utc).getTime()
+                if (Number.isFinite(item.price)) {
+                  // Round to nearest hour
+                  const hourTimestamp = Math.floor(timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000)
+                  timeData[hourTimestamp] = item.price
+                }
+              }
+              
+              if (Object.keys(timeData).length > 0) {
+                historicalData[iso2] = timeData
+              }
+            }
+          }
+        }
+        
+        return historicalData
+        
+      } catch (error) {
+        console.error(`Bulk API request failed for ${countries.length} countries:`, error)
+        throw error // Don't fallback to individual requests - this was causing the slowdown
+      }
+    },
+
+
+    // Support check methods
+    capacitySupported(iso2) {
+      return SUPPORTED_CAPACITY_ISO2.has(iso2)
+    },
+    
     priceSupported(iso2, feature) {
-      // if you prefer: return feature?.properties?.CONTINENT === 'Europe'
       return SUPPORTED_PRICE_ISO2.has(iso2)
     },
-    openModal(payload) { this.selectedFeature = payload; this.isModalOpen = true },
-    closeModal() { this.isModalOpen = false },
 
     // Panel controls
+    openModal(payload) { this.selectedFeature = payload; this.isModalOpen = true },
+    closeModal() { this.isModalOpen = false },
     openPanel(payload) { this.selectedFeature = payload; this.isModalOpen = true },
     closePanel() {
       this.isModalOpen = false
@@ -291,13 +705,14 @@ export default {
       this.destroyGenerationChart()
     },
 
+    // Utility methods
     getCountryISO2(feature) {
       const p = feature?.properties || {}
       const raw = p.ISO_A2_EH || p.ISO_A2 || p.iso_a2 || p.iso2 || p.ISO2
       if (!raw) return null
       const c = String(raw).toUpperCase()
       if (c === '-99') return null
-      if (c === 'FX') return 'FR' // Metropolitan France
+      if (c === 'FX') return 'FR'
       if (c === 'UK') return 'GB'
       return c.length === 2 ? c : null
     },
@@ -306,82 +721,95 @@ export default {
       return feature.properties.name || feature.properties.NAME || feature.properties.ADMIN || 'Unknown'
     },
 
-    async loadCountriesData() {
-      try {
-        const response = await axios.get(
-          'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'
-        )
-        this.countriesGeoJson = response.data
-        await this.refreshAllPrices()
-        this.priceTimer = setInterval(() => this.refreshAllPrices(), this.pricePollingMs)
-      } catch (err) {
-        console.error('Error loading countries data:', err)
-      }
-    },
-
-    pickCurrentPrice(items) {
-      if (!Array.isArray(items) || !items.length) return null
-      const now = new Date()
-      const nowUtcHour = Date.UTC(
-        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), 0, 0, 0
-      )
-      const withTs = items
-        .map(it => ({ ...it, ts: Date.parse(it.datetime_utc) }))
-        .sort((a, b) => a.ts - b.ts)
-
-      const exact = withTs.find(it => it.ts === nowUtcHour)
-      if (exact) return exact.price
-
-      let latest = null
-      for (const it of withTs) {
-        if (it.ts <= nowUtcHour) latest = it
-        else break
-      }
-      return latest ? latest.price : withTs[0].price
-    },
-
-    async fetchCurrentPriceForCountry(iso2) {
-      if (!this.priceSupported(iso2)) return null
+    // Capacity methods (unchanged)
+    async fetchCapacityForHeatmap(iso2) {
+      if (!this.capacitySupported(iso2)) return null
 
       try {
-        const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&period=today`
+        const url = `http://85.14.6.37:16601/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
         const { data } = await axios.get(url)
-        const price = this.pickCurrentPrice(data.items)
-        const currency = (data.items?.[0]?.currency) || 'EUR'
+        
+        const totalMW = Array.isArray(data.items) 
+          ? data.items.reduce((sum, item) => sum + (item.installed_capacity_mw || 0), 0)
+          : 0
 
-        this.priceByISO2[iso2] = { price, currency, ts: Date.now() }
-        if (Number.isFinite(price)) {
-          this.countryPriceByISO2 = { ...this.countryPriceByISO2, [iso2]: price }
+        if (Number.isFinite(totalMW) && totalMW > 0) {
+          this.countryCapacityByISO2 = { ...this.countryCapacityByISO2, [iso2]: totalMW }
         }
-        return price
+        
+        return totalMW
       } catch (e) {
-        // 400/404 → mark as unsupported/no data and do not rethrow
-        this.priceByISO2[iso2] = { price: null, currency: 'EUR', ts: Date.now(), error: e?.response?.status }
+        console.error(`Failed to fetch capacity for ${iso2}:`, e)
         return null
       }
     },
 
-    async refreshAllPrices() {
+    async refreshAllCapacities() {
       if (!this.countriesGeoJson) return
       const updates = {}
       const tasks = []
 
       for (const feature of this.countriesGeoJson.features) {
         const iso2 = this.getCountryISO2(feature)
-        if (!iso2 || !this.priceSupported(iso2, feature)) continue
+        if (!iso2 || !this.capacitySupported(iso2)) continue
 
         tasks.push(
-          this.fetchCurrentPriceForCountry(iso2)
-            .then(price => { if (Number.isFinite(price)) updates[iso2] = price })
+          this.fetchCapacityForHeatmap(iso2)
+            .then(totalMW => { 
+              if (Number.isFinite(totalMW) && totalMW > 0) {
+                updates[iso2] = totalMW
+              }
+            })
             .catch(() => {/* swallow per-country errors */})
         )
       }
 
       await Promise.allSettled(tasks)
-      this.countryPriceByISO2 = { ...this.countryPriceByISO2, ...updates }
+      this.countryCapacityByISO2 = { ...this.countryCapacityByISO2, ...updates }
       this.updateColorScheme()
     },
 
+    // Generic refresh method (updated, removed playback stopping)
+    async refreshHeatmapData() {
+      // Cancel any existing requests
+      if (this.currentAbortController) {
+        this.currentAbortController.abort()
+      }
+      
+      this.currentAbortController = new AbortController()
+      this.isRefreshing = true
+      
+      try {
+        if (this.heatmapType === 'prices') {
+          await this.refreshAllHistoricalPrices()
+        } else {
+          await this.refreshAllCapacities()
+        }
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error refreshing heatmap data:', error)
+        }
+      } finally {
+        this.isRefreshing = false
+        this.currentAbortController = null
+      }
+    },
+
+    // Data loading
+    async loadCountriesData() {
+      try {
+        const response = await axios.get(
+          'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'
+        )
+        this.countriesGeoJson = response.data
+        
+        // Don't auto-load data on startup - wait for user to refresh
+      } catch (err) {
+        console.error('Error loading countries data:', err)
+      }
+    },
+
+    // EXISTING: Capacity method for modal (unchanged)
     async fetchCapacity(iso2) {
       this.capacityLoading = true
       this.capacityError = null
@@ -394,6 +822,13 @@ export default {
         const { data } = await axios.get(url)
         this.capacityYear = data.year
         this.capacityItems = Array.isArray(data.items) ? data.items : []
+        
+        // Also update heatmap data when fetching detailed data
+        const totalMW = this.capacityItems.reduce((sum, item) => sum + (item.installed_capacity_mw || 0), 0)
+        if (Number.isFinite(totalMW) && totalMW > 0) {
+          this.countryCapacityByISO2 = { ...this.countryCapacityByISO2, [iso2]: totalMW }
+        }
+        
       } catch (e) {
         this.capacityError = 'Failed to load capacity data'
       } finally {
@@ -405,11 +840,12 @@ export default {
       }
     },
 
+    // Map interaction (updated for dual heatmap and time display)
     onEachFeature(feature, layer) {
       const vm = this
       const name = vm.getCountryName(feature)
       const iso2 = vm.getCountryISO2(feature)
-      const getVal = () => (iso2 ? vm.countryPriceByISO2?.[iso2] : null)
+      const getVal = () => (iso2 ? vm.currentDataByISO2?.[iso2] : null)
 
       layer.on({
         mouseover(e) {
@@ -417,8 +853,17 @@ export default {
           lyr.setStyle({ weight: 3, color: '#666', dashArray: '', fillOpacity: 1 })
           if (vm.showTooltips) {
             const v = getVal()
-            const currency = (iso2 && vm.priceByISO2?.[iso2]?.currency) || 'EUR'
-            const text = Number.isFinite(v) ? `${name}: ${v.toFixed(2)} ${currency}/MWh` : `${name}: no data`
+            const unit = vm.legendUnit
+            const decimals = vm.heatmapType === 'prices' ? 2 : 0
+            let text = Number.isFinite(v) 
+              ? `${name}: ${v.toFixed(decimals)} ${unit}` 
+              : `${name}: no data`
+            
+            // Add time info for price tooltips
+            if (vm.heatmapType === 'prices' && vm.hasTimeData) {
+              text += `\n${vm.currentTimeDisplay}`
+            }
+            
             lyr.bindTooltip(text, { permanent: false, direction: 'center', className: 'custom-tooltip' }).openTooltip()
           }
         },
@@ -428,10 +873,9 @@ export default {
         },
         async click() {
           vm.openModal({ name, value: getVal(), properties: feature.properties })
-          await new Promise(r => setTimeout(r, 220)) // wait for panel-slide transition
+          await new Promise(r => setTimeout(r, 220))
           if (iso2) {
             await Promise.all([vm.fetchCapacity(iso2), vm.fetchGeneration(iso2)])
-            // if chart exists, ensure a final update after layout settles
             await vm.$nextTick()
             vm.generationChartInstance?.resize()
             vm.generationChartInstance?.update()
@@ -440,19 +884,18 @@ export default {
             vm.generationError = 'Missing ISO-2 code for this feature'
           }
         }
-
       })
     },
 
     updateColorScheme() {
       if (this.countriesGeoJson) {
-        // touch object to trigger LGeoJson reactive re-style
         this.countriesGeoJson = { ...this.countriesGeoJson }
       }
     },
 
     onMapReady(mapObject) { this.map = mapObject },
 
+    // Chart methods (unchanged)
     renderCapacityChart() {
       const canvas = this.$refs.capacityChart
       if (!canvas) return
@@ -494,159 +937,222 @@ export default {
     onKeydown(e) {
       if (e.key === 'Escape' && this.isModalOpen) this.closePanel()
     },
-  //****************GENERATION*****************//
-async fetchGeneration(iso2) {
-  this.generationLoading = true
-  this.generationError = null
-  this.generationItems = []
-  this.generationDateLabel = null
-  this.destroyGenerationChart()
 
-  try {
-    const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
-    const { data } = await axios.get(url)
-    this.generationItems = Array.isArray(data.items) ? data.items : []
-    //this.generationDateLabel = data.date_label 
-    
-  } catch (e) {
-    this.generationError = 'Failed to load generation data'
-  } finally {
-    this.generationLoading = false
-    await this.$nextTick()
-    // изчакай панела (transition) да се разположи
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
-    if (!this.generationError && this.generationItems.length) {
-      this.renderGenerationChart()
-      this.generationChartInstance?.resize()
-      this.generationChartInstance?.update()
-    }
-  }
-},
+    // Generation methods (unchanged)
+    async fetchGeneration(iso2) {
+      this.generationLoading = true
+      this.generationError = null
+      this.generationItems = []
+      this.generationDateLabel = null
+      this.destroyGenerationChart()
 
-renderGenerationChart() {
-  const canvas = this.$refs.generationChart
-  if (!canvas) return
-  this.destroyGenerationChart()
-
-  // чисто копие без Proxy
-  const items = JSON.parse(JSON.stringify(this.generationItems))
-
-  // уникални timestamp-и (epoch ms)
-  const timestamps = Array.from(new Set(items.map(i => Date.parse(i.datetime_utc))))
-    .sort((a, b) => a - b)
-
-  // групиране по технология
-  const byTech = new Map()
-  for (const it of items) {
-    const key = it.psr_name || it.psr_type || 'Unknown'
-    if (!byTech.has(key)) byTech.set(key, new Map())
-    byTech.get(key).set(Date.parse(it.datetime_utc), Number(it.generation_mw) || 0)
-  }
-
-  const datasets = []
-  for (const [tech, series] of byTech.entries()) {
-    const color = this.psrColors[tech] || { border: '#999', fill: 'rgba(153,153,153,0.35)' }
-    const data = timestamps.map(ts => ({ x: ts, y: series.get(ts) ?? 0 }))
-    datasets.push({
-      label: tech,
-      data,
-      borderColor: color.border,
-      backgroundColor: color.fill,
-      pointRadius: 0,
-      borderWidth: 1,
-      tension: 0.25,
-      fill: true,
-      stack: 'gen' // явна купчина за stacked area
-    })
-  }
-
-  const cfg = {
-    type: 'line',
-    data: { datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      normalized: true,
-      parsing: { xAxisKey: 'x', yAxisKey: 'y' }, // казваме му кои ключове да чете
-      interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } },
-      scales: {
-        x: {
-          type: 'time',
-          time: { unit: 'hour', tooltipFormat: 'HH:mm' }
-        },
-        y: {
-          stacked: true,
-          beginAtZero: true,
-          ticks: { callback: v => Intl.NumberFormat().format(v) },
-          title: { display: true, text: 'MW' }
+      try {
+        const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+        const { data } = await axios.get(url)
+        this.generationItems = Array.isArray(data.items) ? data.items : []
+      } catch (e) {
+        this.generationError = 'Failed to load generation data'
+      } finally {
+        this.generationLoading = false
+        await this.$nextTick()
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+        if (!this.generationError && this.generationItems.length) {
+          this.renderGenerationChart()
+          this.generationChartInstance?.resize()
+          this.generationChartInstance?.update()
         }
       }
+    },
+
+    renderGenerationChart() {
+      const canvas = this.$refs.generationChart
+      if (!canvas) return
+      this.destroyGenerationChart()
+
+      const items = JSON.parse(JSON.stringify(this.generationItems))
+      const timestamps = Array.from(new Set(items.map(i => Date.parse(i.datetime_utc))))
+        .sort((a, b) => a - b)
+
+      const byTech = new Map()
+      for (const it of items) {
+        const key = it.psr_name || it.psr_type || 'Unknown'
+        if (!byTech.has(key)) byTech.set(key, new Map())
+        byTech.get(key).set(Date.parse(it.datetime_utc), Number(it.generation_mw) || 0)
+      }
+
+      const datasets = []
+      for (const [tech, series] of byTech.entries()) {
+        const color = this.psrColors[tech] || { border: '#999', fill: 'rgba(153,153,153,0.35)' }
+        const data = timestamps.map(ts => ({ x: ts, y: series.get(ts) ?? 0 }))
+        datasets.push({
+          label: tech,
+          data,
+          borderColor: color.border,
+          backgroundColor: color.fill,
+          pointRadius: 0,
+          borderWidth: 1,
+          tension: 0.25,
+          fill: true,
+          stack: 'gen'
+        })
+      }
+
+      const cfg = {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          normalized: true,
+          parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'hour', tooltipFormat: 'HH:mm' }
+            },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: { callback: v => Intl.NumberFormat().format(v) },
+              title: { display: true, text: 'MW' }
+            }
+          }
+        }
+      }
+
+      const ctx = canvas.getContext('2d')
+      this.generationChartInstance = markRaw(new Chart(ctx, cfg))
+    },
+
+    destroyGenerationChart() {
+      if (this.generationChartInstance?.destroy) this.generationChartInstance.destroy()
+      this.generationChartInstance = null
     }
-  }
-
-  const ctx = canvas.getContext('2d')
-  this.generationChartInstance = markRaw(new Chart(ctx, cfg))
-},
-
-destroyGenerationChart() {
-  if (this.generationChartInstance?.destroy) this.generationChartInstance.destroy()
-  this.generationChartInstance = null
-}
-
   },
 
   async mounted() {
+    
     window.addEventListener('keydown', this.onKeydown)
-    await this.loadCountriesData()
+    this.initialLoading = true
+    try {
+        // First load the GeoJSON data
+          await this.loadCountriesData()
+          
+          if (this.countriesGeoJson) {
+          if (this.heatmapType === 'prices') {
+            await this.refreshAllHistoricalPrices()
+          } else {
+            await this.refreshAllCapacities()
+          }
+        }
+    } catch (error) {
+        console.error('Error during initial data loading:', error)
+    } finally {
+      this.initialLoading = false
+    }
   },
 
   beforeUnmount() {
     window.removeEventListener('keydown', this.onKeydown)
     this.destroyCapacityChart()
-    if (this.priceTimer) clearInterval(this.priceTimer)
     this.destroyGenerationChart()
+    if (this.priceTimer) clearInterval(this.priceTimer)
   }
 }
 </script>
 
-
 <style scoped>
+/* App container - remove default margins and make full viewport */
 #app {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: #2c3e50;
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Header and controls */
+/* Header stays fixed height */
 .header {
   text-align: center;
   padding: 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  flex-shrink: 0; /* Don't shrink */
 }
-.header h1 { margin: 0 0 15px 0; font-weight: 300; font-size: 2.2rem; }
-.controls { display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap; }
-.controls label { display: flex; align-items: center; gap: 8px; color: white; }
-.controls select { padding: 8px 12px; border: none; border-radius: 4px; background: white; color: #333; cursor: pointer; }
-.controls button { padding: 8px 16px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: 500; }
-.controls button:hover { background-color: #218838; transform: translateY(-1px); }
 
-/* Two-column row: left panel + map */
+.header h1 {
+  margin: 0 0 15px 0;
+  font-weight: 300;
+  font-size: 2.2rem;
+}
+
+.controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  cursor: pointer;
+}
+
+.controls input[type="radio"] {
+  margin: 0;
+}
+
+.controls button {
+  padding: 8px 16px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.controls button:hover:not(:disabled) {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.controls button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* FIXED: Map row now fills remaining viewport height */
 .map-row {
-  position: relative;           /* enables absolute positioning for panel/scrim */
+  position: relative;
   display: flex;
   gap: 16px;
   align-items: stretch;
-  margin: 20px;
-  height: 700px;
+  margin: 0 20px;
+  flex: 1; /* Fill remaining space */
+  min-height: 0; /* Allow flex item to shrink */
+  
+  /* Reserve space for slider at bottom */
+  padding-bottom: 120px; /* Adjust based on your slider height */
 }
+
 .left-panel {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
-  /* Wider: min 560px, prefer 56vw, max 800px */
   width: clamp(560px, 56vw, 800px);
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
@@ -659,40 +1165,288 @@ destroyGenerationChart() {
   overflow: hidden;
   z-index: 1100;
 }
-/* Scrim blocks interaction with the map and closes on click */
+
 .panel-scrim {
   position: absolute;
-  inset: 0;                     /* cover the whole map-row */
-  background: rgba(0,0,0,0.08); /* subtle scrim */
-  z-index: 1000;                /* below the panel, above the map */
+  inset: 0;
+  background: rgba(0,0,0,0.08);
+  z-index: 1000;
 }
-.panel-slide-enter-active,
-.panel-slide-leave-active {
+
+.panel-slide-enter-active, .panel-slide-leave-active {
   transition: transform 220ms ease, opacity 220ms ease;
 }
-.panel-slide-enter-from,
-.panel-slide-leave-to {
+
+.panel-slide-enter-from, .panel-slide-leave-to {
   transform: translateX(-14px);
   opacity: 0;
 }
-.panel-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; border-bottom: 1px solid #eee;
-}
-.panel-close { border: none; background: transparent; font-size: 18px; cursor: pointer; }
-.panel-content { padding: 14px; overflow: auto; }
 
-/* Map column takes remaining width and the same height */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eee;
+}
+
+.panel-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.panel-content {
+  padding: 14px;
+  overflow: auto;
+}
+
+/* FIXED: Map column now fills full height */
 .map-col {
   flex: 1 1 auto;
-  min-width: 0; /* allows map to shrink properly */
+  min-width: 0;
+  height: 100%; /* Fill parent height */
 }
+
 .map {
-  height: 100%; /* 100% of .map-col which inherits from .map-row */
+  height: 100%; /* Fill parent height completely */
+  width: 100%;
+  border-radius: 8px; /* Optional: rounded corners */
+  overflow: hidden;
+}
+
+/* Chart containers */
+.chart-box {
+  height: 520px;
+  min-height: 520px;
   width: 100%;
 }
 
-/* Legend */
+.chart-box--sm {
+  height: 400px;
+  min-height: 400px;
+  width: 100%;
+}
+
+/* Time slider container - positioned at bottom */
+.time-slider-container {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 1000;
+}
+
+.time-slider-container h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.slider-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.time-display {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.price-display {
+  font-weight: 600;
+  color: #48bb78;
+}
+
+/* Slider wrapper with proper spacing for ticks below */
+.slider-wrapper {
+  position: relative;
+  height: 80px;
+  margin: 10px 0;
+}
+
+/* Custom slider container */
+.custom-slider {
+  position: relative;
+  height: 40px;
+  margin: 0;
+}
+
+/* Smooth draggable range input */
+.smooth-range-slider {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 40px;
+  transform: translateY(-50%);
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  z-index: 3;
+  
+  /* Essential for smooth dragging */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Webkit (Chrome/Safari/Edge) slider styling */
+.smooth-range-slider::-webkit-slider-track {
+  height: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+}
+
+.smooth-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: grab;
+  border: 3px solid white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  
+  /* Smooth transitions for dragging */
+  transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.smooth-range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+}
+
+.smooth-range-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.8);
+}
+
+/* Firefox slider styling */
+.smooth-range-slider::-moz-range-track {
+  height: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+}
+
+.smooth-range-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: grab;
+  border: 3px solid white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.smooth-range-slider::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+}
+
+.smooth-range-slider::-moz-range-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+
+/* Custom visual track */
+.slider-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e0 100%);
+  border-radius: 4px;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+/* Progress track */
+.slider-progress {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 8px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 4px 0 0 4px;
+  transform: translateY(-50%);
+  transition: width 0.2s ease;
+  z-index: 2;
+}
+
+/* Time ticks positioned BELOW the slider */
+.time-ticks-below {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  right: 0;
+  height: 30px;
+}
+
+.time-tick-below {
+  position: absolute;
+  transform: translateX(-50%);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.time-tick-below:hover {
+  transform: translateX(-50%) scale(1.1);
+}
+
+.tick-mark-below {
+  width: 2px;
+  height: 8px;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  border-radius: 1px;
+  margin: 0 auto 4px auto;
+  transition: all 0.2s ease;
+}
+
+.tick-label-below {
+  font-size: 11px;
+  color: #4a5568;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.time-tick-below:hover .tick-label-below {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.time-tick-below:hover .tick-mark-below {
+  height: 12px;
+  width: 3px;
+}
+
+/* No data message */
+.no-data-message {
+  text-align: center;
+  color: #718096;
+  font-style: italic;
+  margin-top: 10px;
+}
+
+/* Legend for capacity mode only */
 .legend {
   margin: 20px;
   padding: 20px;
@@ -700,13 +1454,90 @@ destroyGenerationChart() {
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
-.legend h3 { margin: 0 0 20px 0; color: #343a40; font-weight: 500; }
-.color-scale { margin-bottom: 20px; }
-.scale-bar { height: 20px; border-radius: 10px; margin-bottom: 5px; border: 1px solid #ddd; }
-.scale-labels { display: flex; justify-content: space-between; font-size: 0.9rem; color: #666; }
-.legend-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-.legend-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; background: #f8f9fa; }
-.color-box { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ccc; }
+
+.legend h3 {
+  margin: 0 0 20px 0;
+  color: #343a40;
+  font-weight: 500;
+}
+
+.color-scale {
+  margin-bottom: 20px;
+}
+
+.scale-bar {
+  height: 20px;
+  border-radius: 10px;
+  margin-bottom: 5px;
+  border: 1px solid #ddd;
+}
+
+.scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.legend-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f8f9fa;
+}
+
+.color-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+/* Loading overlay */
+.initial-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loading-content {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 
 /* Leaflet UI fixes and tooltips */
 :global(.custom-tooltip) {
@@ -714,7 +1545,9 @@ destroyGenerationChart() {
   border: none !important;
   border-radius: 4px !important;
   color: white !important;
+  white-space: pre-line !important;
 }
+
 :global(.leaflet-interactive),
 :global(.leaflet-overlay-pane svg),
 :global(.leaflet-overlay-pane path),
@@ -723,9 +1556,15 @@ destroyGenerationChart() {
 :global(.leaflet-container:focus) {
   outline: none !important;
 }
-.leaflet-container { outline: none !important; }
-.leaflet-container * { outline: none !important; }
-.leaflet-container *, .leaflet-container *:before, .leaflet-container *:after {
+
+.leaflet-container {
+  outline: none !important;
+}
+
+.leaflet-container,
+.leaflet-container *,
+.leaflet-container *:before,
+.leaflet-container *:after {
   -webkit-tap-highlight-color: transparent !important;
   -webkit-touch-callout: none !important;
   -webkit-user-select: none !important;
@@ -735,25 +1574,121 @@ destroyGenerationChart() {
   user-select: none !important;
 }
 
-/* Updated responsive breakpoints */
+/* Responsive breakpoints */
 @media (max-width: 900px) {
-  .left-panel { width: min(420px, 50vw); } /* adjusted for wider panel */
-  .map-row { height: 640px; } /* proportionally increased */
+  .left-panel {
+    width: min(420px, 50vw);
+  }
+  
+  .slider-info {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  
+  .time-slider-container {
+    margin: 10px;
+    padding: 15px;
+  }
+  
+  .tick-label-below {
+    font-size: 10px;
+  }
+  
+  .chart-box--sm {
+    height: 360px;
+    min-height: 360px;
+    width: 100%;
+  }
 }
-.chart-box--sm {
-  height: 360px;
-  min-height: 360px;
-  width: 100%;
+
+@media (max-width: 768px) {
+  .time-slider-container {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    padding: 15px;
+  }
+  
+  .slider-wrapper {
+    height: 70px;
+  }
+  
+  .smooth-range-slider::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .smooth-range-slider::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .tick-label-below {
+    font-size: 10px;
+  }
+  
+  .map-row {
+    padding-bottom: 100px; /* Less padding for mobile */
+  }
 }
+
 @media (max-width: 600px) {
-  .map-row { flex-direction: column; height: auto; }
-  .left-panel, .map { height: auto; }
-  .chart-box { height: 350px; } /* smaller but still bigger than original */
-  .chart-box--sm { height: 300px; }
+  .header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .controls {
+    gap: 15px;
+  }
+  
+  .chart-box {
+    height: 350px;
+  }
+  
+  .chart-box--sm {
+    height: 300px;
+  }
+  
+  .time-slider-container h3 {
+    font-size: 1.1rem;
+  }
+  
+  .tick-label-below {
+    font-size: 9px;
+  }
+  
+  .map-row {
+    margin: 0 10px;
+    padding-bottom: 90px;
+  }
 }
 
-.chart-box { 
-  height: 520px; /* increased from 320px */
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .time-slider-container {
+    background: rgba(26, 32, 44, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .time-slider-container h3 {
+    color: #e2e8f0;
+  }
+  
+  .slider-track {
+    background: linear-gradient(90deg, #4a5568 0%, #2d3748 100%);
+  }
+  
+  .tick-label-below {
+    color: #a0aec0;
+  }
+  
+  .time-tick-below:hover .tick-label-below {
+    color: #90cdf4;
+  }
+  
+  .no-data-message {
+    color: #a0aec0;
+  }
 }
-
 </style>
