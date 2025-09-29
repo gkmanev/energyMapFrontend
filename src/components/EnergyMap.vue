@@ -17,9 +17,9 @@
         <label>
           <input type="radio" v-model="heatmapType" value="capacity"> Capacity Heatmap
         </label>
-        <!-- <button @click="refreshHeatmapData" :disabled="isRefreshing">
+        <button @click="refreshHeatmapData" :disabled="isRefreshing">
           {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
-        </button> -->
+        </button>
       </div>
     </div>
 
@@ -93,14 +93,14 @@
             :geojson="countriesGeoJson"
             :options="geoJsonOptions"
             :options-style="optionsStyle"
+            :key="heatmapUpdateKey"
           />
         </LMap>
       </div>
     </div>
     
-    <!-- FIXED: Remove the extra template wrapper -->
-    <!-- Enhanced time slider section (now properly visible) -->
-    <div v-if="heatmapType === 'prices'" class="time-slider-container">
+    <!-- UPDATED: Slider positioned above the footer -->
+    <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
       <h3>Historical Prices - Last 48 Hours</h3>
       <div class="slider-info">
         <span class="time-display">{{ currentTimeDisplay }}</span>
@@ -147,6 +147,13 @@
       </div>
     </div>
 
+    <!-- NEW: Actual footer positioned below the slider -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <!-- <span>© 2025 Entra Energy | Energy Data Visualization</span> -->
+      </div>
+    </footer>
+
     <!-- Capacity Legend - only show for capacity heatmap -->
     <div v-if="heatmapType === 'capacity'" class="legend">
       <h3>{{ legendTitle }}</h3>
@@ -173,6 +180,7 @@
     </div>
   </div>
 </template>
+
 
 <script>
 const SUPPORTED_PRICE_ISO2 = new Set([
@@ -202,7 +210,8 @@ import {
   interpolatePlasma,
   interpolateInferno,
   interpolateTurbo,
-  interpolateSpectral
+  interpolateSpectral,
+  interpolateYlOrRd
 } from 'd3-scale-chromatic'
 
 export default {
@@ -267,7 +276,7 @@ export default {
       zoom: 4,
       center: [54, 20],
       showTooltips: true,
-      selectedColorScheme: 'viridis',
+      selectedColorScheme: 'ylOrRd',
       tileUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
       mapOptions: {
@@ -288,7 +297,8 @@ export default {
         plasma: interpolatePlasma,
         inferno: interpolateInferno,
         turbo: interpolateTurbo,
-        spectral: interpolateSpectral
+        spectral: interpolateSpectral,
+        ylOrRd: interpolateYlOrRd
       }
     }
   },
@@ -1064,7 +1074,7 @@ export default {
 </script>
 
 <style scoped>
-/* App container - remove default margins and make full viewport */
+/* App container */
 #app {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: #2c3e50;
@@ -1075,37 +1085,39 @@ export default {
   flex-direction: column;
 }
 
-/* Header stays fixed height */
+/* Compact header */
 .header {
   text-align: center;
-  padding: 20px;
+  padding: 10px 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  flex-shrink: 0; /* Don't shrink */
+  flex-shrink: 0;
 }
 
 .header h1 {
-  margin: 0 0 15px 0;
+  margin: 0 0 8px 0;
   font-weight: 300;
-  font-size: 2.2rem;
+  font-size: 1.8rem;
+  line-height: 1.2;
 }
 
 .controls {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 20px;
+  gap: 15px;
   flex-wrap: wrap;
-  margin-top: 15px;
+  margin-top: 8px;
 }
 
 .controls label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: white;
   cursor: pointer;
+  font-size: 14px;
 }
 
 .controls input[type="radio"] {
@@ -1113,7 +1125,7 @@ export default {
 }
 
 .controls button {
-  padding: 8px 16px;
+  padding: 6px 12px;
   background-color: #28a745;
   color: white;
   border: none;
@@ -1121,6 +1133,7 @@ export default {
   cursor: pointer;
   transition: all 0.2s;
   font-weight: 500;
+  font-size: 14px;
 }
 
 .controls button:hover:not(:disabled) {
@@ -1134,18 +1147,16 @@ export default {
   transform: none;
 }
 
-/* FIXED: Map row now fills remaining viewport height */
+/* UPDATED: Map layout with space for layered bottom elements */
 .map-row {
   position: relative;
   display: flex;
   gap: 16px;
   align-items: stretch;
-  margin: 0 20px;
-  flex: 1; /* Fill remaining space */
-  min-height: 0; /* Allow flex item to shrink */
-  
-  /* Reserve space for slider at bottom */
-  padding-bottom: 120px; /* Adjust based on your slider height */
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 0px;  /* UPDATED: Space for slider + footer */
 }
 
 .left-panel {
@@ -1202,21 +1213,19 @@ export default {
   overflow: auto;
 }
 
-/* FIXED: Map column now fills full height */
 .map-col {
   flex: 1 1 auto;
   min-width: 0;
-  height: 100%; /* Fill parent height */
+  height: 100%;
 }
 
 .map {
-  height: 100%; /* Fill parent height completely */
+  height: 100%;
   width: 100%;
-  border-radius: 8px; /* Optional: rounded corners */
+  border-radius: 8px;
   overflow: hidden;
 }
 
-/* Chart containers */
 .chart-box {
   height: 520px;
   min-height: 520px;
@@ -1229,24 +1238,25 @@ export default {
   width: 100%;
 }
 
-/* Time slider container - positioned at bottom */
-.time-slider-container {
+/* NEW: Time slider positioned above footer (overlay style) */
+.time-slider-overlay {
   position: fixed;
-  bottom: 20px;
+  bottom: 40px;              /* UPDATED: Above the footer */
   left: 20px;
   right: 20px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 10px 15px;
+  box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  z-index: 1000;
+  z-index: 1001;             /* UPDATED: Above footer but below modals */
+  max-height: 70px;
 }
 
-.time-slider-container h3 {
-  margin: 0 0 15px 0;
-  font-size: 16px;
+.time-slider-overlay h3 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
   font-weight: 600;
   color: #2d3748;
 }
@@ -1255,8 +1265,8 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  font-size: 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
 }
 
 .time-display {
@@ -1269,94 +1279,85 @@ export default {
   color: #48bb78;
 }
 
-/* Slider wrapper with proper spacing for ticks below */
 .slider-wrapper {
   position: relative;
-  height: 80px;
-  margin: 10px 0;
+  height: 55px;
+  margin: 5px 0;
 }
 
-/* Custom slider container */
 .custom-slider {
   position: relative;
-  height: 40px;
+  height: 28px;
   margin: 0;
 }
 
-/* Smooth draggable range input */
 .smooth-range-slider {
   position: absolute;
   top: 50%;
   left: 0;
   right: 0;
   width: 100%;
-  height: 40px;
+  height: 28px;
   transform: translateY(-50%);
   background: transparent;
   outline: none;
   cursor: pointer;
   z-index: 3;
-  
-  /* Essential for smooth dragging */
   -webkit-appearance: none;
   appearance: none;
 }
 
-/* Webkit (Chrome/Safari/Edge) slider styling */
 .smooth-range-slider::-webkit-slider-track {
-  height: 8px;
+  height: 6px;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .smooth-range-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #667eea;
   cursor: grab;
-  border: 3px solid white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-  
-  /* Smooth transitions for dragging */
+  border: 2px solid white;
+  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
   transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .smooth-range-slider::-webkit-slider-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
 }
 
 .smooth-range-slider::-webkit-slider-thumb:active {
   cursor: grabbing;
   transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.8);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.8);
 }
 
-/* Firefox slider styling */
 .smooth-range-slider::-moz-range-track {
-  height: 8px;
+  height: 6px;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .smooth-range-slider::-moz-range-thumb {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #667eea;
   cursor: grab;
-  border: 3px solid white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  border: 2px solid white;
+  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
   transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .smooth-range-slider::-moz-range-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
 }
 
 .smooth-range-slider::-moz-range-thumb:active {
@@ -1364,39 +1365,36 @@ export default {
   transform: scale(1.05);
 }
 
-/* Custom visual track */
 .slider-track {
   position: absolute;
   top: 50%;
   left: 0;
   right: 0;
-  height: 8px;
+  height: 6px;
   background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e0 100%);
-  border-radius: 4px;
+  border-radius: 3px;
   transform: translateY(-50%);
   z-index: 1;
 }
 
-/* Progress track */
 .slider-progress {
   position: absolute;
   top: 50%;
   left: 0;
-  height: 8px;
+  height: 6px;
   background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  border-radius: 4px 0 0 4px;
+  border-radius: 3px 0 0 3px;
   transform: translateY(-50%);
   transition: width 0.2s ease;
   z-index: 2;
 }
 
-/* Time ticks positioned BELOW the slider */
 .time-ticks-below {
   position: absolute;
-  top: 50px;
+  top: 10px;
   left: 0;
   right: 0;
-  height: 30px;
+  height: 23px;
 }
 
 .time-tick-below {
@@ -1407,7 +1405,7 @@ export default {
 }
 
 .time-tick-below:hover {
-  transform: translateX(-50%) scale(1.1);
+  transform: translateX(-50%) scale(1.05);
 }
 
 .tick-mark-below {
@@ -1420,12 +1418,13 @@ export default {
 }
 
 .tick-label-below {
-  font-size: 11px;
-  color: #4a5568;
+  font-size: 10px;
+  color: #ffffff;
   text-align: center;
   white-space: nowrap;
   font-weight: 500;
   transition: color 0.2s ease;
+  line-height: 1.2;
 }
 
 .time-tick-below:hover .tick-label-below {
@@ -1438,15 +1437,37 @@ export default {
   width: 3px;
 }
 
-/* No data message */
 .no-data-message {
   text-align: center;
   color: #718096;
   font-style: italic;
-  margin-top: 10px;
+  margin-top: 8px;
+  font-size: 12px;
 }
 
-/* Legend for capacity mode only */
+/* NEW: Actual footer positioned at the bottom */
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 35px;               /* Compact footer height */
+  background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 1000;             /* Below slider but above map */
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Legend */
 .legend {
   margin: 20px;
   padding: 20px;
@@ -1539,7 +1560,7 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-/* Leaflet UI fixes and tooltips */
+/* Leaflet fixes */
 :global(.custom-tooltip) {
   background: rgba(0,0,0,0.8) !important;
   border: none !important;
@@ -1574,7 +1595,7 @@ export default {
   user-select: none !important;
 }
 
-/* Responsive breakpoints */
+/* Responsive design */
 @media (max-width: 900px) {
   .left-panel {
     width: min(420px, 50vw);
@@ -1584,15 +1605,17 @@ export default {
     flex-direction: column;
     align-items: stretch;
     text-align: center;
+    gap: 4px;
   }
   
-  .time-slider-container {
-    margin: 10px;
-    padding: 15px;
+  .time-slider-overlay {
+    margin: 8px;
+    padding: 10px 12px;
+    bottom: 67px;            /* Adjust for mobile */
   }
   
   .tick-label-below {
-    font-size: 10px;
+    font-size: 9px;
   }
   
   .chart-box--sm {
@@ -1603,43 +1626,71 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .time-slider-container {
-    bottom: 10px;
-    left: 10px;
-    right: 10px;
-    padding: 15px;
+  .header {
+    padding: 8px 15px;
+  }
+  
+  .header h1 {
+    font-size: 1.6rem;
+  }
+  
+  .controls {
+    gap: 10px;
+    margin-top: 6px;
+  }
+  
+  .time-slider-overlay {
+    bottom: 40px;
+    left: 8px;
+    right: 8px;
+    padding: 8px 12px;
+    max-height: 65px;
   }
   
   .slider-wrapper {
-    height: 70px;
+    height: 50px;
   }
   
   .smooth-range-slider::-webkit-slider-thumb {
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
   }
   
   .smooth-range-slider::-moz-range-thumb {
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
   }
   
   .tick-label-below {
-    font-size: 10px;
+    font-size: 9px;
   }
   
   .map-row {
-    padding-bottom: 100px; /* Less padding for mobile */
+    padding-bottom: 0px;   /* Adjust for layered mobile layout */
+  }
+  
+  .app-footer {
+    height: 30px;            /* Smaller mobile footer */
+  }
+  
+  .footer-content {
+    font-size: 10px;
   }
 }
 
 @media (max-width: 600px) {
   .header h1 {
-    font-size: 1.8rem;
+    font-size: 1.4rem;
+    margin-bottom: 6px;
   }
   
   .controls {
-    gap: 15px;
+    gap: 8px;
+    flex-direction: column;
+  }
+  
+  .controls label, .controls button {
+    font-size: 13px;
   }
   
   .chart-box {
@@ -1650,28 +1701,32 @@ export default {
     height: 300px;
   }
   
-  .time-slider-container h3 {
-    font-size: 1.1rem;
+  .time-slider-overlay h3 {
+    font-size: 13px;
   }
   
   .tick-label-below {
-    font-size: 9px;
+    font-size: 8px;
   }
   
   .map-row {
-    margin: 0 10px;
-    padding-bottom: 90px;
+    margin: 0;
+    padding-bottom: 0px;
+  }
+  
+  .slider-info {
+    font-size: 11px;
   }
 }
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
-  .time-slider-container {
+  .time-slider-overlay {
     background: rgba(26, 32, 44, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
   
-  .time-slider-container h3 {
+  .time-slider-overlay h3 {
     color: #e2e8f0;
   }
   
@@ -1689,6 +1744,10 @@ export default {
   
   .no-data-message {
     color: #a0aec0;
+  }
+  
+  .app-footer {
+    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
   }
 }
 </style>
