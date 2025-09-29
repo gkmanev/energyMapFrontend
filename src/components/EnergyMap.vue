@@ -17,6 +17,9 @@
         <label>
           <input type="radio" v-model="heatmapType" value="capacity"> Capacity Heatmap
         </label>
+        <label>
+          <input type="radio" v-model="heatmapType" value="generation"> Generation Heatmap
+        </label>
         <button @click="refreshHeatmapData" :disabled="isRefreshing">
           {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
         </button>
@@ -99,7 +102,7 @@
       </div>
     </div>
     
-    <!-- UPDATED: Slider positioned above the footer -->
+    <!-- Price Slider -->
     <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
       <h3>Historical Prices - Last 48 Hours</h3>
       <div class="slider-info">
@@ -147,6 +150,54 @@
       </div>
     </div>
 
+    <!-- Generation Slider -->
+    <div v-if="heatmapType === 'generation'" class="time-slider-overlay">
+      <h3>Generation Data - Last 48 Hours</h3>
+      <div class="slider-info">
+        <span class="time-display">{{ currentTimeDisplay }}</span>
+        <span class="generation-display">{{ totalGenerationDisplay }}</span>
+      </div>
+      
+      <!-- Enhanced smooth draggable slider -->
+      <div class="slider-wrapper">
+        <div class="custom-slider">
+          <!-- Native range input for smooth dragging -->
+          <input 
+            v-model="currentTimeIndex"
+            type="range" 
+            :min="0" 
+            :max="maxTimeIndex"
+            :disabled="!hasTimeData || isRefreshing"
+            class="smooth-range-slider"
+            @input="onSliderChange"
+            @change="onSliderChange"
+          />
+          
+          <!-- Custom visual track and progress -->
+          <div class="slider-track"></div>
+          <div class="slider-progress" :style="progressStyle"></div>
+        </div>
+        
+        <!-- Time tick marks BELOW the slider -->
+        <div v-if="hasTimeData" class="time-ticks-below">
+          <div 
+            v-for="(tick, index) in generationTimeTicks" 
+            :key="index"
+            class="time-tick-below"
+            :style="{ left: tick.position }"
+            @click="jumpToTick(tick.index)"
+          >
+            <div class="tick-mark-below"></div>
+            <div class="tick-label-below">{{ tick.label }}</div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-if="!hasTimeData && heatmapType === 'generation'" class="no-data-message">
+        Click "Refresh Data" to load generation data
+      </div>
+    </div>
+
     <!-- NEW: Actual footer positioned below the slider -->
     <footer class="app-footer">
       <div class="footer-content">
@@ -154,33 +205,8 @@
       </div>
     </footer>
 
-    <!-- Capacity Legend - only show for capacity heatmap -->
-    <div v-if="heatmapType === 'capacity'" class="legend">
-      <h3>{{ legendTitle }}</h3>
-      <div class="color-scale">
-        <div class="scale-bar" :style="scaleBarStyle"></div>
-        <div class="scale-labels">
-          <span>{{ minValue.toFixed(2) }}</span>
-          <span>{{ maxValue.toFixed(2) }} {{ legendUnit }}</span>
-        </div>
-      </div>
-      <div class="legend-items">
-        <div 
-          v-for="country in sampleCountries" 
-          :key="country.name"
-          class="legend-item"
-        >
-          <span 
-            class="color-box" 
-            :style="{ backgroundColor: country.color }"
-          ></span>
-          {{ country.name }}: {{ country.value.toFixed(0) }} {{ legendUnit }}
-        </div>
-      </div>
-    </div>
   </div>
 </template>
-
 
 <script>
 const SUPPORTED_PRICE_ISO2 = new Set([
@@ -193,6 +219,10 @@ const SUPPORTED_CAPACITY_ISO2 = new Set([
   'AL','AT','BA','BE','BG','CH','CZ','DE','DK','EE','ES','FI','FR','GB',
   'GR','HR','HU','IE','IT','LT','LU','LV','NL','NO','PL','PT','RO','SE','SI','SK'
 ])
+
+// Generation uses same countries as capacity for now
+const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
+
 const BULK_REQUEST_CONFIG = {
   timeout: 30000,
   retry: 2,
@@ -220,14 +250,20 @@ export default {
 
   data() {
     return {
-      // Heatmap type controls
+      // Heatmap type controls - Price is default
       heatmapType: 'prices',
       isRefreshing: false,
       initialLoading: true,
-      // Time slider data (removed playback-related properties)
+      heatmapUpdateKey: 0,
+      
+      // Time slider data for prices
       currentTimeIndex: 0,
       availableTimestamps: [], // Array of timestamps for the last 48 hours
       historicalPriceData: {},  // { iso2: { timestamp: price, ... }, ... }
+      
+      // Generation time-series data for heatmap (48 hours)
+      availableGenerationTimestamps: [], // Array of timestamps for generation data
+      historicalGenerationData: {},  // { iso2: { timestamp: generation_mw, ... }, ... }
       
       // Capacity data (ISO-2 keyed)
       countryCapacityByISO2: {},
@@ -304,34 +340,40 @@ export default {
   },
 
   computed: {
- progressStyle() {
+    progressStyle() {
       const percentage = this.maxTimeIndex > 0 ? (this.currentTimeIndex / this.maxTimeIndex) * 100 : 0
       return {
         width: `${percentage}%`
       }
     },
-    thumbStyle() {
-      const percentage = this.maxTimeIndex > 0 ? (this.currentTimeIndex / this.maxTimeIndex) * 100 : 0
-      return {
-        left: `calc(${percentage}% - 12px)` // Adjust for thumb width
-      }
-    },
+    
     // Time slider computed properties
     hasTimeData() {
+      if (this.heatmapType === 'generation') {
+        return this.availableGenerationTimestamps.length > 0
+      }
       return this.availableTimestamps.length > 0
     },
     
     maxTimeIndex() {
+      if (this.heatmapType === 'generation') {
+        return Math.max(0, this.availableGenerationTimestamps.length - 1)
+      }
       return Math.max(0, this.availableTimestamps.length - 1)
     },
     
     currentTimestamp() {
+      if (this.heatmapType === 'generation') {
+        return this.availableGenerationTimestamps[this.currentTimeIndex] || Date.now()
+      }
       return this.availableTimestamps[this.currentTimeIndex] || Date.now()
     },
     
     currentTimeDisplay() {
       if (!this.hasTimeData) return 'No data'
       const date = new Date(this.currentTimestamp)
+      
+      // Both price and generation use hourly display for 48 hours
       return date.toLocaleString('en-GB', {
         weekday: 'short',
         day: '2-digit',
@@ -341,9 +383,9 @@ export default {
       })
     },
     
-    // NEW: Time ticks for slider labels
+    // Time ticks for price slider labels
     timeTicks() {
-      if (!this.hasTimeData) return []
+      if (!this.hasTimeData || this.heatmapType !== 'prices') return []
       
       const ticks = []
       const totalTicks = 8 // Show 8 tick marks across the slider
@@ -379,27 +421,81 @@ export default {
       return ticks
     },
     
-    averagePriceDisplay() {
+    // Generation time ticks for slider (48 hours like prices)
+    generationTimeTicks() {
+      if (!this.hasTimeData || this.heatmapType !== 'generation') return []
       
+      const ticks = []
+      const totalTicks = 8 // Show 8 tick marks across the slider (same as prices)
+      
+      for (let i = 0; i <= totalTicks; i++) {
+        const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
+        const timestamp = this.availableGenerationTimestamps[tickIndex]
+        const date = new Date(timestamp)
+        
+        const position = `${(tickIndex / this.maxTimeIndex) * 100}%`
+        
+        let label
+        if (i === 0) {
+          label = '48h ago' // Leftmost (oldest)
+        } else if (i === totalTicks) {
+          label = 'Now' // Rightmost (newest)
+        } else {
+          // Show hours ago
+          const hoursAgo = Math.round((this.availableGenerationTimestamps[this.maxTimeIndex] - timestamp) / (60 * 60 * 1000))
+          label = `${hoursAgo}h`
+        }
+        
+        ticks.push({
+          position,
+          label,
+          timestamp,
+          index: tickIndex
+        })
+      }
+      
+      return ticks
+    },
+    
+    averagePriceDisplay() {
       if (this.heatmapType !== 'prices' || !this.hasTimeData) return ''
       const prices = Object.values(this.currentDataByISO2).filter(p => Number.isFinite(p))
       if (prices.length === 0) return 'No price data'
       const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length
       return `Avg: ${avg.toFixed(2)} EUR/MWh`
     },
+    
+    totalGenerationDisplay() {
+      if (this.heatmapType !== 'generation' || !this.hasTimeData) return ''
+      const generations = Object.values(this.currentDataByISO2).filter(g => Number.isFinite(g))
+      if (generations.length === 0) return 'No generation data'
+      const total = generations.reduce((sum, gen) => sum + gen, 0)
+      return `Total: ${(total/1000).toFixed(1)} GW`
+    },
 
-    // Updated computed properties for dual heatmap functionality
+    // Updated computed properties for multi heatmap functionality
     currentDataByISO2() {
       if (this.heatmapType === 'capacity') {
         return this.countryCapacityByISO2
       }
       
+      if (this.heatmapType === 'generation') {
+        const result = {}
+        const timestamp = this.currentTimestamp
+        
+        for (const [iso2, timeData] of Object.entries(this.historicalGenerationData)) {
+          if (timeData && timeData[timestamp] !== undefined) {
+            result[iso2] = timeData[timestamp]
+          }
+        }
+        
+        return result
+      }
+      
       // For prices, use historical data based on current time selection
       const result = {}
       const timestamp = this.currentTimestamp
-      // console.log("TIMESTAMP:", timestamp)
-      // console.log(this.historicalPriceData)
-
+      
       for (const [iso2, timeData] of Object.entries(this.historicalPriceData)) {
         if (timeData && timeData[timestamp] !== undefined) {
           result[iso2] = timeData[timestamp]
@@ -410,11 +506,17 @@ export default {
     },
     
     legendTitle() {
-      return this.heatmapType === 'prices' ? 'Energy Price Legend' : 'Installed Capacity Legend'
+      if (this.heatmapType === 'prices') return 'Energy Price Legend'
+      if (this.heatmapType === 'capacity') return 'Installed Capacity Legend'
+      if (this.heatmapType === 'generation') return 'Generation Legend'
+      return 'Heatmap Legend'
     },
     
     legendUnit() {
-      return this.heatmapType === 'prices' ? 'EUR/MWh' : 'MW'
+      if (this.heatmapType === 'prices') return 'EUR/MWh'
+      if (this.heatmapType === 'capacity') return 'MW'
+      if (this.heatmapType === 'generation') return 'MW'
+      return 'MW'
     },
     
     minValue() {
@@ -476,26 +578,28 @@ export default {
   },
 
   watch: {
-      heatmapType: {
-          handler(newType) {
-            // Only refresh if switching to a type without data
-            if (newType === 'prices' && !this.hasTimeData) {
-              this.refreshAllHistoricalPrices()
-            } else if (newType === 'capacity' && Object.keys(this.countryCapacityByISO2).length === 0) {
-              this.refreshAllCapacities()  
-            }
-            // Always update the color scheme when switching types
-            this.updateColorScheme()
-          },
-          immediate: false
-        },
-    
-      currentTimeIndex: {
-        handler() {
-          // Update map when time index changes
-          this.updateColorScheme()
+    heatmapType: {
+      handler(newType) {
+        // Only refresh if switching to a type without data
+        if (newType === 'prices' && !this.hasTimeData) {
+          this.refreshAllHistoricalPrices()
+        } else if (newType === 'capacity' && Object.keys(this.countryCapacityByISO2).length === 0) {
+          this.refreshAllCapacities()  
+        } else if (newType === 'generation' && this.availableGenerationTimestamps.length === 0) {
+          this.refreshAllHistoricalGeneration()
         }
+        // Always update the color scheme when switching types
+        this.updateColorScheme()
+      },
+      immediate: false
+    },
+
+    currentTimeIndex: {
+      handler() {
+        // Update map when time index changes
+        this.updateColorScheme()
       }
+    }
   },
 
   methods: {
@@ -504,8 +608,23 @@ export default {
       this.currentTimeIndex = tickIndex
       this.onSliderChange()
     },
-    // Time slider methods (removed playback methods)
+    
+    // Time slider methods
     generateLast48HoursTimestamps() {
+      const timestamps = []
+      const now = new Date()
+      const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
+      
+      for (let i = 47; i >= 0; i--) {
+        const timestamp = new Date(currentHour.getTime() - (i * 60 * 60 * 1000))
+        timestamps.push(timestamp.getTime())
+      }
+      
+      return timestamps
+    },
+    
+    // Generate timestamps for last 48 hours for generation heatmap (same as prices)
+    generateLast48HoursGenerationTimestamps() {
       const timestamps = []
       const now = new Date()
       const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
@@ -578,6 +697,7 @@ export default {
         return null
       }
     },
+    
     getCurrentDateKey() {
       return new Date().toISOString().split('T')[0]
     },
@@ -653,7 +773,7 @@ export default {
         console.log(`Bulk API call: ${url}`)
         
         const { data } = await axios.get(url, {
-          timeout: 15000, // Reduced timeout
+          timeout: 15000,
           signal: this.currentAbortController?.signal
         })
         
@@ -685,14 +805,99 @@ export default {
         
       } catch (error) {
         console.error(`Bulk API request failed for ${countries.length} countries:`, error)
-        throw error // Don't fallback to individual requests - this was causing the slowdown
+        throw error
       }
     },
 
+    // Fetch historical generation data for heatmap (48 hours)
+    async refreshAllHistoricalGeneration() {
+      if (!this.countriesGeoJson) return
+      
+      // Generate 48 hours of timestamps (same as prices)
+      this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
+      this.currentTimeIndex = this.availableGenerationTimestamps.length - 1 // Start at most recent
+      
+      const generationUpdates = {}
+      const tasks = []
+      
+      for (const feature of this.countriesGeoJson.features) {
+        const iso2 = this.getCountryISO2(feature)
+        if (!iso2 || !this.generationSupported(iso2)) continue
+        
+        tasks.push(
+          this.fetchHistoricalGenerationForCountry(iso2)
+            .then(timeData => {
+              if (timeData && Object.keys(timeData).length > 0) {
+                generationUpdates[iso2] = timeData
+              }
+            })
+            .catch(error => {
+              console.error(`Failed to fetch generation for ${iso2}:`, error)
+            })
+        )
+      }
+      
+      await Promise.allSettled(tasks)
+      this.historicalGenerationData = { ...this.historicalGenerationData, ...generationUpdates }
+      this.updateColorScheme()
+    },
+    
+    // Fetch historical generation data for a single country (48 hours for heatmap)
+    async fetchHistoricalGenerationForCountry(iso2) {
+      if (!this.generationSupported(iso2)) return null
+      
+      try {
+        const timeData = {}
+        
+        // Use the same 48-hour range as prices
+        const now = new Date()
+        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+        const end = new Date()
+        
+        const startDate = start.toISOString().split('T')[0]
+        const endDate = end.toISOString().split('T')[0]
+        
+        console.log(`Fetching generation for ${iso2}: ${startDate} to ${endDate}`)
+        
+        const url = `http://85.14.6.37:16601/api/generation/range/?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+        
+        const { data } = await axios.get(url, {
+          timeout: 10000,
+          signal: this.currentAbortController?.signal
+        })
+        
+        // Process hourly generation data (same as price processing)
+        if (Array.isArray(data.items)) {
+          for (const item of data.items) {
+            const timestamp = new Date(item.datetime_utc).getTime()
+            if (Number.isFinite(item.generation_mw)) {
+              // Round to nearest hour (same as price data)
+              const hourTimestamp = Math.floor(timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000)
+              timeData[hourTimestamp] = item.generation_mw
+            }
+          }
+        }
+        
+        return Object.keys(timeData).length > 0 ? timeData : null
+        
+      } catch (error) {
+        // Better error handling for 400 errors
+        if (error.response?.status === 400) {
+          console.warn(`400 Bad Request for generation data: ${iso2} - possibly no data available for this country`)
+        } else {
+          console.error(`Failed to fetch historical generation for ${iso2}:`, error)
+        }
+        return null
+      }
+    },
 
     // Support check methods
     capacitySupported(iso2) {
       return SUPPORTED_CAPACITY_ISO2.has(iso2)
+    },
+    
+    generationSupported(iso2) {
+      return SUPPORTED_GENERATION_ISO2.has(iso2)
     },
     
     priceSupported(iso2, feature) {
@@ -779,7 +984,7 @@ export default {
       this.updateColorScheme()
     },
 
-    // Generic refresh method (updated, removed playback stopping)
+    // Generic refresh method
     async refreshHeatmapData() {
       // Cancel any existing requests
       if (this.currentAbortController) {
@@ -792,8 +997,10 @@ export default {
       try {
         if (this.heatmapType === 'prices') {
           await this.refreshAllHistoricalPrices()
-        } else {
+        } else if (this.heatmapType === 'capacity') {
           await this.refreshAllCapacities()
+        } else if (this.heatmapType === 'generation') {
+          await this.refreshAllHistoricalGeneration()
         }
       } catch (error) {
         if (error.name !== 'AbortError') {
@@ -813,13 +1020,12 @@ export default {
         )
         this.countriesGeoJson = response.data
         
-        // Don't auto-load data on startup - wait for user to refresh
       } catch (err) {
         console.error('Error loading countries data:', err)
       }
     },
 
-    // EXISTING: Capacity method for modal (unchanged)
+    // Capacity method for modal (unchanged)
     async fetchCapacity(iso2) {
       this.capacityLoading = true
       this.capacityError = null
@@ -850,7 +1056,7 @@ export default {
       }
     },
 
-    // Map interaction (updated for dual heatmap and time display)
+    // Map interaction (updated for multi heatmap and time display)
     onEachFeature(feature, layer) {
       const vm = this
       const name = vm.getCountryName(feature)
@@ -869,8 +1075,8 @@ export default {
               ? `${name}: ${v.toFixed(decimals)} ${unit}` 
               : `${name}: no data`
             
-            // Add time info for price tooltips
-            if (vm.heatmapType === 'prices' && vm.hasTimeData) {
+            // Add time info for tooltips
+            if (vm.hasTimeData) {
               text += `\n${vm.currentTimeDisplay}`
             }
             
@@ -898,6 +1104,7 @@ export default {
     },
 
     updateColorScheme() {
+      this.heatmapUpdateKey++
       if (this.countriesGeoJson) {
         this.countriesGeoJson = { ...this.countriesGeoJson }
       }
@@ -948,7 +1155,7 @@ export default {
       if (e.key === 'Escape' && this.isModalOpen) this.closePanel()
     },
 
-    // Generation methods (unchanged)
+    // Generation method for modal (unchanged - uses yesterday API)
     async fetchGeneration(iso2) {
       this.generationLoading = true
       this.generationError = null
@@ -958,6 +1165,7 @@ export default {
 
       try {
         const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+        console.log(url)
         const { data } = await axios.get(url)
         this.generationItems = Array.isArray(data.items) ? data.items : []
       } catch (e) {
@@ -1147,7 +1355,7 @@ export default {
   transform: none;
 }
 
-/* UPDATED: Map layout with space for layered bottom elements */
+/* Map layout */
 .map-row {
   position: relative;
   display: flex;
@@ -1156,7 +1364,7 @@ export default {
   margin: 0;
   flex: 1;
   min-height: 0;
-  padding-bottom: 0px;  /* UPDATED: Space for slider + footer */
+  padding-bottom: 0px;
 }
 
 .left-panel {
@@ -1238,10 +1446,10 @@ export default {
   width: 100%;
 }
 
-/* NEW: Time slider positioned above footer (overlay style) */
+/* Time slider positioned above footer (overlay style) */
 .time-slider-overlay {
   position: fixed;
-  bottom: 40px;              /* UPDATED: Above the footer */
+  bottom: 40px;
   left: 20px;
   right: 20px;
   background: rgba(255, 255, 255, 0.95);
@@ -1250,7 +1458,7 @@ export default {
   padding: 10px 15px;
   box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  z-index: 1001;             /* UPDATED: Above footer but below modals */
+  z-index: 1001;
   max-height: 70px;
 }
 
@@ -1274,7 +1482,7 @@ export default {
   color: #667eea;
 }
 
-.price-display {
+.price-display, .generation-display {
   font-weight: 600;
   color: #48bb78;
 }
@@ -1445,16 +1653,16 @@ export default {
   font-size: 12px;
 }
 
-/* NEW: Actual footer positioned at the bottom */
+/* Footer positioned at the bottom */
 .app-footer {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 35px;               /* Compact footer height */
+  height: 35px;
   background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  z-index: 1000;             /* Below slider but above map */
+  z-index: 1000;
 }
 
 .footer-content {
@@ -1611,7 +1819,7 @@ export default {
   .time-slider-overlay {
     margin: 8px;
     padding: 10px 12px;
-    bottom: 67px;            /* Adjust for mobile */
+    bottom: 67px;
   }
   
   .tick-label-below {
@@ -1666,11 +1874,11 @@ export default {
   }
   
   .map-row {
-    padding-bottom: 0px;   /* Adjust for layered mobile layout */
+    padding-bottom: 0px;
   }
   
   .app-footer {
-    height: 30px;            /* Smaller mobile footer */
+    height: 30px;
   }
   
   .footer-content {
