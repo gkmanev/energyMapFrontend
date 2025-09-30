@@ -1241,37 +1241,142 @@ async fetchHistoricalGenerationForCountry(iso2) {
     onMapReady(mapObject) { this.map = mapObject },
 
     // Chart methods with markRaw fixes
-    renderCapacityChart() {
-      const canvas = this.$refs.capacityChart
-      if (!canvas) return
-      this.destroyCapacityChart()
+async renderCapacityChart() {
+  const canvas = this.$refs.capacityChart;
+  if (!canvas) return;
+  
+  this.destroyCapacityChart();
 
-      const items = [...this.capacityItems].sort((a, b) => (b.installed_capacity_mw || 0) - (a.installed_capacity_mw || 0))
-      const labels = items.map(i => i.psr_name)
-      const values = items.map(i => i.installed_capacity_mw)
+  // Sort items by capacity
+  const items = [...this.capacityItems].sort((a, b) => 
+    (b.installed_capacity_mw || 0) - (a.installed_capacity_mw || 0)
+  );
+  
+  const labels = items.map(i => i.psr_name);
+  const capacityValues = items.map(i => i.installed_capacity_mw);
 
-      const ctx = canvas.getContext('2d')
-      // Use markRaw to prevent Vue reactivity
-      this.capacityChartInstance = markRaw(new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Installed capacity (MW)',
-            data: values,
-            backgroundColor: 'rgba(54, 162, 235, 0.6)',
-            borderColor: 'rgb(54, 162, 235)',
-            borderWidth: 1
-          }]
+  // Get current generation data for the selected country
+  const iso2 = this.getCountryISO2(this.selectedFeature);
+  
+  // AWAIT the generation data before creating the chart
+  const generationByTech = await this.getGenerationByTechnology(iso2);
+  
+  console.log('generationByTech', generationByTech);
+
+  // Map generation to capacity items
+  const generationMapped = items.map(item => {
+    const genValue = generationByTech[item.psr_name] || 0;
+    return genValue;
+  });
+
+  // Calculate remaining capacity
+  const remainingCapacity = capacityValues.map((cap, i) => {
+    const gen = generationMapped[i] || 0;
+    return Math.max(0, cap - gen);
+  });
+
+  const ctx = canvas.getContext('2d');
+  
+  // Use markRaw to prevent Vue reactivity
+  this.capacityChartInstance = markRaw(new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Current Generation (MW)',
+          data: generationMapped,
+          backgroundColor: 'rgba(54, 162, 235, 0.85)',
+          borderColor: 'rgb(54, 162, 235)',
+          borderWidth: 2,
+          stack: 'capacity'
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true } },
-          plugins: { legend: { display: true } }
+        {
+          label: 'Available Capacity (MW)',
+          data: remainingCapacity,
+          backgroundColor: 'rgba(200, 200, 200, 0.4)',
+          borderColor: 'rgb(150, 150, 150)',
+          borderWidth: 1,
+          stack: 'capacity'
         }
-      }))
+      ]
     },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          stacked: true
+        },
+        y: {
+          beginAtZero: true,
+          stacked: true
+        }
+      },
+      plugins: {
+        legend: {
+          display: true
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const datasetIndex = context.datasetIndex;
+              if (datasetIndex === 0) {
+                const value = context.parsed.y;
+                const capacity = capacityValues[context.dataIndex];
+                const percentage = capacity > 0 ? ((value / capacity) * 100).toFixed(1) : 0;
+                return `Current Generation: ${value.toFixed(0)} MW (${percentage}%)`;
+              } else {
+                return `Available Capacity: ${context.parsed.y.toFixed(0)} MW`;
+              }
+            },
+            footer: function(tooltipItems) {
+              if (tooltipItems.length > 0) {
+                const index = tooltipItems[0].dataIndex;
+                const total = capacityValues[index];
+                return `Total Installed: ${total.toFixed(0)} MW`;
+              }
+            }
+          }
+        }
+      }
+    }
+  }));
+},
+
+
+
+async getGenerationByTechnology(iso2) {
+  if (!iso2) return {};
+  
+  try {
+    const url = `http://85.14.6.37:16601/api/generation/yesterday?country=${encodeURIComponent(iso2)}`;
+    const { data } = await axios.get(url);    
+    const byTech = {};    
+    if (Array.isArray(data.items)) {
+      const now = new Date();
+      // -24h offset
+      now.setTime(now.getTime() - (24 * 60 * 60 * 1000));
+      now.setMinutes(0, 0, 0);
+      const currentTimeISO = now.toISOString().split('.')[0] + 'Z';
+      for (const item of data.items) {        
+        const tech = item.psr_name || item.psr_type || 'Unknown';        
+        const gen = Number(item.generation_mw) || 0;        
+        const itemDate = item.datetime_utc       
+        if (currentTimeISO === itemDate){
+          byTech[tech] = gen
+        }
+
+      }      
+    }       
+    return byTech;
+  } catch (e) {
+    console.error(`Failed to get generation for ${iso2}`, e);
+    return {};
+  }
+},
+
+
 
     destroyCapacityChart() {
       if (this.capacityChartInstance) {
