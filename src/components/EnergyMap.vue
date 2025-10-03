@@ -23,27 +23,39 @@
         <button @click="refreshHeatmapData" :disabled="isRefreshing">
           {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
         </button>
+        <!-- NEW: Arrange modals button -->
+        <!-- <button @click="autoArrangeSeparateModals" 
+                v-if="separateModals.length > 0"
+                title="Arrange modals on right side">
+          📐 Arrange Modals
+        </button> -->
       </div>
     </div>
 
     <!-- FLEX ROW: sidebar + map -->
     <div class="map-row">
-      <!-- Modal side sheet over the map -->
-      <transition name="panel-slide" appear>
-        <aside
+      <!-- Modal side sheet over the map - NOW DRAGGABLE AND RESIZABLE -->
+      <!-- <transition name="panel-slide" appear> -->
+        <!-- <aside
           v-if="isModalOpen"
           class="left-panel"
           role="dialog"
           aria-modal="true"
           aria-label="Country details"
+          :style="modalStyle"
+          ref="modalPanel"
         >
-          <div class="panel-header">
-            <h3>{{ selectedFeature && selectedFeature.name }}</h3>
+          <div 
+            class="panel-header" 
+            @mousedown="startDrag"
+            style="cursor: move;"
+          >
+            <h3>Country: {{ selectedFeature && selectedFeature.name }}</h3>
             <button class="panel-close" @click="closePanel" aria-label="Close">✕</button>
           </div>
-          <div class="panel-content">
+          <div class="panel-content"> -->
             <!-- Capacity -->
-            <div v-if="capacityLoading">Loading capacity…</div>
+            <!-- <div v-if="capacityLoading">Loading capacity…</div>
             <div v-else-if="capacityError" style="color:#b00020">{{ capacityError }}</div>
             <template v-else>
               <p v-if="capacityYear">Latest year: {{ capacityYear }}</p>
@@ -51,9 +63,9 @@
                 <canvas ref="capacityChart"></canvas>
               </div>
             </template>
-            <div style="margin-top: 40px;"><span><h3>Generation by technology</h3></span></div>
+            <div style="margin-top: 40px;"><span><h3>Generation by technology</h3></span></div> -->
             <!-- Generation -->
-            <div v-if="generationLoading" style="margin-top:16px;">Loading generation…</div>
+            <!-- <div v-if="generationLoading" style="margin-top:16px;">Loading generation…</div>
             <div v-else-if="generationError" style="margin-top:16px;color:#b00020">{{ generationError }}</div>
             <template v-else>
               <p v-if="generationDateLabel" style="margin-top:16px;">{{ generationDateLabel }}</p>
@@ -64,9 +76,13 @@
                 <small>Hourly generation (MW) by technology</small>
               </div>
             </template>
-          </div>
+          </div> -->
+          <!-- Resize handles -->
+          <!-- <div class="resize-handle resize-handle-right" @mousedown="startResize($event, 'right')"></div>
+          <div class="resize-handle resize-handle-bottom" @mousedown="startResize($event, 'bottom')"></div>
+          <div class="resize-handle resize-handle-corner" @mousedown="startResize($event, 'corner')"></div>
         </aside>
-      </transition>
+      </transition> -->
 
       <!-- Scrim blocks interaction and closes panel on click -->
       <div
@@ -75,6 +91,46 @@
         @click="closePanel"
         aria-hidden="true"
       ></div>
+
+      <!-- Separate Modal Windows for Charts -->
+      <div v-for="modal in separateModals" 
+          :key="modal.id" 
+          class="separate-modal" 
+          :style="getSeparateModalStyle(modal.id)" 
+          v-show="modal.visible">
+        
+        <!-- Draggable header -->
+        <div class="separate-modal-header" 
+            @mousedown="startSeparateModalDrag($event, modal.id)"
+            style="cursor: move;">
+          <h4>{{ modal.country }} - {{ modal.title }}</h4>
+          <button @click="closeSeparateModal(modal.id)" 
+                  class="separate-modal-close">×</button>
+        </div>
+        
+        <!-- Modal content -->
+        <div class="separate-modal-content">
+          <div v-if="modal.loading" class="separate-modal-loading">
+            <div class="loading-spinner-small"></div>
+            <p>Loading {{ modal.type }} data...</p>
+          </div>
+          <div v-else-if="modal.error" class="separate-modal-error">
+            <p>Error: {{ modal.error }}</p>
+            <button @click="retrySeparateModalData(modal.id)">Retry</button>
+          </div>
+          <div v-else class="chart-container">
+            <canvas :id="'separate-chart-' + modal.id"></canvas>
+          </div>
+        </div>
+        
+        <!-- Resize handles -->
+        <div class="separate-modal-resize-handle separate-modal-resize-right"
+            @mousedown="startSeparateModalResize($event, modal.id, 'right')"></div>
+        <div class="separate-modal-resize-handle separate-modal-resize-bottom"
+            @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"></div>
+        <div class="separate-modal-resize-handle separate-modal-resize-corner"
+            @mousedown="startSeparateModalResize($event, modal.id, 'corner')"></div>
+      </div>
 
       <!-- Map column -->
       <div class="map-col">
@@ -216,31 +272,6 @@
         <!-- <span>© 2025 Entra Energy | Energy Data Visualization</span> -->
       </div>
     </footer>
-
-    <!-- Capacity Legend - only show for capacity heatmap -->
-    <!-- <div v-if="heatmapType === 'capacity'" class="legend">
-      <h3>{{ legendTitle }}</h3>
-      <div class="color-scale">
-        <div class="scale-bar" :style="scaleBarStyle"></div>
-        <div class="scale-labels">
-          <span>{{ minValue.toFixed(2) }}</span>
-          <span>{{ maxValue.toFixed(2) }} {{ legendUnit }}</span>
-        </div>
-      </div> -->
-      <!-- <div class="legend-items">
-        <div 
-          v-for="country in sampleCountries" 
-          :key="country.name"
-          class="legend-item"
-        >
-          <span 
-            class="color-box" 
-            :style="{ backgroundColor: country.color }"
-          ></span>
-          {{ country.name }}: {{ country.value.toFixed(0) }} {{ legendUnit }}
-        </div>
-      </div>
-    </div> -->
   </div>
 </template>
 
@@ -286,23 +317,43 @@ export default {
 
   data() {
     return {
+      // Separate Modal System
+      separateModals: [],
+      separateModalIdCounter: 0,
+
+      // Modal drag and resize state
+      modalPosition: { x: 0, y: 0 },
+      modalSize: { width: 560, height: Math.floor(window.innerHeight * 0.7) },
+      isDragging: false,
+      isResizing: false,
+      resizeDirection: null,
+      separateModalDragState: {},  // Track drag state for each modal
+      separateModalResizeState: {}, // Track resize state for each modal
+
+      dragStartX: 0,
+      dragStartY: 0,
+      resizeStartX: 0,
+      resizeStartY: 0,
+      resizeStartWidth: 0,
+      resizeStartHeight: 0,
+      
       // Heatmap type controls - Price is default
       heatmapType: 'prices',
       isRefreshing: false,
       initialLoading: true,
-      isMapUpdating: false, // Add this to prevent layer conflicts\
+      isMapUpdating: false,
       isPlaying: false,
       playInterval: null,
-      playSpeed: 500, // milliseconds between steps
+      playSpeed: 500,
       
       // Time slider data for prices
       currentTimeIndex: 0,
-      availableTimestamps: [], // Array of timestamps for the last 48 hours
-      historicalPriceData: {},  // { iso2: { timestamp: price, ... }, ... }
+      availableTimestamps: [],
+      historicalPriceData: {},
       
       // Generation time-series data for heatmap (48 hours)
-      availableGenerationTimestamps: [], // Array of timestamps for generation data
-      historicalGenerationData: {},  // { iso2: { timestamp: generation_mw, ... }, ... }
+      availableGenerationTimestamps: [],
+      historicalGenerationData: {},
       
       // Capacity data (ISO-2 keyed)
       countryCapacityByISO2: {},
@@ -326,7 +377,7 @@ export default {
       priceCache: new Map(),
       capacityCache: new Map(),
       cacheTimestamp: null,
-      cacheValidityMs: 5 * 60 * 1000, // 5 minutes
+      cacheValidityMs: 5 * 60 * 1000,
       psrColors: {
         'Solar':        { border: '#f5b000', fill: 'rgba(245,176,0,0.45)' },
         'Wind Onshore': { border: '#2ca02c', fill: 'rgba(44,160,44,0.45)' },
@@ -341,13 +392,11 @@ export default {
         'Waste':       { border: '#b56576', fill: 'rgba(181,101,118,0.45)' }
       },
 
-      // Legacy price data (for backward compatibility)
       countryPriceByISO2: {},
       priceByISO2: {},
       pricePollingMs: 5 * 60 * 1000,
       priceTimer: null,
 
-      // Map state
       zoom: 4,
       center: [54, 20],
       showTooltips: true,
@@ -379,6 +428,17 @@ export default {
   },
 
   computed: {
+    // Modal style computed property for drag and resize
+    modalStyle() {
+      return {
+        left: `${this.modalPosition.x}px`,
+        top: `${this.modalPosition.y}px`,
+        width: `${this.modalSize.width}px`,
+        height: this.modalSize.height ? `${this.modalSize.height}px` : 'auto',
+        position: 'absolute'
+      }
+    },
+    
     progressStyle() {
       const percentage = this.maxTimeIndex > 0 ? (this.currentTimeIndex / this.maxTimeIndex) * 100 : 0
       return {
@@ -386,7 +446,6 @@ export default {
       }
     },
     
-    // Time slider computed properties
     hasTimeData() {
       if (this.heatmapType === 'generation') {
         return this.availableGenerationTimestamps.length > 0
@@ -412,7 +471,6 @@ export default {
       if (!this.hasTimeData) return 'No data'
       const date = new Date(this.currentTimestamp)
       
-      // Both price and generation use hourly display for 48 hours
       return date.toLocaleString('en-GB', {
         weekday: 'short',
         day: '2-digit',
@@ -422,29 +480,25 @@ export default {
       })
     },
     
-    // Time ticks for price slider labels
     timeTicks() {
       if (!this.hasTimeData || this.heatmapType !== 'prices') return []
       
       const ticks = []
-      const totalTicks = 8 // Show 8 tick marks across the slider
+      const totalTicks = 8
       
       for (let i = 0; i <= totalTicks; i++) {
         const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
         const timestamp = this.availableTimestamps[tickIndex]
         const date = new Date(timestamp)
         
-        // Position as percentage from left
         const position = `${(tickIndex / this.maxTimeIndex) * 100}%`
         
-        // Format label based on time
         let label
         if (i === 0) {
-          label = '48h ago' // Leftmost (oldest)
+          label = '48h ago'
         } else if (i === totalTicks) {
-          label = 'Now' // Rightmost (newest)
+          label = 'Now'
         } else {
-          // Show hours ago
           const hoursAgo = Math.round((this.availableTimestamps[this.maxTimeIndex] - timestamp) / (60 * 60 * 1000))
           label = `${hoursAgo}h`
         }
@@ -460,12 +514,11 @@ export default {
       return ticks
     },
     
-    // Generation time ticks for slider (48 hours like prices)
     generationTimeTicks() {
       if (!this.hasTimeData || this.heatmapType !== 'generation') return []
       
       const ticks = []
-      const totalTicks = 8 // Show 8 tick marks across the slider (same as prices)
+      const totalTicks = 8
       
       for (let i = 0; i <= totalTicks; i++) {
         const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
@@ -476,11 +529,10 @@ export default {
         
         let label
         if (i === 0) {
-          label = '48h ago' // Leftmost (oldest)
+          label = '48h ago'
         } else if (i === totalTicks) {
-          label = 'Now' // Rightmost (newest)
+          label = 'Now'
         } else {
-          // Show hours ago
           const hoursAgo = Math.round((this.availableGenerationTimestamps[this.maxTimeIndex] - timestamp) / (60 * 60 * 1000))
           label = `${hoursAgo}h`
         }
@@ -512,41 +564,35 @@ export default {
       return `Total: ${(total/1000).toFixed(1)} GW`
     },
 
-    // Updated computed properties for multi heatmap functionality
-currentDataByISO2() {
-  if (this.heatmapType === 'capacity') {
-    return this.countryCapacityByISO2;
-  }
-  
-  if (this.heatmapType === 'generation') {
-    const result = {};
-    const timestamp = Number(this.currentTimestamp); // ENSURE it's a number
-    
-    console.log('Looking for timestamp:', timestamp);
-    console.log("DATA", this.historicalGenerationData)
-    for (const [iso2, timeData] of Object.entries(this.historicalGenerationData)) {
-      if (timeData && timeData[timestamp] !== undefined) {
-        result[iso2] = timeData[timestamp];
+    currentDataByISO2() {
+      if (this.heatmapType === 'capacity') {
+        return this.countryCapacityByISO2
       }
-    }
-    
-    console.log(`Generation data at timestamp ${timestamp}: ${Object.keys(result).length} countries`);
-    return result;
-  }
-  
-  // For prices
-  const result = {};
-  const timestamp = Number(this.currentTimestamp); // ENSURE it's a number
-  
-  for (const [iso2, timeData] of Object.entries(this.historicalPriceData)) {
-    if (timeData && timeData[timestamp] !== undefined) {
-      result[iso2] = timeData[timestamp];
-    }
-  }
-  
-  return result;
-},
-
+      
+      if (this.heatmapType === 'generation') {
+        const result = {}
+        const timestamp = Number(this.currentTimestamp)
+        
+        for (const [iso2, timeData] of Object.entries(this.historicalGenerationData)) {
+          if (timeData && timeData[timestamp] !== undefined) {
+            result[iso2] = timeData[timestamp]
+          }
+        }
+        
+        return result
+      }
+      
+      const result = {}
+      const timestamp = Number(this.currentTimestamp)
+      
+      for (const [iso2, timeData] of Object.entries(this.historicalPriceData)) {
+        if (timeData && timeData[timestamp] !== undefined) {
+          result[iso2] = timeData[timestamp]
+        }
+      }
+      
+      return result
+    },
     
     legendTitle() {
       if (this.heatmapType === 'prices') return 'Energy Price Legend'
@@ -623,16 +669,14 @@ currentDataByISO2() {
   watch: {
     heatmapType: {
       handler(newType) {
-        // Only refresh if switching to a type without data
         if (newType === 'prices' && !this.hasTimeData) {
           this.refreshAllHistoricalPrices()
         } else if (newType === 'capacity' && Object.keys(this.countryCapacityByISO2).length === 0) {
-          this.currentTimeIndex = this.maxTimeIndex; // Jump to current time
+          this.currentTimeIndex = this.maxTimeIndex
           this.refreshAllCapacities()  
         } else if (newType === 'generation' && this.availableGenerationTimestamps.length === 0) {
           this.refreshAllHistoricalGeneration()
         }
-        // Always update the color scheme when switching types
         this.updateColorScheme()
       },
       immediate: false
@@ -640,49 +684,629 @@ currentDataByISO2() {
 
     currentTimeIndex: {
       handler() {
-        // Update map when time index changes
         this.updateColorScheme()
       }
     }
   },
 
   methods: {
-      togglePlay() {
-        if (this.isPlaying) {
+    // UPDATED: Separate Modal Management Methods
+    createSeparateModal(country, type, title) {
+      // Check if modal for this country and type already exists
+      const existingModal = this.separateModals.find(m => 
+        m.country === country && m.type === type
+      )
+      
+      if (existingModal) {
+        // Just show existing modal if hidden
+        existingModal.visible = true
+        return existingModal.id
+      }
+
+      const modalId = this.separateModalIdCounter++
+
+      // Calculate position for right-side stacking
+      const modalWidth = 400
+      const modalHeight = 300
+      const marginFromEdge = 20
+      const verticalSpacing = 10
+      
+      // Position on right side of screen
+      const rightX = window.innerWidth - modalWidth - marginFromEdge
+      
+      // Calculate Y position based on existing modals
+      const visibleModals = this.separateModals.filter(m => m.visible)
+      const startY = 100 // Start position from top
+      const stackedY = startY + (visibleModals.length * (modalHeight + verticalSpacing))
+
+      const modal = {
+        id: modalId,
+        country: country,
+        type: type,
+        title: title,
+        visible: true,
+        loading: true,
+        error: null,
+        chart: null,
+        data: null,
+        position: { x: rightX, y: stackedY },
+        size: { width: modalWidth, height: modalHeight }
+      }      
+      this.separateModals.push(modal)
+
+      // Initialize drag/resize state
+      this.separateModalDragState[modalId] = {
+        isDragging: false,
+        startX: 0,
+        startY: 0,
+        startPosX: 0,
+        startPosY: 0
+      }
+      this.separateModalResizeState[modalId] = {
+        isResizing: false,
+        direction: null,
+        startX: 0,
+        startY: 0,
+        startWidth: 0,
+        startHeight: 0
+      }
+      this.loadSeparateModalData(modalId, country, type)
+      return modalId
+    },
+    repositionSeparateModals() {
+      const modalWidth = 400
+      const modalHeight = 300
+      const marginFromEdge = 20
+      const verticalSpacing = 10
+      const startY = 100
+      
+      const rightX = window.innerWidth - modalWidth - marginFromEdge
+      
+      // Get all visible modals sorted by their current Y position
+      const visibleModals = this.separateModals
+        .filter(m => m.visible)
+        .sort((a, b) => a.position.y - b.position.y)
+      
+      // Reposition each modal in a neat stack
+      visibleModals.forEach((modal, index) => {
+        modal.position.x = rightX
+        modal.position.y = startY + (index * (modalHeight + verticalSpacing))
+      })
+    },
+
+    closeSeparateModal(modalId) {
+      const modalIndex = this.separateModals.findIndex(modal => modal.id === modalId)
+      if (modalIndex !== -1) {
+        const modal = this.separateModals[modalIndex]
+        if (modal.chart) {
+          modal.chart.destroy()
+        }
+        this.separateModals.splice(modalIndex, 1)
+        
+        // Clean up drag/resize state
+        delete this.separateModalDragState[modalId]
+        delete this.separateModalResizeState[modalId]
+        
+        // Reposition remaining modals to close gaps
+        this.$nextTick(() => {
+          this.repositionSeparateModals()
+        })
+      }
+    },
+
+
+    getSeparateModalStyle(modalId) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal) return {}
+
+      return {
+        position: 'fixed',
+        left: `${modal.position.x}px`,
+        top: `${modal.position.y}px`,
+        width: `${modal.size.width}px`,
+        height: `${modal.size.height}px`,
+        backgroundColor: 'white',
+        border: '2px solid #333',
+        borderRadius: '8px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        zIndex: 1200 + modalId,
+        overflow: 'hidden',
+        minWidth: '300px',
+        minHeight: '200px',
+        maxWidth: '90vw',
+        maxHeight: '90vh'
+      }
+    },
+    // Start dragging separate modal
+    startSeparateModalDrag(event, modalId) {
+      if (event.target.closest('.separate-modal-close') || 
+          event.target.closest('.separate-modal-resize-handle')) {
+        return
+      }
+
+      const dragState = this.separateModalDragState[modalId]
+      const modal = this.separateModals.find(m => m.id === modalId)
+      
+      if (!dragState || !modal) return
+
+      dragState.isDragging = true
+      dragState.startX = event.clientX
+      dragState.startY = event.clientY
+      dragState.startPosX = modal.position.x
+      dragState.startPosY = modal.position.y
+
+      document.addEventListener('mousemove', (e) => this.onSeparateModalDrag(e, modalId))
+      document.addEventListener('mouseup', () => this.stopSeparateModalDrag(modalId))
+      event.preventDefault()
+    },
+
+    // Handle separate modal dragging
+    onSeparateModalDrag(event, modalId) {
+      const dragState = this.separateModalDragState[modalId]
+      const modal = this.separateModals.find(m => m.id === modalId)
+      
+      if (!dragState?.isDragging || !modal) return
+
+      const deltaX = event.clientX - dragState.startX
+      const deltaY = event.clientY - dragState.startY
+      
+      const newX = dragState.startPosX + deltaX
+      const newY = dragState.startPosY + deltaY
+      
+      // Snap to right edge when close
+      const snapDistance = 50
+      const rightEdgeX = window.innerWidth - modal.size.width - 20
+      
+      let finalX = newX
+      if (Math.abs(newX - rightEdgeX) < snapDistance) {
+        finalX = rightEdgeX // Snap to right edge
+      }
+      
+      // Constrain to viewport
+      const maxX = window.innerWidth - modal.size.width
+      const maxY = window.innerHeight - modal.size.height
+      
+      modal.position.x = Math.max(0, Math.min(finalX, maxX))
+      modal.position.y = Math.max(0, Math.min(newY, maxY))
+    },
+
+    // Stop dragging separate modal
+    stopSeparateModalDrag(modalId) {
+      const dragState = this.separateModalDragState[modalId]
+      if (!dragState) return
+
+      dragState.isDragging = false
+      document.removeEventListener('mousemove', (e) => this.onSeparateModalDrag(e, modalId))
+      document.removeEventListener('mouseup', () => this.stopSeparateModalDrag(modalId))
+    },
+    // Start resizing separate modal
+    startSeparateModalResize(event, modalId, direction) {
+      const resizeState = this.separateModalResizeState[modalId]
+      const modal = this.separateModals.find(m => m.id === modalId)
+      
+      if (!resizeState || !modal) return
+
+      resizeState.isResizing = true
+      resizeState.direction = direction
+      resizeState.startX = event.clientX
+      resizeState.startY = event.clientY
+      resizeState.startWidth = modal.size.width
+      resizeState.startHeight = modal.size.height
+
+      document.addEventListener('mousemove', (e) => this.onSeparateModalResize(e, modalId))
+      document.addEventListener('mouseup', () => this.stopSeparateModalResize(modalId))
+      event.preventDefault()
+      event.stopPropagation()
+    },
+
+    // Handle separate modal resizing
+    onSeparateModalResize(event, modalId) {
+      const resizeState = this.separateModalResizeState[modalId]
+      const modal = this.separateModals.find(m => m.id === modalId)
+      
+      if (!resizeState?.isResizing || !modal) return
+
+      const deltaX = event.clientX - resizeState.startX
+      const deltaY = event.clientY - resizeState.startY
+
+      if (resizeState.direction === 'right' || resizeState.direction === 'corner') {
+        const newWidth = resizeState.startWidth + deltaX
+        modal.size.width = Math.max(300, Math.min(newWidth, window.innerWidth - modal.position.x))
+      }
+
+      if (resizeState.direction === 'bottom' || resizeState.direction === 'corner') {
+        const newHeight = resizeState.startHeight + deltaY
+        modal.size.height = Math.max(200, Math.min(newHeight, window.innerHeight - modal.position.y))
+      }
+    },
+
+    // Stop resizing separate modal
+    stopSeparateModalResize(modalId) {
+      const resizeState = this.separateModalResizeState[modalId]
+      if (!resizeState) return
+
+      resizeState.isResizing = false
+      resizeState.direction = null
+      document.removeEventListener('mousemove', (e) => this.onSeparateModalResize(e, modalId))
+      document.removeEventListener('mouseup', () => this.stopSeparateModalResize(modalId))
+      // ADDED: Trigger chart resize after modal resize
+      this.$nextTick(() => {
+        this.resizeSeparateModalChart(modalId)
+      })
+    },
+
+
+
+    async loadSeparateModalData(modalId, country, type) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal) return
+
+      try {
+        modal.loading = true
+        modal.error = null
+
+        let data
+        if (type === 'capacity') {
+          // Use the existing capacity fetch method
+          const iso2 = this.getCountryISO2ByName(country)
+          if (!iso2) throw new Error('Country not found')
+          
+          const url = `http://85.14.6.37:16601/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
+          const { data: response } = await axios.get(url)
+          data = response.items || []
+        } else if (type === 'generation') {
+          // Use existing generation method
+          const iso2 = this.getCountryISO2ByName(country)
+          if (!iso2) throw new Error('Country not found')
+          
+          const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+          const { data: response } = await axios.get(url)
+          data = response.items || []
+        }
+
+        modal.data = data
+        modal.loading = false
+
+        // Wait for DOM update then create chart
+        await nextTick()
+        this.createSeparateModalChart(modalId)
+
+      } catch (error) {
+        console.error(`Error loading ${type} data for ${country}:`, error)
+        modal.loading = false
+        modal.error = error.message || 'Failed to load data'
+      }
+    },
+
+    // NEW: Helper method to get ISO2 by country name
+    getCountryISO2ByName(countryName) {
+      if (!this.countriesGeoJson) return null
+      
+      const feature = this.countriesGeoJson.features.find(f => {
+        const name = this.getCountryName(f)
+        return name === countryName
+      })
+      
+      return feature ? this.getCountryISO2(feature) : null
+    },
+
+    async retrySeparateModalData(modalId) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (modal) {
+        await this.loadSeparateModalData(modalId, modal.country, modal.type)
+      }
+    },
+
+    async createSeparateModalChart(modalId) {
+
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal || !modal.data) return
+
+      const canvas = document.getElementById('separate-chart-' + modalId)
+      if (!canvas) return
+
+      const ctx = canvas.getContext('2d')
+
+      if (modal.chart) {
+        modal.chart.destroy()
+      }
+
+      if (modal.type === 'capacity') {
+
+        const items = [...modal.data].sort((a, b) => 
+          (b.installed_capacity_mw || 0) - (a.installed_capacity_mw || 0)
+        )
+        
+        const labels = items.map(i => i.psr_name)
+        const capacityValues = items.map(i => i.installed_capacity_mw)
+        
+        // Get ISO2 from modal's country name instead of selectedFeature
+        const iso2 = this.getCountryISO2ByName(modal.country)
+        
+        const generationByTech = await this.getGenerationByTechnology(iso2)        
+        const generationMapped = items.map(item => {
+          const genValue = generationByTech[item.psr_name] || 0
+          return genValue
+        })       
+
+        const remainingCapacity = capacityValues.map((cap, i) => {
+          const gen = generationMapped[i] || 0
+          return Math.max(0, cap - gen)
+        })
+        
+        // Use the correct canvas (already defined at the top)
+        // const ctx = canvas.getContext('2d')  <-- Already defined above
+        
+        modal.chart = markRaw(new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Current Generation (MW)',
+                data: generationMapped,
+                backgroundColor: 'rgba(54, 162, 235, 0.85)',
+                borderColor: 'rgb(54, 162, 235)',
+                borderWidth: 2,
+                stack: 'capacity'
+              },
+              {
+                label: 'Available Capacity (MW)',
+                data: remainingCapacity,
+                backgroundColor: 'rgba(200, 200, 200, 0.4)',
+                borderColor: 'rgb(150, 150, 150)',
+                borderWidth: 1,
+                stack: 'capacity'
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { stacked: true },
+              y: { beginAtZero: true, stacked: true }
+            },
+            plugins: {
+              legend: { display: true },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const datasetIndex = context.datasetIndex
+                    if (datasetIndex === 0) {
+                      const value = context.parsed.y
+                      const capacity = capacityValues[context.dataIndex]
+                      const percentage = capacity > 0 ? ((value / capacity) * 100).toFixed(1) : 0
+                      return `Current Generation: ${value.toFixed(0)} MW (${percentage}%)`
+                    } else {
+                      return `Available Capacity: ${context.parsed.y.toFixed(0)} MW`
+                    }
+                  },
+                  footer: function(tooltipItems) {
+                    if (tooltipItems.length > 0) {
+                      const index = tooltipItems[0].dataIndex
+                      const total = capacityValues[index]
+                      return `Total Installed: ${total.toFixed(0)} MW`
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }))
+    
+      } else if (modal.type === 'generation') {       
+
+          // Build a stacked area chart for generation by technology
+          const items = JSON.parse(JSON.stringify(modal.data));
+          
+          // Extract unique sorted timestamps
+          const timestamps = Array.from(
+            new Set(items.map(i => Date.parse(i.datetime_utc)))
+          ).sort((a, b) => a - b);
+
+          // Group generation MW by technology and timestamp
+          const byTech = new Map();
+          items.forEach(i => {
+            const tech = i.psr_name || i.psr_type || 'Unknown';
+            const time = Date.parse(i.datetime_utc);
+            if (!byTech.has(tech)) byTech.set(tech, new Map());
+            byTech.get(tech).set(time, Number(i.generation_mw) || 0);
+          });
+
+          // Assemble datasets with proper x,y format for time series
+          const datasets = [];
+          byTech.forEach((series, tech) => {
+            const color = this.psrColors[tech] || { border: 'rgba(0,0,0,0.8)', fill: 'rgba(0,0,0,0.4)' };
+            const data = timestamps.map(ts => ({
+              x: ts,
+              y: series.get(ts) || 0
+            }));
+            datasets.push({
+              label: tech,
+              data,
+              borderColor: color.border,
+              backgroundColor: color.fill,
+              pointRadius: 0,
+              borderWidth: 1,
+              fill: true,
+              stack: 'gen',
+              tension: 0.25
+            });
+          });
+
+          const cfg = {
+            type: 'line',
+            data: { datasets },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              normalized: true,
+              parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+              scales: {
+                x: {
+                  type: 'time',
+                  time: { unit: 'hour', tooltipFormat: 'HH:mm' }
+                },
+                y: {
+                  stacked: true,
+                  beginAtZero: true,
+                  title: { display: true, text: 'Generation (MW)' },
+                  ticks: {
+                    callback: v => Intl.NumberFormat().format(v)
+                  }
+                }
+              },
+              plugins: {
+                legend: { position: 'bottom' },
+                tooltip: { mode: 'index', intersect: false }
+              },
+              interaction: {
+                mode: 'index',
+                intersect: false
+              }
+            }
+          };
+
+          modal.chart = markRaw(new Chart(ctx, cfg));              
+      }
+      this.$nextTick(() => {
+        this.resizeSeparateModalChart(modalId)
+      })
+    },
+
+    // Drag and resize methods
+    startDrag(event) {
+      if (event.target.closest('.panel-close')) return
+      
+      this.isDragging = true
+      this.dragStartX = event.clientX - this.modalPosition.x
+      this.dragStartY = event.clientY - this.modalPosition.y
+      
+      document.addEventListener('mousemove', this.onDrag)
+      document.addEventListener('mouseup', this.stopDrag)
+      
+      event.preventDefault()
+    },
+    
+    onDrag(event) {
+      if (!this.isDragging) return
+      
+      const newX = event.clientX - this.dragStartX
+      const newY = event.clientY - this.dragStartY
+      
+      // Constrain to viewport
+      const maxX = window.innerWidth - this.modalSize.width
+      const maxY = window.innerHeight - (this.modalSize.height || 600)
+      
+      this.modalPosition.x = Math.max(0, Math.min(newX, maxX))
+      this.modalPosition.y = Math.max(0, Math.min(newY, maxY))
+    },
+    
+    stopDrag() {
+      this.isDragging = false
+      document.removeEventListener('mousemove', this.onDrag)
+      document.removeEventListener('mouseup', this.stopDrag)
+    },
+    
+    startResize(event, direction) {
+      this.isResizing = true
+      this.resizeDirection = direction
+      this.resizeStartX = event.clientX
+      this.resizeStartY = event.clientY
+      this.resizeStartWidth = this.modalSize.width
+      this.resizeStartHeight = this.modalSize.height || this.$refs.modalPanel?.offsetHeight || 600
+      
+      document.addEventListener('mousemove', this.onResize)
+      document.addEventListener('mouseup', this.stopResize)
+      
+      event.preventDefault()
+      event.stopPropagation()
+    },
+    
+    onResize(event) {
+      if (!this.isResizing) return
+      
+      const deltaX = event.clientX - this.resizeStartX
+      const deltaY = event.clientY - this.resizeStartY
+      
+      if (this.resizeDirection === 'right' || this.resizeDirection === 'corner') {
+        this.modalSize.width = Math.max(400, Math.min(this.resizeStartWidth + deltaX, window.innerWidth - this.modalPosition.x))
+      }
+      
+      if (this.resizeDirection === 'bottom' || this.resizeDirection === 'corner') {
+        this.modalSize.height = Math.max(300, Math.min(this.resizeStartHeight + deltaY, window.innerHeight - this.modalPosition.y))
+      }
+    },
+    
+    stopResize() {
+      this.isResizing = false
+      this.resizeDirection = null
+      document.removeEventListener('mousemove', this.onResize)
+      document.removeEventListener('mouseup', this.stopResize)
+    },
+
+    // ADD THIS MISSING METHOD
+    resizeSeparateModalChart(modalId) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal || !modal.chart) return
+
+      const canvas = document.getElementById('separate-chart-' + modalId)
+      if (!canvas) return
+
+      // Calculate available space
+      const headerHeight = 40  // Modal header height  
+      const padding = 24       // Modal content padding (12px * 2)
+      const availableWidth = modal.size.width - (padding * 2)
+      const availableHeight = modal.size.height - headerHeight - (padding * 2)
+
+      // Update canvas container size
+      const container = canvas.parentElement
+      if (container) {
+        container.style.width = availableWidth + 'px'
+        container.style.height = availableHeight + 'px'
+      }
+
+      // Trigger Chart.js resize
+      modal.chart.resize()
+    },
+
+    
+    togglePlay() {
+      if (this.isPlaying) {
+        this.pauseAnimation()
+      } else {
+        this.startAnimation()
+      }
+    },
+    
+    startAnimation() {
+      this.currentTimeIndex = 0
+      this.isPlaying = true
+      
+      this.playInterval = setInterval(() => {
+        if (this.currentTimeIndex >= this.maxTimeIndex) {
           this.pauseAnimation()
         } else {
-          this.startAnimation()
+          this.currentTimeIndex++
+          this.onSliderChange()
         }
-      },
-      startAnimation() {
-        // Reset to start
-        this.currentTimeIndex = 0
-        this.isPlaying = true
-        
-        this.playInterval = setInterval(() => {
-          if (this.currentTimeIndex >= this.maxTimeIndex) {
-            // Reached the end, stop
-            this.pauseAnimation()
-          } else {
-            this.currentTimeIndex++
-            this.onSliderChange()
-          }
-        }, this.playSpeed)
-      },
-        pauseAnimation() {
-        this.isPlaying = false
-        if (this.playInterval) {
-          clearInterval(this.playInterval)
-          this.playInterval = null
-        }
-      },
+      }, this.playSpeed)
+    },
+    
+    pauseAnimation() {
+      this.isPlaying = false
+      if (this.playInterval) {
+        clearInterval(this.playInterval)
+        this.playInterval = null
+      }
+    },
 
     jumpToTick(tickIndex) {
       this.currentTimeIndex = tickIndex
       this.onSliderChange()
     },
     
-    // Time slider methods
     generateLast48HoursTimestamps() {
       const timestamps = []
       const now = new Date()
@@ -696,7 +1320,6 @@ currentDataByISO2() {
       return timestamps
     },
     
-    // Generate timestamps for last 48 hours for generation heatmap (same as prices)
     generateLast48HoursGenerationTimestamps() {
       const timestamps = []
       const now = new Date()
@@ -711,7 +1334,6 @@ currentDataByISO2() {
     },
     
     onSliderChange() {
-      // Add smooth transition class temporarily
       const slider = this.$el.querySelector('.enhanced-time-slider')
       if (slider) {
         slider.classList.add('transitioning')
@@ -721,18 +1343,15 @@ currentDataByISO2() {
       }
     },
 
-    // Historical price data loading
     async fetchHistoricalPricesForCountry(iso2) {
       if (!this.priceSupported(iso2)) return null
 
-      // Check cache first
       const cacheKey = `${iso2}_${this.getCurrentDateKey()}`
       const now = Date.now()
       
       if (this.priceCache.has(cacheKey) && 
           this.cacheTimestamp && 
           (now - this.cacheTimestamp) < this.cacheValidityMs) {
-        console.log(`Using cached data for ${iso2}`)
         return this.priceCache.get(cacheKey)
       }
 
@@ -744,7 +1363,7 @@ currentDataByISO2() {
         const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
         
         const { data } = await axios.get(url, {
-          timeout: 10000, // 10 second timeout
+          timeout: 10000,
           signal: this.currentAbortController?.signal
         })
         
@@ -760,7 +1379,6 @@ currentDataByISO2() {
           }
         }
         
-        // Cache the result
         this.priceCache.set(cacheKey, timeData)
         this.cacheTimestamp = now
         
@@ -778,11 +1396,9 @@ currentDataByISO2() {
     async refreshAllHistoricalPrices() {
       if (!this.countriesGeoJson) return
       
-      // Generate timestamps
       this.availableTimestamps = this.generateLast48HoursTimestamps()
       this.currentTimeIndex = this.maxTimeIndex
       
-      // Get all supported countries
       const supportedCountries = []
       for (const feature of this.countriesGeoJson.features) {
         const iso2 = this.getCountryISO2(feature)
@@ -791,9 +1407,6 @@ currentDataByISO2() {
         }
       }
       
-      console.log(`Loading price data for ${supportedCountries.length} countries using bulk API`)
-      
-      // Process ALL countries in chunks of 20 (your API limit)
       const chunkSize = 20
       const newHistoricalData = {}
       
@@ -802,12 +1415,8 @@ currentDataByISO2() {
         chunks.push(supportedCountries.slice(i, i + chunkSize))
       }
       
-      console.log(`Making ${chunks.length} bulk API calls instead of ${supportedCountries.length} individual calls`)
-      
-      // Process all chunks concurrently (this is the key optimization!)
       const chunkPromises = chunks.map(async (chunk, index) => {
         try {
-          console.log(`Starting bulk call ${index + 1}/${chunks.length} for ${chunk.length} countries`)
           const chunkData = await this.fetchBulkHistoricalPrices(chunk)
           return { success: true, data: chunkData, chunkIndex: index }
         } catch (error) {
@@ -816,21 +1425,16 @@ currentDataByISO2() {
         }
       })
       
-      // Wait for all chunks to complete
       const results = await Promise.allSettled(chunkPromises)
       
-      // Process results
       results.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value.success) {
           Object.assign(newHistoricalData, result.value.data)
-          console.log(`Chunk ${index + 1} completed: ${Object.keys(result.value.data).length} countries`)
         }
       })
       
       this.historicalPriceData = newHistoricalData
       this.updateColorScheme()
-      
-      console.log(`Bulk loading completed: ${Object.keys(newHistoricalData).length} countries loaded`)
     },
 
     async fetchBulkHistoricalPrices(countries) {
@@ -843,8 +1447,6 @@ currentDataByISO2() {
         
         const url = `http://85.14.6.37:16601/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
         
-        console.log(`Bulk API call: ${url}`)
-        
         const { data } = await axios.get(url, {
           timeout: 15000,
           signal: this.currentAbortController?.signal
@@ -852,7 +1454,6 @@ currentDataByISO2() {
         
         const historicalData = {}
         
-        // Process the bulk response
         if (data.data) {
           for (const [iso2, countryData] of Object.entries(data.data)) {
             if (countryData.items && Array.isArray(countryData.items)) {
@@ -861,7 +1462,6 @@ currentDataByISO2() {
               for (const item of countryData.items) {
                 const timestamp = new Date(item.datetime_utc).getTime()
                 if (Number.isFinite(item.price)) {
-                  // Round to nearest hour
                   const hourTimestamp = Math.floor(timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000)
                   timeData[hourTimestamp] = item.price
                 }
@@ -882,106 +1482,85 @@ currentDataByISO2() {
       }
     },
 
-    // Fetch historical generation data for heatmap (48 hours)
     async refreshAllHistoricalGeneration() {
-      if (!this.countriesGeoJson) return;
+      if (!this.countriesGeoJson) return
       
-      this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps();
-      this.currentTimeIndex = this.availableGenerationTimestamps.length - 1;
+      this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
+      this.currentTimeIndex = this.availableGenerationTimestamps.length - 1
       
-      const generationUpdates = {};
-      const tasks = [];
+      const generationUpdates = {}
+      const tasks = []
       
       for (const feature of this.countriesGeoJson.features) {
-        const iso2 = this.getCountryISO2(feature);
+        const iso2 = this.getCountryISO2(feature)
         
-        if (!iso2 || !this.generationSupported(iso2)) continue;
+        if (!iso2 || !this.generationSupported(iso2)) continue
         
         tasks.push(
           this.fetchHistoricalGenerationForCountry(iso2)
             .then(timeData => {
               if (timeData && Object.keys(timeData).length > 0) {
-                generationUpdates[iso2] = timeData;
+                generationUpdates[iso2] = timeData
               }
             })
             .catch(error => {
-              console.error(`Failed to fetch generation for ${iso2}`, error);
+              console.error(`Failed to fetch generation for ${iso2}`, error)
             })
-        );
+        )
       }
       
-      await Promise.allSettled(tasks);      
-      this.historicalGenerationData = { ...this.historicalGenerationData, ...generationUpdates };
-
-    
+      await Promise.allSettled(tasks)      
+      this.historicalGenerationData = { ...this.historicalGenerationData, ...generationUpdates }
       
-      this.updateColorScheme();
+      this.updateColorScheme()
     },
-    
-    // Fetch historical generation data for a single country (48 hours for heatmap)
 
-// Fetch historical generation data for a single country (48 hours for heatmap)
-async fetchHistoricalGenerationForCountry(iso2) {
-  if (!this.generationSupported(iso2)) return null;
-  
-  try {
-    const timeData = {};
-    
-    const now = new Date();
-    const start = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-    const end = new Date();
-    
-    const startDate = start.toISOString().split('T')[0];
-    const endDate = end.toISOString().split('T')[0];
-    
-    const url = `http://85.14.6.37:16601/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`;
-   
-    const { data } = await axios.get(url, { 
-      timeout: 10000,
-      signal: this.currentAbortController?.signal 
-    });   
-
-      if (Array.isArray(data.items)) {        
+    async fetchHistoricalGenerationForCountry(iso2) {
+      if (!this.generationSupported(iso2)) return null
       
-        for (const item of data.items) {
-          console.log("ITEM", item)
-          // Use datetime_utc (with underscore) - confirmed from API response
-          const dt = new Date(item.datetime_utc);
-          const timestamp = dt.getTime();
-          
-          if (Number.isFinite(timestamp) && !isNaN(timestamp) && Number.isFinite(item.generation_mw)) {
-            // Round to nearest hour - SAME logic as price data
-            //const hourTimestamp = Math.floor(timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000);
-            console.log("Time",timestamp)
-            // Initialize if needed
-            if (!timeData[timestamp]) {
-              timeData[timestamp] = 0;
-            }
+      try {
+        const timeData = {}
+        
+        const now = new Date()
+        const start = new Date(now.getTime() - 48 * 60 * 60 * 1000)
+        const end = new Date()
+        
+        const startDate = start.toISOString().split('T')[0]
+        const endDate = end.toISOString().split('T')[0]
+        
+        const url = `http://85.14.6.37:16601/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+       
+        const { data } = await axios.get(url, { 
+          timeout: 10000,
+          signal: this.currentAbortController?.signal 
+        })
+
+        if (Array.isArray(data.items)) {
+          for (const item of data.items) {
+            const dt = new Date(item.datetime_utc)
+            const timestamp = dt.getTime()
             
-            // Sum generation values for this specific hour
-            timeData[timestamp] += item.generation_mw;
+            if (Number.isFinite(timestamp) && !isNaN(timestamp) && Number.isFinite(item.generation_mw)) {
+              if (!timeData[timestamp]) {
+                timeData[timestamp] = 0
+              }
+              
+              timeData[timestamp] += item.generation_mw
+            }
           }
         }
-    }
-    console.log(timeData)
-    
-    return Object.keys(timeData).length > 0 ? timeData : null;
-    
+        
+        return Object.keys(timeData).length > 0 ? timeData : null
+      } catch (error) {
+        if (error.response?.status === 400) {
+          console.warn(`400 Bad Request for generation data ${iso2}`)
+        } else {
+          console.error(`Failed to fetch historical generation for ${iso2}:`, error)
+        }
+        return null
+      }
+    },
 
-  } catch (error) {
-    if (error.response?.status === 400) {
-      console.warn(`400 Bad Request for generation data ${iso2}`);
-    } else {
-      console.error(`Failed to fetch historical generation for ${iso2}:`, error);
-    }
-    return null;
-  }
-},
-
-
-
-
-    // Support check methods
     capacitySupported(iso2) {
       return SUPPORTED_CAPACITY_ISO2.has(iso2)
     },
@@ -994,7 +1573,6 @@ async fetchHistoricalGenerationForCountry(iso2) {
       return SUPPORTED_PRICE_ISO2.has(iso2)
     },
 
-    // Panel controls
     openModal(payload) { this.selectedFeature = payload; this.isModalOpen = true },
     closeModal() { this.isModalOpen = false },
     openPanel(payload) { this.selectedFeature = payload; this.isModalOpen = true },
@@ -1008,9 +1586,12 @@ async fetchHistoricalGenerationForCountry(iso2) {
       this.generationDateLabel = null
       this.generationItems = []
       this.destroyGenerationChart()
+      
+      // Reset modal position and size
+      this.modalPosition = { x: 0, y: 0 }
+      this.modalSize = { width: 560, height: null }
     },
 
-    // Utility methods
     getCountryISO2(feature) {
       const p = feature?.properties || {}
       const raw = p.ISO_A2_EH || p.ISO_A2 || p.iso_a2 || p.iso2 || p.ISO2
@@ -1026,7 +1607,6 @@ async fetchHistoricalGenerationForCountry(iso2) {
       return feature.properties.name || feature.properties.NAME || feature.properties.ADMIN || 'Unknown'
     },
 
-    // Capacity methods (unchanged)
     async fetchCapacityForHeatmap(iso2) {
       if (!this.capacitySupported(iso2)) return null
 
@@ -1065,7 +1645,7 @@ async fetchHistoricalGenerationForCountry(iso2) {
                 updates[iso2] = totalMW
               }
             })
-            .catch(() => {/* swallow per-country errors */})
+            .catch(() => {})
         )
       }
 
@@ -1074,9 +1654,7 @@ async fetchHistoricalGenerationForCountry(iso2) {
       this.updateColorScheme()
     },
 
-    // Generic refresh method
     async refreshHeatmapData() {
-      // Cancel any existing requests
       if (this.currentAbortController) {
         this.currentAbortController.abort()
       }
@@ -1102,21 +1680,17 @@ async fetchHistoricalGenerationForCountry(iso2) {
       }
     },
 
-    // Data loading with markRaw fix
     async loadCountriesData() {
       try {
         const response = await axios.get(
           'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'
         )
-        // Use markRaw to prevent Vue reactivity on GeoJSON data
         this.countriesGeoJson = markRaw(response.data)
-        
       } catch (err) {
         console.error('Error loading countries data:', err)
       }
     },
 
-    // Capacity method for modal (unchanged)
     async fetchCapacity(iso2) {
       this.capacityLoading = true
       this.capacityError = null
@@ -1130,7 +1704,6 @@ async fetchHistoricalGenerationForCountry(iso2) {
         this.capacityYear = data.year
         this.capacityItems = Array.isArray(data.items) ? data.items : []
         
-        // Also update heatmap data when fetching detailed data
         const totalMW = this.capacityItems.reduce((sum, item) => sum + (item.installed_capacity_mw || 0), 0)
         if (Number.isFinite(totalMW) && totalMW > 0) {
           this.countryCapacityByISO2 = { ...this.countryCapacityByISO2, [iso2]: totalMW }
@@ -1142,19 +1715,17 @@ async fetchHistoricalGenerationForCountry(iso2) {
         this.capacityLoading = false
         await this.$nextTick()
         if (!this.capacityError && this.capacityItems.length) {
-          this.renderCapacityChart()
+          //this.renderCapacityChart()
         }
       }
     },
 
-    // Map interaction with better error handling
     onEachFeature(feature, layer) {
       const vm = this
       const name = vm.getCountryName(feature)
       const iso2 = vm.getCountryISO2(feature)
       const getVal = () => (iso2 ? vm.currentDataByISO2?.[iso2] : null)
 
-      // Add error handling
       try {
         layer.on({
           mouseover(e) {
@@ -1171,7 +1742,6 @@ async fetchHistoricalGenerationForCountry(iso2) {
                   ? `${name}: ${v.toFixed(decimals)} ${unit}` 
                   : `${name}: no data`
                 
-                // Add time info for tooltips
                 if (vm.hasTimeData) {
                   text += `\n${vm.currentTimeDisplay}`
                 }
@@ -1198,6 +1768,7 @@ async fetchHistoricalGenerationForCountry(iso2) {
           },
           async click() {
             try {
+              // First, open the original modal
               vm.openModal({ name, value: getVal(), properties: feature.properties })
               await new Promise(r => setTimeout(r, 220))
               if (iso2) {
@@ -1205,6 +1776,10 @@ async fetchHistoricalGenerationForCountry(iso2) {
                 await vm.$nextTick()
                 if (vm.generationChartInstance?.resize) vm.generationChartInstance.resize()
                 if (vm.generationChartInstance?.update) vm.generationChartInstance.update()
+
+                // UPDATED: Create BOTH capacity and generation modals for each click
+                vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
+                vm.createSeparateModal(name, 'generation', 'Energy Generation')
               } else {
                 vm.capacityError = 'Missing ISO-2 code for this feature'
                 vm.generationError = 'Missing ISO-2 code for this feature'
@@ -1219,11 +1794,9 @@ async fetchHistoricalGenerationForCountry(iso2) {
       }
     },
 
-// Fixed updateColorScheme method - uses safe layer updating
     async updateColorScheme() {
       if (!this.countriesGeoJson) return
       
-      // Instead of removing/recreating the layer, update styles directly
       const geoJsonRef = this.$refs.geoJsonLayer
       if (geoJsonRef && geoJsonRef.leafletObject) {
         try {
@@ -1240,143 +1813,130 @@ async fetchHistoricalGenerationForCountry(iso2) {
 
     onMapReady(mapObject) { this.map = mapObject },
 
-    // Chart methods with markRaw fixes
-async renderCapacityChart() {
-  const canvas = this.$refs.capacityChart;
-  if (!canvas) return;
-  
-  this.destroyCapacityChart();
+    async renderCapacityChart() {
+      const canvas = this.$refs.capacityChart
+      if (!canvas) return
+      
+      this.destroyCapacityChart()
 
-  // Sort items by capacity
-  const items = [...this.capacityItems].sort((a, b) => 
-    (b.installed_capacity_mw || 0) - (a.installed_capacity_mw || 0)
-  );
-  
-  const labels = items.map(i => i.psr_name);
-  const capacityValues = items.map(i => i.installed_capacity_mw);
+      const items = [...this.capacityItems].sort((a, b) => 
+        (b.installed_capacity_mw || 0) - (a.installed_capacity_mw || 0)
+      )
+      
+      const labels = items.map(i => i.psr_name)
+      const capacityValues = items.map(i => i.installed_capacity_mw)
 
-  // Get current generation data for the selected country
-  const iso2 = this.getCountryISO2(this.selectedFeature);
-  
-  // AWAIT the generation data before creating the chart
-  const generationByTech = await this.getGenerationByTechnology(iso2);
-  
-  console.log('generationByTech', generationByTech);
+      const iso2 = this.getCountryISO2(this.selectedFeature)
+      
+      const generationByTech = await this.getGenerationByTechnology(iso2)
 
-  // Map generation to capacity items
-  const generationMapped = items.map(item => {
-    const genValue = generationByTech[item.psr_name] || 0;
-    return genValue;
-  });
+      const generationMapped = items.map(item => {
+        const genValue = generationByTech[item.psr_name] || 0
+        return genValue
+      })
 
-  // Calculate remaining capacity
-  const remainingCapacity = capacityValues.map((cap, i) => {
-    const gen = generationMapped[i] || 0;
-    return Math.max(0, cap - gen);
-  });
+      const remainingCapacity = capacityValues.map((cap, i) => {
+        const gen = generationMapped[i] || 0
+        return Math.max(0, cap - gen)
+      })
 
-  const ctx = canvas.getContext('2d');
-  
-  // Use markRaw to prevent Vue reactivity
-  this.capacityChartInstance = markRaw(new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Current Generation (MW)',
-          data: generationMapped,
-          backgroundColor: 'rgba(54, 162, 235, 0.85)',
-          borderColor: 'rgb(54, 162, 235)',
-          borderWidth: 2,
-          stack: 'capacity'
-        },
-        {
-          label: 'Available Capacity (MW)',
-          data: remainingCapacity,
-          backgroundColor: 'rgba(200, 200, 200, 0.4)',
-          borderColor: 'rgb(150, 150, 150)',
-          borderWidth: 1,
-          stack: 'capacity'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          stacked: true
-        },
-        y: {
-          beginAtZero: true,
-          stacked: true
-        }
-      },
-      plugins: {
-        legend: {
-          display: true
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const datasetIndex = context.datasetIndex;
-              if (datasetIndex === 0) {
-                const value = context.parsed.y;
-                const capacity = capacityValues[context.dataIndex];
-                const percentage = capacity > 0 ? ((value / capacity) * 100).toFixed(1) : 0;
-                return `Current Generation: ${value.toFixed(0)} MW (${percentage}%)`;
-              } else {
-                return `Available Capacity: ${context.parsed.y.toFixed(0)} MW`;
-              }
+      const ctx = canvas.getContext('2d')
+      
+      this.capacityChartInstance = markRaw(new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Current Generation (MW)',
+              data: generationMapped,
+              backgroundColor: 'rgba(54, 162, 235, 0.85)',
+              borderColor: 'rgb(54, 162, 235)',
+              borderWidth: 2,
+              stack: 'capacity'
             },
-            footer: function(tooltipItems) {
-              if (tooltipItems.length > 0) {
-                const index = tooltipItems[0].dataIndex;
-                const total = capacityValues[index];
-                return `Total Installed: ${total.toFixed(0)} MW`;
+            {
+              label: 'Available Capacity (MW)',
+              data: remainingCapacity,
+              backgroundColor: 'rgba(200, 200, 200, 0.4)',
+              borderColor: 'rgb(150, 150, 150)',
+              borderWidth: 1,
+              stack: 'capacity'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true
+            },
+            y: {
+              beginAtZero: true,
+              stacked: true
+            }
+          },
+          plugins: {
+            legend: {
+              display: true
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const datasetIndex = context.datasetIndex
+                  if (datasetIndex === 0) {
+                    const value = context.parsed.y
+                    const capacity = capacityValues[context.dataIndex]
+                    const percentage = capacity > 0 ? ((value / capacity) * 100).toFixed(1) : 0
+                    return `Current Generation: ${value.toFixed(0)} MW (${percentage}%)`
+                  } else {
+                    return `Available Capacity: ${context.parsed.y.toFixed(0)} MW`
+                  }
+                },
+                footer: function(tooltipItems) {
+                  if (tooltipItems.length > 0) {
+                    const index = tooltipItems[0].dataIndex
+                    const total = capacityValues[index]
+                    return `Total Installed: ${total.toFixed(0)} MW`
+                  }
+                }
               }
             }
           }
         }
-      }
-    }
-  }));
-},
+      }))
+    },
 
-
-
-async getGenerationByTechnology(iso2) {
-  if (!iso2) return {};
-  
-  try {
-    const url = `http://85.14.6.37:16601/api/generation/yesterday?country=${encodeURIComponent(iso2)}`;
-    const { data } = await axios.get(url);    
-    const byTech = {};    
-    if (Array.isArray(data.items)) {
-      const now = new Date();
-      // -24h offset
-      now.setTime(now.getTime() - (24 * 60 * 60 * 1000));
-      now.setMinutes(0, 0, 0);
-      const currentTimeISO = now.toISOString().split('.')[0] + 'Z';
-      for (const item of data.items) {        
-        const tech = item.psr_name || item.psr_type || 'Unknown';        
-        const gen = Number(item.generation_mw) || 0;        
-        const itemDate = item.datetime_utc       
-        if (currentTimeISO === itemDate){
-          byTech[tech] = gen
+    async getGenerationByTechnology(iso2) {
+      if (!iso2) return {}
+      
+      try {
+        
+        const url = `http://85.14.6.37:16601/api/generation/yesterday?country=${encodeURIComponent(iso2)}`
+        const { data } = await axios.get(url)
+        const byTech = {}
+        if (Array.isArray(data.items)) {
+          const now = new Date()
+          now.setTime(now.getTime() - (24 * 60 * 60 * 1000))
+          now.setMinutes(0, 0, 0)
+          const currentTimeISO = now.toISOString().split('.')[0] + 'Z'
+          for (const item of data.items) {
+            const tech = item.psr_name || item.psr_type || 'Unknown'
+            const gen = Number(item.generation_mw) || 0
+            const itemDate = item.datetime_utc
+            if (currentTimeISO === itemDate) {
+              byTech[tech] = gen
+            }
+          }
         }
-
-      }      
-    }       
-    return byTech;
-  } catch (e) {
-    console.error(`Failed to get generation for ${iso2}`, e);
-    return {};
-  }
-},
-
-
+        
+        return byTech
+      } catch (e) {
+        console.error(`Failed to get generation for ${iso2}`, e)
+        return {}
+      }
+    },
 
     destroyCapacityChart() {
       if (this.capacityChartInstance) {
@@ -1389,7 +1949,6 @@ async getGenerationByTechnology(iso2) {
       if (e.key === 'Escape' && this.isModalOpen) this.closePanel()
     },
 
-    // Generation method for modal (unchanged - uses yesterday API)
     async fetchGeneration(iso2) {
       this.generationLoading = true
       this.generationError = null
@@ -1399,7 +1958,6 @@ async getGenerationByTechnology(iso2) {
 
       try {
         const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
-        console.log(url)
         const { data } = await axios.get(url)
         this.generationItems = Array.isArray(data.items) ? data.items : []
       } catch (e) {
@@ -1475,9 +2033,16 @@ async getGenerationByTechnology(iso2) {
       }
 
       const ctx = canvas.getContext('2d')
-      // Use markRaw to prevent Vue reactivity
       this.generationChartInstance = markRaw(new Chart(ctx, cfg))
     },
+
+    handleWindowResize() {
+        // Reposition modals when window is resized
+        this.repositionSeparateModals()
+      },
+    autoArrangeSeparateModals() {
+        this.repositionSeparateModals()
+      },
 
     destroyGenerationChart() {
       if (this.generationChartInstance?.destroy) this.generationChartInstance.destroy()
@@ -1486,33 +2051,47 @@ async getGenerationByTechnology(iso2) {
   },
 
   async mounted() {
-    
+    window.addEventListener('resize', this.handleWindowResize)
     window.addEventListener('keydown', this.onKeydown)
     this.initialLoading = true
     try {
-        // First load the GeoJSON data
-          await this.loadCountriesData()
-          
-          if (this.countriesGeoJson) {
-          if (this.heatmapType === 'prices') {
-            await this.refreshAllHistoricalPrices()
-          } else {
-            await this.refreshAllCapacities()
-          }
+      await this.loadCountriesData()
+      
+      if (this.countriesGeoJson) {
+        if (this.heatmapType === 'prices') {
+          await this.refreshAllHistoricalPrices()
+        } else {
+          await this.refreshAllCapacities()
         }
+      }
     } catch (error) {
-        console.error('Error during initial data loading:', error)
+      console.error('Error during initial data loading:', error)
     } finally {
       this.initialLoading = false
     }
   },
 
   beforeUnmount() {
+    window.removeEventListener('resize', this.handleWindowResize)
     window.removeEventListener('keydown', this.onKeydown)
     this.destroyCapacityChart()
     this.destroyGenerationChart()
+    
+    // Clean up separate modal charts
+    this.separateModals.forEach(modal => {
+      if (modal.chart) {
+        modal.chart.destroy()
+      }
+    })
+    
     if (this.priceTimer) clearInterval(this.priceTimer)
     if (this.playInterval) clearInterval(this.playInterval)
+    
+    // Clean up drag/resize listeners
+    document.removeEventListener('mousemove', this.onDrag)
+    document.removeEventListener('mouseup', this.stopDrag)
+    document.removeEventListener('mousemove', this.onResize)
+    document.removeEventListener('mouseup', this.stopResize)
   }
 }
 </script>
@@ -1603,12 +2182,13 @@ async getGenerationByTechnology(iso2) {
   padding-bottom: 0px;
 }
 
+/* Updated modal panel - now supports drag and resize */
 .left-panel {
   position: absolute;
   top: 0;
   left: 0;
-  bottom: 0;
-  width: clamp(560px, 56vw, 800px);
+  min-width: 400px;
+  min-height: 300px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -1619,6 +2199,7 @@ async getGenerationByTechnology(iso2) {
   flex-direction: column;
   overflow: hidden;
   z-index: 1100;
+  user-select: none;
 }
 
 .panel-scrim {
@@ -1643,6 +2224,7 @@ async getGenerationByTechnology(iso2) {
   justify-content: space-between;
   padding: 12px 14px;
   border-bottom: 1px solid #eee;
+  user-select: none;
 }
 
 .panel-close {
@@ -1650,11 +2232,138 @@ async getGenerationByTechnology(iso2) {
   background: transparent;
   font-size: 18px;
   cursor: pointer;
+  z-index: 10;
 }
 
 .panel-content {
   padding: 14px;
   overflow: auto;
+  flex: 1;
+}
+
+/* Separate Modal Styles */
+.separate-modal {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.separate-modal-header {
+  background-color: #2c3e50;
+  color: white;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.separate-modal-header h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.separate-modal-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.3s;
+}
+
+.separate-modal-close:hover {
+  background-color: rgba(255,255,255,0.2);
+}
+
+.separate-modal-content {
+  flex: 1;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.separate-modal-loading {
+  text-align: center;
+  color: #666;
+  font-size: 12px;
+}
+
+.separate-modal-error {
+  text-align: center;
+  color: #e74c3c;
+  font-size: 12px;
+}
+
+.separate-modal-error button {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 8px;
+  font-size: 11px;
+  transition: background-color 0.3s;
+}
+
+.separate-modal-error button:hover {
+  background-color: #c0392b;
+}
+
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 8px;
+}
+
+/* Resize handles */
+.resize-handle {
+  position: absolute;
+  background: transparent;
+  z-index: 10;
+}
+
+.resize-handle-right {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.resize-handle-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.resize-handle-corner {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(102, 126, 234, 0.3) 50%);
+}
+
+.resize-handle:hover {
+  background: rgba(102, 126, 234, 0.2);
 }
 
 .map-col {
@@ -1684,10 +2393,6 @@ async getGenerationByTechnology(iso2) {
 
 /* Time slider positioned above footer (overlay style) */
 .time-slider-overlay {
-  /* position: fixed;
-  bottom: 78px;
-  left: 20px;
-  right: 20px; */
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-radius: 8px;
@@ -1911,61 +2616,6 @@ async getGenerationByTechnology(iso2) {
   font-weight: 500;
 }
 
-/* Legend */
-.legend {
-  margin: 20px;
-  padding: 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.legend h3 {
-  margin: 0 0 20px 0;
-  color: #343a40;
-  font-weight: 500;
-}
-
-.color-scale {
-  margin-bottom: 20px;
-}
-
-.scale-bar {
-  height: 20px;
-  border-radius: 10px;
-  margin-bottom: 5px;
-  border: 1px solid #ddd;
-}
-
-.scale-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9rem;
-  color: #666;
-}
-
-.legend-items {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border-radius: 6px;
-  background: #f8f9fa;
-}
-
-.color-box {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
 /* Loading overlay */
 .initial-loading-overlay {
   position: fixed;
@@ -2039,10 +2689,41 @@ async getGenerationByTechnology(iso2) {
   user-select: none !important;
 }
 
+/* Play controls */
+.play-controls {
+  display: flex;
+  justify-content: left;
+  margin-bottom: 8px;
+}
+
+.play-button {
+  padding: 6px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.play-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.play-button:disabled {
+  background: linear-gradient(135deg, #a0aec0 0%, #718096 100%);
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* Responsive design */
 @media (max-width: 900px) {
   .left-panel {
-    width: min(420px, 50vw);
+    min-width: 350px;
   }
   
   .slider-info {
@@ -2051,8 +2732,6 @@ async getGenerationByTechnology(iso2) {
     text-align: center;
     gap: 4px;
   }
-  
-
   
   .tick-label-below {
     font-size: 9px;
@@ -2078,14 +2757,6 @@ async getGenerationByTechnology(iso2) {
     gap: 10px;
     margin-top: 6px;
   }
-  
-  /* .time-slider-overlay {
-    bottom: 40px;
-    left: 8px;
-    right: 8px;
-    padding: 8px 12px;
-    max-height: 65px;
-  } */
   
   .slider-wrapper {
     height: 50px;
@@ -2190,34 +2861,54 @@ async getGenerationByTechnology(iso2) {
     background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
   }
 }
-
-.play-controls {
-  display: flex;
-  justify-content: left;
-  margin-bottom: 8px;
+/* Separate Modal Resize Handles */
+.separate-modal-resize-handle {
+  position: absolute;
+  background: transparent;
+  z-index: 10;
 }
 
-.play-button {
-  padding: 6px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+.separate-modal-resize-right {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
 }
 
-.play-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.separate-modal-resize-bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
 }
 
-.play-button:disabled {
-  background: linear-gradient(135deg, #a0aec0 0%, #718096 100%);
-  cursor: not-allowed;
-  transform: none;
+.separate-modal-resize-corner {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(102, 126, 234, 0.3) 50%);
+}
+
+.separate-modal-resize-handle:hover {
+  background: rgba(102, 126, 234, 0.2);
+}
+
+/* Make header draggable */
+.separate-modal-header {
+  user-select: none;
+}
+.chart-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  min-height: 150px;
+}
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 </style>
