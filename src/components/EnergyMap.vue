@@ -191,6 +191,8 @@
             class="smooth-range-slider"
             @input="onSliderChange"
             @change="onSliderChange"
+            @pointerdown="onSliderPointerDown"
+            @pointerup="onSliderPointerUp"
           />
           
           <!-- Custom visual track and progress -->
@@ -329,6 +331,10 @@ export default {
       resizeDirection: null,
       separateModalDragState: {},  // Track drag state for each modal
       separateModalResizeState: {}, // Track resize state for each modal
+      layerByISO2: {},               // iso2 -> Leaflet layer
+      showChangeTooltips: false,      // enable/disable delta bubbles
+      deltaHideTimer: null,
+      isUserScrubbing: false,
 
       dragStartX: 0,
       dragStartY: 0,
@@ -677,7 +683,12 @@ export default {
         } else if (newType === 'generation' && this.availableGenerationTimestamps.length === 0) {
           this.refreshAllHistoricalGeneration()
         }
+        else{
+          this.showChangeTooltips = false;
+          this.hideAllDeltaTooltips();
+        }
         this.updateColorScheme()
+       
       },
       immediate: false
     },
@@ -685,11 +696,107 @@ export default {
     currentTimeIndex: {
       handler() {
         this.updateColorScheme()
+        if (this.showChangeTooltips) this.updateDeltaTooltips();
       }
     }
   },
 
   methods: {
+
+    onSliderPointerDown() {
+      this.isUserScrubbing = true;
+      this.beginMotion();
+    },
+    onSliderPointerUp() {
+      this.isUserScrubbing = false;
+      this.endMotionSoon();  // hide a moment after user stops
+    },
+    onSliderChange() {
+        this.beginMotion();        // show labels while scrubbing/playing
+        this.updateDeltaTooltips();
+        this.endMotionSoon(400);   // hide shortly after idle
+      // const slider = this.$el.querySelector('.enhanced-time-slider');
+      // if (slider) {
+      //   slider.classList.add('transitioning');
+      //   setTimeout(() => slider.classList.remove('transitioning'), 200);
+      // }
+      // this.beginMotion();       // keep visible while scrubbing
+      // this.updateDeltaTooltips();
+      // this.endMotionSoon(400);  // refresh the idle timer on each tick
+    },
+
+
+    updateDeltaTooltips() {
+      if (this.heatmapType !== 'prices' || !this.showChangeTooltips || this.currentTimeIndex <= 0) {
+        this.hideAllDeltaTooltips();
+        return;
+      }
+      const unit = 'EUR/MWh';
+      for (const iso2 in this.layerByISO2) {
+        const lyr = this.layerByISO2[iso2];
+        if (!lyr) continue;
+        const ch = this.getPriceDelta(iso2);
+        if (!ch || !Number.isFinite(ch.delta)) {
+          if (lyr.closeTooltip) lyr.closeTooltip();
+          continue;
+        }
+        const d = ch.delta;
+        const arrow = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
+        const sign = d > 0 ? '+' : '';
+        const pctStr = Number.isFinite(ch.pct) ? ` (${sign}${ch.pct.toFixed(1)}%)` : '';
+        const text = `${arrow} ${sign}${d.toFixed(2)} ${unit}${pctStr}`;
+
+        if (lyr.getTooltip && lyr.getTooltip()) {
+          lyr.getTooltip().setContent(text);
+        } else if (lyr.bindTooltip) {
+          lyr.bindTooltip(text, { permanent: true, direction: 'center', className: 'delta-tooltip' }).openTooltip();
+        }
+      }
+    },
+
+    hideAllDeltaTooltips() {
+      for (const iso2 in this.layerByISO2) {
+        const lyr = this.layerByISO2[iso2];
+        if (lyr?.closeTooltip) lyr.closeTooltip();
+      }
+    },
+    beginMotion() {
+      this.showChangeTooltips = true;
+      if (this.deltaHideTimer) { clearTimeout(this.deltaHideTimer); this.deltaHideTimer = null; }
+      this.updateDeltaTooltips();
+    },
+    endMotionSoon(delayMs = 500) {
+      if (this.deltaHideTimer) clearTimeout(this.deltaHideTimer);
+      this.deltaHideTimer = setTimeout(() => {
+        if (!this.isPlaying && !this.isUserScrubbing) {
+          this.showChangeTooltips = false;
+          this.hideAllDeltaTooltips();
+        }
+      }, delayMs);
+    },
+
+
+    getPriceDelta(iso2) {
+      if (this.heatmapType !== 'prices' || !this.hasTimeData) return null;
+
+      const t = this.currentTimeIndex;
+      if (t <= 0) return null;
+
+      const tsCur  = Number(this.availableTimestamps[t]);
+      const tsPrev = Number(this.availableTimestamps[t - 1]);
+
+      const cur  = this.historicalPriceData?.[iso2]?.[tsCur];
+      const prev = this.historicalPriceData?.[iso2]?.[tsPrev];
+
+      if (!Number.isFinite(cur) || !Number.isFinite(prev)) return null;
+
+      const delta = cur - prev;
+      const pct = prev !== 0 ? (delta / prev) * 100 : null;
+
+      return { delta, pct };
+    },
+
+
     // UPDATED: Separate Modal Management Methods
     createSeparateModal(country, type, title) {
       // Check if modal for this country and type already exists
@@ -1281,25 +1388,22 @@ export default {
     },
     
     startAnimation() {
-      this.currentTimeIndex = 0
-      this.isPlaying = true
-      
+      this.currentTimeIndex = 0;
+      this.isPlaying = true;
+      this.beginMotion();  // show labels while playing
       this.playInterval = setInterval(() => {
         if (this.currentTimeIndex >= this.maxTimeIndex) {
-          this.pauseAnimation()
+          this.pauseAnimation();
         } else {
-          this.currentTimeIndex++
-          this.onSliderChange()
+          this.currentTimeIndex++;
+          this.updateDeltaTooltips();
         }
-      }, this.playSpeed)
+      }, this.playSpeed);
     },
-    
     pauseAnimation() {
-      this.isPlaying = false
-      if (this.playInterval) {
-        clearInterval(this.playInterval)
-        this.playInterval = null
-      }
+      this.isPlaying = false;
+      if (this.playInterval) { clearInterval(this.playInterval); this.playInterval = null; }
+      this.endMotionSoon(); // hide shortly after pause
     },
 
     jumpToTick(tickIndex) {
@@ -1333,15 +1437,7 @@ export default {
       return timestamps
     },
     
-    onSliderChange() {
-      const slider = this.$el.querySelector('.enhanced-time-slider')
-      if (slider) {
-        slider.classList.add('transitioning')
-        setTimeout(() => {
-          slider.classList.remove('transitioning')
-        }, 200)
-      }
-    },
+
 
     async fetchHistoricalPricesForCountry(iso2) {
       if (!this.priceSupported(iso2)) return null
@@ -1435,6 +1531,8 @@ export default {
       
       this.historicalPriceData = newHistoricalData
       this.updateColorScheme()
+      if (this.showChangeTooltips) this.$nextTick(() => this.updateDeltaTooltips());
+     
     },
 
     async fetchBulkHistoricalPrices(countries) {
@@ -1745,6 +1843,21 @@ export default {
                 if (vm.hasTimeData) {
                   text += `\n${vm.currentTimeDisplay}`
                 }
+                // // ✨ NEW: show Δ change for price heatmap
+
+                // if (vm.heatmapType === 'prices' && iso2) {
+                //   const ch = vm.priceChangeFor(iso2);
+                //   if (ch) {
+                //     if (Number.isFinite(ch.delta)) {
+                //       const arrow = ch.delta > 0 ? '↑' : (ch.delta < 0 ? '↓' : '→');
+                //       const sign  = ch.delta > 0 ? '+' : '';
+                //       const pctStr = Number.isFinite(ch.pct) ? ` (${sign}${ch.pct.toFixed(1)}%)` : '';
+                //       text += `\nΔ ${arrow} ${sign}${ch.delta.toFixed(2)} ${unit}${pctStr} vs prev hour`;
+                //     } else {
+                //       text += `\nΔ n/a`;
+                //     }
+                //   }
+                // }
                 
                 if (lyr && lyr.bindTooltip) {
                   lyr.bindTooltip(text, { permanent: false, direction: 'center', className: 'custom-tooltip' }).openTooltip()
@@ -1766,7 +1879,7 @@ export default {
               console.warn('Error in mouseout handler:', error)
             }
           },
-          async click() {
+          async click() {            
             try {
               // First, open the original modal
               vm.openModal({ name, value: getVal(), properties: feature.properties })
@@ -1789,6 +1902,10 @@ export default {
             }
           }
         })
+        const iso2Key = vm.getCountryISO2(feature);
+        if (iso2Key) {
+          vm.layerByISO2[iso2Key] = layer;
+        }
       } catch (error) {
         console.error('Error setting up layer events:', error)
       }
@@ -2910,5 +3027,16 @@ export default {
 .chart-container canvas {
   width: 100% !important;
   height: 100% !important;
+}
+:global(.delta-tooltip) {
+  background: rgba(0,0,0,0.75) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 4px 6px !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+  white-space: nowrap !important;
 }
 </style>
