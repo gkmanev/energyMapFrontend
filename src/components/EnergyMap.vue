@@ -162,7 +162,7 @@
     
     <!-- Price Slider -->
     <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
-      <h3>Historical Prices - Last 48 Hours</h3>
+      <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
       <div class="slider-info">
         <span class="time-display">{{ currentTimeDisplay }}</span>
         <span class="price-display">{{ averagePriceDisplay }}</span>
@@ -176,6 +176,10 @@
         >
           {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
         </button>
+        <label class="show-pct-toggle">
+          <input type="checkbox" v-model="showPctInTooltip" @change="onPctToggle" />
+          Show %
+        </label>
       </div>
       
       <!-- Enhanced smooth draggable slider -->
@@ -351,6 +355,7 @@ export default {
       isPlaying: false,
       playInterval: null,
       playSpeed: 500,
+      showPctInTooltip: true,
       
       // Time slider data for prices
       currentTimeIndex: 0,
@@ -724,14 +729,20 @@ export default {
       // this.updateDeltaTooltips();
       // this.endMotionSoon(400);  // refresh the idle timer on each tick
     },
-
+    onPctToggle() {
+      // If change-tooltips are currently visible, refresh their content right away
+      if (this.showChangeTooltips) {
+        this.updateDeltaTooltips();
+      }
+    },
 
     updateDeltaTooltips() {
       if (this.heatmapType !== 'prices' || !this.showChangeTooltips || this.currentTimeIndex <= 0) {
         this.hideAllDeltaTooltips();
         return;
       }
-      const unit = 'EUR/MWh';
+
+      const unit = ''; // keep as-is if you don't want units in the bubble
       for (const iso2 in this.layerByISO2) {
         const lyr = this.layerByISO2[iso2];
         if (!lyr) continue;
@@ -740,10 +751,16 @@ export default {
           if (lyr.closeTooltip) lyr.closeTooltip();
           continue;
         }
+
         const d = ch.delta;
         const arrow = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
         const sign = d > 0 ? '+' : '';
-        const pctStr = Number.isFinite(ch.pct) ? ` (${sign}${ch.pct.toFixed(1)}%)` : '';
+
+        // 👇 ONLY add % when the checkbox is checked
+        const pctStr = (this.showPctInTooltip && Number.isFinite(ch.pct))
+          ? ` (${sign}${ch.pct.toFixed(1)}%)`
+          : '';
+
         const text = `${arrow} ${sign}${d.toFixed(2)} ${unit}${pctStr}`;
 
         if (lyr.getTooltip && lyr.getTooltip()) {
@@ -1457,7 +1474,7 @@ export default {
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
         
         const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
-        
+        console.log("Prices",url)
         const { data } = await axios.get(url, {
           timeout: 10000,
           signal: this.currentAbortController?.signal
@@ -3038,5 +3055,16 @@ export default {
   line-height: 1.2 !important;
   box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
   white-space: nowrap !important;
+}
+.show-pct-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  font-size: 13px;
+  color: #2c3e50;
+}
+.play-button + .show-pct-toggle input[type="checkbox"] {
+  cursor: pointer;
 }
 </style>
