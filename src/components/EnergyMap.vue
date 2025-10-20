@@ -1084,6 +1084,7 @@ export default {
           if (!iso2) throw new Error('Country not found')
           
           const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+          console.log(url)
           const { data: response } = await axios.get(url)
           data = response.items || []
         }
@@ -1597,38 +1598,107 @@ export default {
       }
     },
 
+    async fetchBulkHistoricalGeneration(countries) {
+      if (countries.length === 0) return {}
+
+      try {
+        // last 48h window, aligned to how you build timestamps for prices
+        const now = new Date()
+        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+        // end is exclusive; your API accepts full ISO for end
+        const endISO = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+
+        // Use your new bulk endpoint
+        // Supports start/end (UTC) or period. We’ll send start/end for symmetry with prices.
+        const url = `http://85.14.6.37:16601/api/generation/bulk-range/` +
+                    `?countries=${countries.join(',')}` +
+                    `&start=${start.toISOString()}` +
+                    `&end=${endISO}`
+
+        const { data } = await axios.get(url, {
+          timeout: 15000,
+          signal: this.currentAbortController?.signal
+        })
+
+        // data.data = { "AT": { items: [{ datetime_utc, psr_type, psr_name, generation_mw }, ...] }, ... }
+        // We need TOTAL generation per timestamp (sum over technologies) for heatmap.
+        const aggregatedByCountry = {}
+
+        if (data?.data && typeof data.data === 'object') {
+          for (const [iso2, countryData] of Object.entries(data.data)) {
+            const byTs = Object.create(null)
+
+            if (Array.isArray(countryData.items)) {
+              for (const item of countryData.items) {
+                const t = new Date(item.datetime_utc).getTime()
+                if (!Number.isFinite(t)) continue
+                const v = Number(item.generation_mw)
+                if (!Number.isFinite(v)) continue
+
+                // Hour-bin (just like prices)
+                const hourTs = Math.floor(t / (60 * 60 * 1000)) * (60 * 60 * 1000)
+                byTs[hourTs] = (byTs[hourTs] || 0) + v
+              }
+            }
+
+            if (Object.keys(byTs).length > 0) {
+              aggregatedByCountry[iso2] = byTs
+            }
+          }
+        }
+
+        return aggregatedByCountry
+      } catch (error) {
+        console.error(`Bulk generation request failed for ${countries.length} countries:`, error)
+        throw error
+      }
+    },
+
     async refreshAllHistoricalGeneration() {
       if (!this.countriesGeoJson) return
-      
+
+      // Drive the slider with the same 48h grid used for prices
       this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
       this.currentTimeIndex = this.availableGenerationTimestamps.length - 1
-      
-      const generationUpdates = {}
-      const tasks = []
-      
-      for (const feature of this.countriesGeoJson.features) {
-        const iso2 = this.getCountryISO2(feature)
-        
-        if (!iso2 || !this.generationSupported(iso2)) continue
-        
-        tasks.push(
-          this.fetchHistoricalGenerationForCountry(iso2)
-            .then(timeData => {
-              if (timeData && Object.keys(timeData).length > 0) {
-                generationUpdates[iso2] = timeData
-              }
-            })
-            .catch(error => {
-              console.error(`Failed to fetch generation for ${iso2}`, error)
-            })
-        )
+
+      // Find supported countries
+      const supported = []
+      for (const f of this.countriesGeoJson.features) {
+        const iso2 = this.getCountryISO2(f)
+        if (iso2 && this.generationSupported(iso2)) supported.push(iso2)
       }
-      
-      await Promise.allSettled(tasks)      
-      this.historicalGenerationData = { ...this.historicalGenerationData, ...generationUpdates }
-      
+
+      // Chunk to match server safety limit (20)
+      const chunkSize = 20
+      const chunks = []
+      for (let i = 0; i < supported.length; i += chunkSize) {
+        chunks.push(supported.slice(i, i + chunkSize))
+      }
+
+      const merged = {}
+      const chunkPromises = chunks.map(async (chunk, idx) => {
+        try {
+          const chunkData = await this.fetchBulkHistoricalGeneration(chunk)
+          return { ok: true, data: chunkData, idx }
+        } catch (err) {
+          return { ok: false, err, idx }
+        }
+      })
+
+      const results = await Promise.allSettled(chunkPromises)
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value.ok) {
+          Object.assign(merged, r.value.data)
+        }
+      }
+
+      this.historicalGenerationData = merged
       this.updateColorScheme()
     },
+
+
+
+
 
     async fetchHistoricalGenerationForCountry(iso2) {
       if (!this.generationSupported(iso2)) return null
