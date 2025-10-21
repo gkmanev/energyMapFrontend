@@ -29,7 +29,9 @@
                 title="Arrange modals on right side">
           📐 Arrange Modals
         </button> -->
+        <div class="ml-auto flex items-center" style="font-size: 25px; text-align: right;"><LocalClock /></div>
       </div>
+      
     </div>
 
     <!-- FLEX ROW: sidebar + map -->
@@ -144,8 +146,7 @@
           ref="leafletMap"
         >
           <LTileLayer
-            :url="tileUrl"
-            :attribution="attribution"
+            :url="tileUrl"            
             :options="{ noWrap: true, bounds: [[-90, -180], [90, 180]] }"
           />
           <!-- Use v-if instead of :key to prevent unnecessary remounting -->
@@ -301,7 +302,7 @@ const BULK_REQUEST_CONFIG = {
   retry: 2,
   retryDelay: 1000
 }
-
+import LocalClock from "@/components/LocalClock.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import Chart from 'chart.js/auto'
@@ -319,7 +320,7 @@ import {
 
 export default {
   name: 'EnergyMap',
-  components: { LMap, LTileLayer, LGeoJson },
+  components: { LMap, LTileLayer, LGeoJson, LocalClock },
 
   data() {
     return {
@@ -412,8 +413,7 @@ export default {
       center: [54, 20],
       showTooltips: true,
       selectedColorScheme: 'ylOrRd',
-      tileUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+      tileUrl: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',     
       mapOptions: {
         zoomSnap: 0.5,
         preferCanvas: true,
@@ -707,6 +707,17 @@ export default {
   },
 
   methods: {
+    closeAllSeparateModals() {
+      // Destroy charts to avoid leaks
+      this.separateModals.forEach(m => {
+        if (m.chart) m.chart.destroy()
+      })
+      // Clear the arrays and state maps
+      this.separateModals = []
+      this.separateModalDragState = {}
+      this.separateModalResizeState = {}
+    },
+
 
     onSliderPointerDown() {
       this.isUserScrubbing = true;
@@ -1968,6 +1979,7 @@ export default {
           },
           async click() {            
             try {
+              vm.closeAllSeparateModals();
               // First, open the original modal
               vm.openModal({ name, value: getVal(), properties: feature.properties })
               await new Promise(r => setTimeout(r, 220))
