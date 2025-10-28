@@ -20,6 +20,10 @@
         <label>
           <input type="radio" v-model="heatmapType" value="generation"> Generation Heatmap
         </label>
+        <label>
+          <input type="checkbox" v-model="showFlows" />
+        </label>
+        Show Cross-Border Flows
         <button @click="refreshHeatmapData" :disabled="isRefreshing">
           {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
         </button>
@@ -120,6 +124,26 @@
             <p>Error: {{ modal.error }}</p>
             <button @click="retrySeparateModalData(modal.id)">Retry</button>
           </div>
+          <div v-else-if="modal.type === 'powerflow'" class="chart-container">
+              <PowerFlow
+                :pvGen="modal.data.pvGen"
+                :homeLoad="modal.data.homeLoad"
+                :gridImport="modal.data.gridImport"
+                :gridExport="modal.data.gridExport"
+                :batteryCharge="modal.data.batteryCharge"
+                :batteryDischarge="modal.data.batteryDischarge"
+                :pvToHome="modal.data.pvToHome"
+                :pvToGrid="modal.data.pvToGrid"
+                :pvToBattery="modal.data.pvToBattery"
+                :gridToHome="modal.data.gridToHome"
+                :gridToBattery="modal.data.gridToBattery"
+                :batteryToHome="modal.data.batteryToHome"
+                :homeToPv="modal.data.homeToPv"
+                unit="MW"
+                :minStroke="2.5"
+                :maxStroke="10"
+              />
+            </div>
           <div v-else class="chart-container">
             <canvas :id="'separate-chart-' + modal.id"></canvas>
           </div>
@@ -302,6 +326,7 @@ const BULK_REQUEST_CONFIG = {
   retry: 2,
   retryDelay: 1000
 }
+import PowerFlow from "@/components/PowerFlow.vue";
 import LocalClock from "@/components/LocalClock.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
@@ -320,14 +345,24 @@ import {
 
 export default {
   name: 'EnergyMap',
-  components: { LMap, LTileLayer, LGeoJson, LocalClock },
+  components: { LMap, LTileLayer, LGeoJson, LocalClock, PowerFlow },
 
   data() {
     return {
       // Separate Modal System
       separateModals: [],
       separateModalIdCounter: 0,
-
+      showFlows: true,
+      flowsLayer: null,
+      flowsData: {},                  // { "BG-RO": { [ts]: mw, ... }, ... }
+      flowEdges: [                    // pick the borders you want to visualize
+        // Examples – add more as you wish:
+        ['BG','RO'], ['BG','GR'], ['BG','RS'], ['BG','TR'], ['RO','HU'],
+        ['RO','UA'], ['RO','MD'], ['GR','AL'], ['GR','MK'], ['HU','AT'],
+        ['HU','SK'], ['AT','DE'], ['DE','PL'], ['DE','CZ'], ['IT','AT'],
+        ['IT','SI'], ['FR','ES'], ['FR','DE'], ['FR','IT'], ['ES','PT'],
+      ],
+      maxFlowAbsMW: 4000, // used to scale line width; adjust after first fetch
       // Modal drag and resize state
       modalPosition: { x: 0, y: 0 },
       modalSize: { width: 560, height: Math.floor(window.innerHeight * 0.7) },
@@ -702,11 +737,270 @@ export default {
       handler() {
         this.updateColorScheme()
         if (this.showChangeTooltips) this.updateDeltaTooltips();
-      }
+        this.redrawFlowsForCurrentTime();
+      },      
+    },
+    showFlows(val) {
+      this.redrawFlowsForCurrentTime()
     }
   },
 
   methods: {
+    // Simple hash -> stable pseudo-random
+_hashInt(s) { let x = 0; for (let i=0;i<s.length;i++) x = (x*31 + s.charCodeAt(i))|0; return Math.abs(x); },
+_rand01(key) { return (this._hashInt(String(key)) % 10000) / 10000; },
+
+// Build a plausible power-flow state from your data (or smart synth if missing)
+buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
+  // Anchor to your hourly total generation if available; fallback to 3 GW
+  const genSeries = this.historicalGenerationData?.[iso2] || null;
+  const totalGen = Number(genSeries?.[ts]) || 3000; // MW
+
+  // Estimated site load ~ close to total generation +/- 10–50%
+  const load = Math.max(500, Math.round(totalGen * (0.9 + 0.5 * this._rand01('ld:'+iso2))));
+
+  // PV share varies with hour and country
+  const pvShare = 0.10 + 0.25 * this._rand01('pv:' + iso2 + ':' + (ts/3600000|0)); // 10..35%
+  const pvGen = Math.round(totalGen * pvShare);
+
+  // Battery behavior: charge around solar hours, discharge otherwise
+  const hour = new Date(ts).getUTCHours();
+  const isSolarHour = hour >= 9 && hour <= 16;
+  const battCap = Math.max(200, Math.round(0.15 * load));
+  const batteryCharge = isSolarHour ? Math.round(Math.min(battCap, pvGen * 0.35)) : 0;
+  const batteryDischarge = !isSolarHour ? Math.round(Math.min(battCap, load * 0.25)) : 0;
+
+  // Split PV priority: Home, then Battery, then Grid
+  const pvToHome = Math.min(pvGen, Math.round(load * (0.45 + 0.25 * this._rand01('pth:'+iso2))));
+  const pvLeft = Math.max(0, pvGen - pvToHome);
+  const pvToBattery = Math.min(pvLeft, batteryCharge);
+  const pvToGrid = Math.max(0, pvLeft - pvToBattery);
+
+  // Use battery to help supply remaining home load at night
+  const batteryToHome = Math.min(batteryDischarge, Math.max(0, load - pvToHome));
+  const remainingHome = Math.max(0, load - pvToHome - batteryToHome);
+
+  // Grid covers remaining demand; allow some export bias
+  const gridToHome = remainingHome;
+  const exportBias = this._rand01('exp:'+iso2) < 0.35;
+  const extraExport = exportBias ? Math.round(0.12 * totalGen * this._rand01('x:'+iso2)) : 0;
+  const homeToGrid = Math.max(0, pvToGrid + Math.max(0, batteryDischarge - batteryToHome) + extraExport);
+
+  // Headline import/export (shown on Grid node)
+  const gridImport = gridToHome;
+  const gridExport = homeToGrid;
+
+  return {
+    pvGen,
+    homeLoad: load,
+    gridImport,
+    gridExport,
+    batteryCharge,
+    batteryDischarge,
+
+    // Optional per-link flows (PowerFlow can infer if you set these 0)
+    pvToHome,
+    pvToGrid,
+    pvToBattery,
+    gridToHome,
+    gridToBattery: 0,
+    batteryToHome,
+    homeToPv: 0
+  };
+},
+
+    async refreshAllFlows() {
+      // Just synthesize for now
+      this.generateFakeFlowsData()
+      this.redrawFlowsForCurrentTime()
+    },
+    generateFakeFlowsData() {
+      // Use your 48h timestamps from prices; if missing, synthesize them
+      const ts = (this.availableTimestamps?.length
+        ? this.availableTimestamps
+        : this.generateLast48HoursTimestamps()
+      ).map(Number)
+
+      const out = {}
+      // Deterministic pseudo-random per edge using a hash
+      const h = (s) => {
+        let x = 0; for (let i=0;i<s.length;i++) x = (x*31 + s.charCodeAt(i))|0; return Math.abs(x)
+      }
+
+      // Create a smooth-ish waveform with daily rhythm + noise
+      for (const [A,B] of this.flowEdges) {
+        const key = `${A}-${B}`
+        const seed = h(key) % 1000
+        const series = {}
+        for (let i=0; i<ts.length; i++) {
+          const t = ts[i] / (1000*60*60) // hours
+          // Base amplitude depends on seed (200..2200 MW)
+          const amp = 200 + (seed % 2000)
+          // Slow sine (daily), edge-dependent phase
+          const phase = (seed % 360) * Math.PI / 180
+          const sine = Math.sin((2*Math.PI/24)*t + phase)
+          // A bit of hourly “noise” but deterministic
+          const noi = (((seed * (i+7)) % 200) - 100) * 0.5
+          // Net flow (signed): + means A -> B ; – means B -> A
+          const mw = Math.round(0.7*amp*sine + noi)
+          series[ts[i]] = mw
+        }
+        out[key] = series
+      }
+      // Save max abs for stroke scaling
+      let maxAbs = 0
+      Object.values(out).forEach(s => {
+        Object.values(s).forEach(v => { const a = Math.abs(v); if (a>maxAbs) maxAbs=a })
+      })
+      this.maxFlowAbsMW = Math.max(maxAbs, 1000)
+      this.flowsData = out
+    },
+
+    // Get a country’s visual center from its Leaflet layer bounds (cheap & good-enough)
+    getCountryCenter(iso2) {
+      const lyr = this.layerByISO2[iso2]
+      if (!lyr?.getBounds) return null
+      const c = lyr.getBounds().getCenter()
+      return [c.lat, c.lng]
+    },
+
+    // Map absolute flow (MW) to a 1..8 px stroke width (tweak as you like)
+    flowStrokeWidth(mwAbs) {
+      const max = Math.max(this.maxFlowAbsMW || 1, 1)
+      const t = Math.min(mwAbs / max, 1)
+      return 1 + Math.round(7 * Math.sqrt(t)) // sqrt for visual balance
+    },
+
+    // Color by direction (A->B is positive)
+    flowColor(mw) {
+      if (!Number.isFinite(mw)) return '#999'
+      if (mw >  0) return '#3fb950' // export from A to B
+      if (mw <  0) return '#e5534b' // export from B to A (i.e., A imports)
+      return '#9aa0a6'
+    },
+    // Build a tiny arrowhead polygon near the line end
+    makeArrowHead(pStart, pEnd, sizeMeters = 25000) {
+      // Convert lat/lng to Leaflet points at current zoom for simple math
+      if (!this.map) return null
+      const map = this.map
+      const s = map.latLngToLayerPoint(pStart)
+      const e = map.latLngToLayerPoint(pEnd)
+      const v = e.subtract(s)
+      const len = Math.max(v.distanceTo({ x:0, y:0 }), 1)
+      const unit = v.multiplyBy(1 / len)
+
+      // place arrow at 75% along the line
+      const tip = s.add(unit.multiplyBy(len * 0.75))
+      const perp = L.point(-unit.y, unit.x) // 90° rotated
+
+      // Convert size in meters to pixels (rough) using current scale
+      const metersPerPixel = (40075017 * Math.cos((pEnd.lat*Math.PI)/180)) / Math.pow(2, this.map.getZoom()+8)
+      const px = Math.max(6, Math.min(14, sizeMeters / Math.max(metersPerPixel, 1)))
+
+      const left  = tip.add(perp.multiplyBy(px * 0.6)).subtract(unit.multiplyBy(px))
+      const right = tip.subtract(perp.multiplyBy(px * 0.6)).subtract(unit.multiplyBy(px))
+
+      const toLatLng = (pt) => map.layerPointToLatLng(pt)
+      return [ toLatLng(left), toLatLng(tip), toLatLng(right) ]
+    },
+    async redrawFlowsWhenReady() {
+  // Wait up to ~2s for layers to attach
+  const needs = new Set(this.flowEdges.flat()) // ISO2 involved in flows
+  const have = () => [...needs].every(iso => this.layerByISO2[iso])
+  const start = performance.now()
+  while (!have() && performance.now() - start < 2000) {
+    await new Promise(r => setTimeout(r, 50))
+  }
+  this.redrawFlowsForCurrentTime()
+},
+
+    redrawFlowsForCurrentTime() {
+      if (!this.map) return
+      if (!this.flowsLayer) {
+        this.flowsLayer = L.layerGroup().addTo(this.map)
+      }
+      this.flowsLayer.clearLayers()
+      if (!this.showFlows) return
+
+      const ts = Number(this.currentTimestamp)
+      if (!Number.isFinite(ts)) return
+
+      for (const [A, B] of this.flowEdges) {
+        const pairKey = `${A}-${B}`
+        const series = this.flowsData[pairKey]
+        if (!series) continue
+
+        // value > 0 means A -> B; value < 0 means B -> A
+        const mw = Number(series[ts])
+        if (!Number.isFinite(mw)) continue
+        const absMW = Math.abs(mw)
+        if (absMW < 1) continue // skip tiny flows (noise threshold)
+
+        const cA = this.getCountryCenter(A)
+        const cB = this.getCountryCenter(B)
+        if (!cA || !cB) continue
+
+        // Decide the actual direction we’ll draw the arrow
+        const startLL = (mw >= 0) ? L.latLng(cA[0], cA[1]) : L.latLng(cB[0], cB[1])
+        const endLL   = (mw >= 0) ? L.latLng(cB[0], cB[1]) : L.latLng(cA[0], cA[1])
+
+        const color = this.flowColor(mw)
+        const weight = this.flowStrokeWidth(absMW)
+
+        L.polyline([startLL, endLL], {
+          pane: 'flowsPane',
+          color, weight, opacity: 0.85, lineCap: 'round'
+        }).addTo(this.flowsLayer)
+
+        L.polygon(head, {
+          pane: 'flowsPane',
+          color, weight: 0, fillColor: color, fillOpacity: 0.95
+        }).addTo(this.flowsLayer)
+
+        L.circleMarker(mid, {
+          pane: 'flowsPane',
+          radius: 0.1, opacity: 0, fillOpacity: 0
+        })
+
+        // Base line
+        L.polyline([startLL, endLL], {
+          color,
+          weight,
+          opacity: 0.85,
+          lineCap: 'round'
+        }).addTo(this.flowsLayer)
+
+        // Arrowhead
+        const head = this.makeArrowHead(startLL, endLL)
+        if (head) {
+          L.polygon(head, {
+            color,
+            weight: 0,
+            fillColor: color,
+            fillOpacity: 0.95
+          }).addTo(this.flowsLayer)
+        }
+
+        // Optional: tooltip mid-segment
+        const mid = L.latLng(
+          (startLL.lat + endLL.lat) / 2,
+          (startLL.lng + endLL.lng) / 2
+        )
+        L.circleMarker(mid, {
+          radius: 0.1, opacity: 0, fillOpacity: 0
+        })
+        .bindTooltip(`${A} ↔ ${B}\n${mw.toFixed(0)} MW`, {
+          direction: 'top',
+          className: 'custom-tooltip',
+          permanent: false
+        })
+        .addTo(this.flowsLayer)
+      }
+    },
+
+
+
+
     closeAllSeparateModals() {
       // Destroy charts to avoid leaks
       this.separateModals.forEach(m => {
@@ -1099,13 +1393,39 @@ export default {
           const { data: response } = await axios.get(url)
           data = response.items || []
         }
+        else if (type === 'prices') {
+          // New: prices modal (last 48h). Reuse your historical price fetcher.
+          const iso2 = this.getCountryISO2ByName(country)
+          if (!iso2) throw new Error('Country not found')
+
+          // Returns object like { [hourTs]: price, ... }
+          const timeData = await this.fetchHistoricalPricesForCountry(iso2)
+          if (!timeData || Object.keys(timeData).length === 0) {
+            throw new Error('No price data available')
+          }
+
+          // Normalize to sorted array for Chart.js time series
+          // [{ ts, price }, ...] ascending by ts
+          data = Object.entries(timeData)
+            .map(([ts, price]) => ({ ts: Number(ts), price }))
+            .sort((a, b) => a.ts - b.ts)
+        }else if (type === 'powerflow') {
+          const iso2 = this.getCountryISO2ByName(country)
+          if (!iso2) throw new Error('Country not found')
+          data = this.buildPowerFlowForCountry(iso2, Number(this.currentTimestamp))           
+        
+        }else {
+          throw new Error(`Unknown modal type: ${type}`)
+        }        
 
         modal.data = data
         modal.loading = false
 
         // Wait for DOM update then create chart
         await nextTick()
-        this.createSeparateModalChart(modalId)
+        if (type !== 'powerflow') {
+          this.createSeparateModalChart(modalId)
+        }
 
       } catch (error) {
         console.error(`Error loading ${type} data for ${country}:`, error)
@@ -1306,6 +1626,51 @@ export default {
 
           modal.chart = markRaw(new Chart(ctx, cfg));              
       }
+      else if (modal.type === 'prices') {
+        // Expect modal.data as [{ ts, price }]
+        const points = Array.isArray(modal.data) ? modal.data : []
+        if (!points.length) return
+
+        const data = points.map(p => ({ x: p.ts, y: Number(p.price) || 0 }))
+        const cfg = {
+          type: 'line',
+          data: {
+            datasets: [{
+              label: 'Price (EUR/MWh)',
+              data,
+              borderColor: 'rgba(102,126,234,1)',
+              backgroundColor: 'rgba(102,126,234,0.25)',
+              pointRadius: 0,
+              borderWidth: 2,
+              fill: true,
+              tension: 0.25
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+            scales: {
+              x: {
+                type: 'time',
+                time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' }
+              },
+              y: {
+                beginAtZero: false,
+                title: { display: true, text: 'EUR/MWh' },
+                ticks: { callback: v => Intl.NumberFormat().format(v) }
+              }
+            },
+            plugins: {
+              legend: { display: true, position: 'bottom' },
+              tooltip: { mode: 'index', intersect: false }
+            },
+            interaction: { mode: 'index', intersect: false }
+          }
+        }
+
+        modal.chart = markRaw(new Chart(ctx, cfg))
+      }
       this.$nextTick(() => {
         this.resizeSeparateModalChart(modalId)
       })
@@ -1486,7 +1851,7 @@ export default {
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
         
         const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
-        console.log("Prices",url)
+        console.log(url)
         const { data } = await axios.get(url, {
           timeout: 10000,
           signal: this.currentAbortController?.signal
@@ -1539,7 +1904,7 @@ export default {
       for (let i = 0; i < supportedCountries.length; i += chunkSize) {
         chunks.push(supportedCountries.slice(i, i + chunkSize))
       }
-      
+      console.log(chunks)
       const chunkPromises = chunks.map(async (chunk, index) => {
         try {
           const chunkData = await this.fetchBulkHistoricalPrices(chunk)
@@ -1568,12 +1933,13 @@ export default {
       if (countries.length === 0) return {}
       
       try {
+        console.log("Called!")
         const now = new Date()
         const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
         
         const url = `http://85.14.6.37:16601/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
-        
+        console.log(url)
         const { data } = await axios.get(url, {
           timeout: 15000,
           signal: this.currentAbortController?.signal
@@ -1992,6 +2358,8 @@ export default {
                 // UPDATED: Create BOTH capacity and generation modals for each click
                 vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
                 vm.createSeparateModal(name, 'generation', 'Energy Generation')
+                vm.createSeparateModal(name, 'prices', 'Energy Prices (48h)')
+                vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
               } else {
                 vm.capacityError = 'Missing ISO-2 code for this feature'
                 vm.generationError = 'Missing ISO-2 code for this feature'
@@ -2027,7 +2395,14 @@ export default {
       }
     },
 
-    onMapReady(mapObject) { this.map = mapObject },
+    onMapReady(mapObject) { 
+      this.map = mapObject
+      if (!this.map.getPane('flowsPane')) {
+        this.map.createPane('flowsPane')
+        this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
+      }
+      this.map.on('zoomend moveend', () => this.redrawFlowsForCurrentTime())    
+    },
 
     async renderCapacityChart() {
       const canvas = this.$refs.capacityChart
@@ -2255,6 +2630,7 @@ export default {
     handleWindowResize() {
         // Reposition modals when window is resized
         this.repositionSeparateModals()
+        this.$nextTick(() => this.redrawFlowsForCurrentTime())
       },
     autoArrangeSeparateModals() {
         this.repositionSeparateModals()
@@ -2267,12 +2643,13 @@ export default {
   },
 
   async mounted() {
+    
     window.addEventListener('resize', this.handleWindowResize)
     window.addEventListener('keydown', this.onKeydown)
     this.initialLoading = true
     try {
       await this.loadCountriesData()
-      
+      await this.refreshAllFlows()
       if (this.countriesGeoJson) {
         if (this.heatmapType === 'prices') {
           await this.refreshAllHistoricalPrices()
@@ -2285,6 +2662,7 @@ export default {
     } finally {
       this.initialLoading = false
     }
+    
   },
 
   beforeUnmount() {
