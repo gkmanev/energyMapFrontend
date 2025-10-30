@@ -20,13 +20,7 @@
         <label>
           <input type="radio" v-model="heatmapType" value="generation"> Generation Heatmap
         </label>
-        <label>
-          <input type="checkbox" v-model="showFlows" />
-        </label>
-        Show Cross-Border Flows
-        <button @click="refreshHeatmapData" :disabled="isRefreshing">
-          {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
-        </button>
+       
         <!-- NEW: Arrange modals button -->
         <!-- <button @click="autoArrangeSeparateModals" 
                 v-if="separateModals.length > 0"
@@ -40,57 +34,7 @@
 
     <!-- FLEX ROW: sidebar + map -->
     <div class="map-row">
-      <!-- Modal side sheet over the map - NOW DRAGGABLE AND RESIZABLE -->
-      <!-- <transition name="panel-slide" appear> -->
-        <!-- <aside
-          v-if="isModalOpen"
-          class="left-panel"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Country details"
-          :style="modalStyle"
-          ref="modalPanel"
-        >
-          <div 
-            class="panel-header" 
-            @mousedown="startDrag"
-            style="cursor: move;"
-          >
-            <h3>Country: {{ selectedFeature && selectedFeature.name }}</h3>
-            <button class="panel-close" @click="closePanel" aria-label="Close">✕</button>
-          </div>
-          <div class="panel-content"> -->
-            <!-- Capacity -->
-            <!-- <div v-if="capacityLoading">Loading capacity…</div>
-            <div v-else-if="capacityError" style="color:#b00020">{{ capacityError }}</div>
-            <template v-else>
-              <p v-if="capacityYear">Latest year: {{ capacityYear }}</p>
-              <div class="chart-box">
-                <canvas ref="capacityChart"></canvas>
-              </div>
-            </template>
-            <div style="margin-top: 40px;"><span><h3>Generation by technology</h3></span></div> -->
-            <!-- Generation -->
-            <!-- <div v-if="generationLoading" style="margin-top:16px;">Loading generation…</div>
-            <div v-else-if="generationError" style="margin-top:16px;color:#b00020">{{ generationError }}</div>
-            <template v-else>
-              <p v-if="generationDateLabel" style="margin-top:16px;">{{ generationDateLabel }}</p>
-              <div class="chart-box chart-box--sm">
-                <canvas ref="generationChart"></canvas>
-              </div>
-              <div style="margin-top:10px;">
-                <small>Hourly generation (MW) by technology</small>
-              </div>
-            </template>
-          </div> -->
-          <!-- Resize handles -->
-          <!-- <div class="resize-handle resize-handle-right" @mousedown="startResize($event, 'right')"></div>
-          <div class="resize-handle resize-handle-bottom" @mousedown="startResize($event, 'bottom')"></div>
-          <div class="resize-handle resize-handle-corner" @mousedown="startResize($event, 'corner')"></div>
-        </aside>
-      </transition> -->
-
-      <!-- Scrim blocks interaction and closes panel on click -->
+     
       <div
         v-if="isModalOpen"
         class="panel-scrim"
@@ -99,64 +43,80 @@
       ></div>
 
       <!-- Separate Modal Windows for Charts -->
-      <div v-for="modal in separateModals" 
-          :key="modal.id" 
-          class="separate-modal" 
-          :style="getSeparateModalStyle(modal.id)" 
-          v-show="modal.visible">
-        
-        <!-- Draggable header -->
-        <div class="separate-modal-header" 
-            @mousedown="startSeparateModalDrag($event, modal.id)"
-            style="cursor: move;">
-          <h4>{{ modal.country }} - {{ modal.title }}</h4>
-          <button @click="closeSeparateModal(modal.id)" 
-                  class="separate-modal-close">×</button>
-        </div>
-        
-        <!-- Modal content -->
-        <div class="separate-modal-content">
-          <div v-if="modal.loading" class="separate-modal-loading">
-            <div class="loading-spinner-small"></div>
-            <p>Loading {{ modal.type }} data...</p>
-          </div>
-          <div v-else-if="modal.error" class="separate-modal-error">
-            <p>Error: {{ modal.error }}</p>
-            <button @click="retrySeparateModalData(modal.id)">Retry</button>
-          </div>
-          <div v-else-if="modal.type === 'powerflow'" class="chart-container">
-              <PowerFlow
-                :pvGen="modal.data.pvGen"
-                :homeLoad="modal.data.homeLoad"
-                :gridImport="modal.data.gridImport"
-                :gridExport="modal.data.gridExport"
-                :batteryCharge="modal.data.batteryCharge"
-                :batteryDischarge="modal.data.batteryDischarge"
-                :pvToHome="modal.data.pvToHome"
-                :pvToGrid="modal.data.pvToGrid"
-                :pvToBattery="modal.data.pvToBattery"
-                :gridToHome="modal.data.gridToHome"
-                :gridToBattery="modal.data.gridToBattery"
-                :batteryToHome="modal.data.batteryToHome"
-                :homeToPv="modal.data.homeToPv"
-                unit="MW"
-                :minStroke="2.5"
-                :maxStroke="10"
-              />
-            </div>
-          <div v-else class="chart-container">
-            <canvas :id="'separate-chart-' + modal.id"></canvas>
-          </div>
-        </div>
-        
-        <!-- Resize handles -->
-        <div class="separate-modal-resize-handle separate-modal-resize-right"
-            @mousedown="startSeparateModalResize($event, modal.id, 'right')"></div>
-        <div class="separate-modal-resize-handle separate-modal-resize-bottom"
-            @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"></div>
-        <div class="separate-modal-resize-handle separate-modal-resize-corner"
-            @mousedown="startSeparateModalResize($event, modal.id, 'corner')"></div>
-      </div>
+       <div
+  v-for="modal in separateModals"
+  :key="modal.id"
+  class="separate-modal"
+  :style="getSeparateModalStyle(modal.id)"
+  v-show="modal.visible"
+>
+  <!-- Draggable header -->
+  <div
+    class="separate-modal-header"
+    @mousedown="startSeparateModalDrag($event, modal.id)"
+    style="cursor: move;"
+  >
+    <h4>{{ modal.country }} - {{ modal.title }}</h4>
+    <button
+      @click="closeSeparateModal(modal.id)"
+      class="separate-modal-close"
+    >×</button>
+  </div>
+
+  <!-- Modal content -->
+  <div class="separate-modal-content">
+    <div v-if="modal.loading" class="separate-modal-loading">
+      <div class="loading-spinner-small"></div>
+      <p>Loading {{ modal.type }} data...</p>
+    </div>
+
+    <div v-else-if="modal.error" class="separate-modal-error">
+      <p>Error: {{ modal.error }}</p>
+      <button @click="retrySeparateModalData(modal.id)">Retry</button>
+    </div>
+
+    <div v-else-if="modal.type === 'powerflow'" class="chart-container">
+      <PowerFlow
+        :pvGen="modal.data.pvGen"
+        :homeLoad="modal.data.homeLoad"
+        :gridImport="modal.data.gridImport"
+        :gridExport="modal.data.gridExport"
+        :batteryCharge="modal.data.batteryCharge"
+        :batteryDischarge="modal.data.batteryDischarge"
+        :pvToHome="modal.data.pvToHome"
+        :pvToGrid="modal.data.pvToGrid"
+        :pvToBattery="modal.data.pvToBattery"
+        :gridToHome="modal.data.gridToHome"
+        :gridToBattery="modal.data.gridToBattery"
+        :batteryToHome="modal.data.batteryToHome"
+        :homeToPv="modal.data.homeToPv"
+        unit="MW"
+        :minStroke="2.5"
+        :maxStroke="10"
+      />
+    </div>
+
+    <div v-else class="chart-container">
+      <canvas :id="'separate-chart-' + modal.id"></canvas>
+    </div>
+  </div>
+
+  <!-- Resize handles -->
+  <div
+    class="separate-modal-resize-handle separate-modal-resize-right"
+    @mousedown="startSeparateModalResize($event, modal.id, 'right')"
+  ></div>
+  <div
+    class="separate-modal-resize-handle separate-modal-resize-bottom"
+    @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"
+  ></div>
+  <div
+    class="separate-modal-resize-handle separate-modal-resize-corner"
+    @mousedown="startSeparateModalResize($event, modal.id, 'corner')"
+  ></div>
+</div>
+
+
 
       <!-- Map column -->
       <div class="map-col">
@@ -164,7 +124,7 @@
           :zoom="zoom"
           :center="center"
           :options="mapOptions"
-          :use-global-leaflet="false"
+          :use-global-leaflet="true"
           class="map"
           @ready="onMapReady"
           ref="leafletMap"
@@ -307,6 +267,8 @@
 </template>
 
 <script>
+
+
 const SUPPORTED_PRICE_ISO2 = new Set([
   'AL','AT','BA','BE','BG','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB',
   'GR','HR','HU','IE','IS','IT','LT','LU','LV','ME','MK','MT','NL','NO','PL',
@@ -736,16 +698,51 @@ export default {
     currentTimeIndex: {
       handler() {
         this.updateColorScheme()
-        if (this.showChangeTooltips) this.updateDeltaTooltips();
-        this.redrawFlowsForCurrentTime();
+        if (this.showChangeTooltips) this.updateDeltaTooltips();      
       },      
     },
-    showFlows(val) {
-      this.redrawFlowsForCurrentTime()
-    }
   },
 
   methods: {
+
+     getSeparateModalStyle(modalId) {
+    // find modal by id
+    const modal = this.separateModals.find(m => m.id === modalId)
+    if (!modal) {
+      return {}
+    }
+
+    // If we've already stored runtime position/size on the modal (from dragging/resizing),
+    // use that.
+    if (modal.runtimeStyle) {
+        return modal.runtimeStyle
+    }
+
+    // Otherwise, provide a default "2x2 grid" layout based on index
+    const index = this.separateModals.findIndex(m => m.id === modalId)
+
+    // tweak these numbers to taste
+    const modalWidth = 400
+    const modalHeight = 300
+    const gap = 16
+
+    // row: 0 or 1, col: 0 or 1
+    const row = Math.floor(index / 2) // 0,0,1,1 for 0,1,2,3
+    const col = index % 2             // 0,1,0,1 for 0,1,2,3
+
+    const top  = 80  + row * (modalHeight + gap)
+    const left = 80  + col * (modalWidth  + gap)
+
+    return {
+      position: 'absolute',
+      top:  top  + 'px',
+      left: left + 'px',
+      width: modalWidth + 'px',
+      height: modalHeight + 'px',
+      // keep your existing styles like z-index, background, border-radius, etc
+      'z-index': modal.zIndex || 1000 + index,
+    }
+  },
     // Simple hash -> stable pseudo-random
 _hashInt(s) { let x = 0; for (let i=0;i<s.length;i++) x = (x*31 + s.charCodeAt(i))|0; return Math.abs(x); },
 _rand01(key) { return (this._hashInt(String(key)) % 10000) / 10000; },
@@ -812,7 +809,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async refreshAllFlows() {
       // Just synthesize for now
       this.generateFakeFlowsData()
-      this.redrawFlowsForCurrentTime()
+
     },
     generateFakeFlowsData() {
       // Use your 48h timestamps from prices; if missing, synthesize them
@@ -911,92 +908,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   while (!have() && performance.now() - start < 2000) {
     await new Promise(r => setTimeout(r, 50))
   }
-  this.redrawFlowsForCurrentTime()
+
 },
 
-    redrawFlowsForCurrentTime() {
-      if (!this.map) return
-      if (!this.flowsLayer) {
-        this.flowsLayer = L.layerGroup().addTo(this.map)
-      }
-      this.flowsLayer.clearLayers()
-      if (!this.showFlows) return
-
-      const ts = Number(this.currentTimestamp)
-      if (!Number.isFinite(ts)) return
-
-      for (const [A, B] of this.flowEdges) {
-        const pairKey = `${A}-${B}`
-        const series = this.flowsData[pairKey]
-        if (!series) continue
-
-        // value > 0 means A -> B; value < 0 means B -> A
-        const mw = Number(series[ts])
-        if (!Number.isFinite(mw)) continue
-        const absMW = Math.abs(mw)
-        if (absMW < 1) continue // skip tiny flows (noise threshold)
-
-        const cA = this.getCountryCenter(A)
-        const cB = this.getCountryCenter(B)
-        if (!cA || !cB) continue
-
-        // Decide the actual direction we’ll draw the arrow
-        const startLL = (mw >= 0) ? L.latLng(cA[0], cA[1]) : L.latLng(cB[0], cB[1])
-        const endLL   = (mw >= 0) ? L.latLng(cB[0], cB[1]) : L.latLng(cA[0], cA[1])
-
-        const color = this.flowColor(mw)
-        const weight = this.flowStrokeWidth(absMW)
-
-        L.polyline([startLL, endLL], {
-          pane: 'flowsPane',
-          color, weight, opacity: 0.85, lineCap: 'round'
-        }).addTo(this.flowsLayer)
-
-        L.polygon(head, {
-          pane: 'flowsPane',
-          color, weight: 0, fillColor: color, fillOpacity: 0.95
-        }).addTo(this.flowsLayer)
-
-        L.circleMarker(mid, {
-          pane: 'flowsPane',
-          radius: 0.1, opacity: 0, fillOpacity: 0
-        })
-
-        // Base line
-        L.polyline([startLL, endLL], {
-          color,
-          weight,
-          opacity: 0.85,
-          lineCap: 'round'
-        }).addTo(this.flowsLayer)
-
-        // Arrowhead
-        const head = this.makeArrowHead(startLL, endLL)
-        if (head) {
-          L.polygon(head, {
-            color,
-            weight: 0,
-            fillColor: color,
-            fillOpacity: 0.95
-          }).addTo(this.flowsLayer)
-        }
-
-        // Optional: tooltip mid-segment
-        const mid = L.latLng(
-          (startLL.lat + endLL.lat) / 2,
-          (startLL.lng + endLL.lng) / 2
-        )
-        L.circleMarker(mid, {
-          radius: 0.1, opacity: 0, fillOpacity: 0
-        })
-        .bindTooltip(`${A} ↔ ${B}\n${mw.toFixed(0)} MW`, {
-          direction: 'top',
-          className: 'custom-tooltip',
-          permanent: false
-        })
-        .addTo(this.flowsLayer)
-      }
-    },
 
 
 
@@ -1851,7 +1765,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
         
         const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
-        console.log(url)
+        console.log("forCountry",url)
         const { data } = await axios.get(url, {
           timeout: 10000,
           signal: this.currentAbortController?.signal
@@ -2401,7 +2315,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         this.map.createPane('flowsPane')
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
       }
-      this.map.on('zoomend moveend', () => this.redrawFlowsForCurrentTime())    
+ 
     },
 
     async renderCapacityChart() {
@@ -2630,7 +2544,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     handleWindowResize() {
         // Reposition modals when window is resized
         this.repositionSeparateModals()
-        this.$nextTick(() => this.redrawFlowsForCurrentTime())
+     
       },
     autoArrangeSeparateModals() {
         this.repositionSeparateModals()
