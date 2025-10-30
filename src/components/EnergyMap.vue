@@ -1380,7 +1380,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
           
-          const url = `http://85.14.6.37:16601/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
+          const url = `https://api.visualize.energy/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
           const { data: response } = await axios.get(url)
           data = response.items || []
         } else if (type === 'generation') {
@@ -1388,7 +1388,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
           
-          const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+          const url = `https://api.visualize.energy/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
           console.log(url)
           const { data: response } = await axios.get(url)
           data = response.items || []
@@ -1850,7 +1850,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
         
-        const url = `http://85.14.6.37:16601/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
+        const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
         console.log(url)
         const { data } = await axios.get(url, {
           timeout: 10000,
@@ -1938,7 +1938,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
         const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
         
-        const url = `http://85.14.6.37:16601/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
+        const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
         console.log(url)
         const { data } = await axios.get(url, {
           timeout: 15000,
@@ -1987,7 +1987,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         // Use your new bulk endpoint
         // Supports start/end (UTC) or period. We’ll send start/end for symmetry with prices.
-        const url = `http://85.14.6.37:16601/api/generation/bulk-range/` +
+        const url = `https://api.visualize.energy/api/generation/bulk-range/` +
                     `?countries=${countries.join(',')}` +
                     `&start=${start.toISOString()}` +
                     `&end=${endISO}`
@@ -2090,7 +2090,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const startDate = start.toISOString().split('T')[0]
         const endDate = end.toISOString().split('T')[0]
         
-        const url = `http://85.14.6.37:16601/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+        const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
        
         const { data } = await axios.get(url, { 
           timeout: 10000,
@@ -2173,7 +2173,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!this.capacitySupported(iso2)) return null
 
       try {
-        const url = `http://85.14.6.37:16601/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
+        const url = `https://api.visualize.energy/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
         const { data } = await axios.get(url)
         
         const totalMW = Array.isArray(data.items) 
@@ -2261,7 +2261,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.destroyCapacityChart()
 
       try {
-        const url = `http://85.14.6.37:16601/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
+        const url = `https://api.visualize.energy/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
         const { data } = await axios.get(url)
         this.capacityYear = data.year
         this.capacityItems = Array.isArray(data.items) ? data.items : []
@@ -2504,7 +2504,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       
       try {
         
-        const url = `http://85.14.6.37:16601/api/generation/yesterday?country=${encodeURIComponent(iso2)}`
+        const url = `https://api.visualize.energy/api/generation/yesterday?country=${encodeURIComponent(iso2)}`
         const { data } = await axios.get(url)
         const byTech = {}
         if (Array.isArray(data.items)) {
@@ -2548,7 +2548,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.destroyGenerationChart()
 
       try {
-        const url = `http://85.14.6.37:16601/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+        const url = `https://api.visualize.energy/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
         const { data } = await axios.get(url)
         this.generationItems = Array.isArray(data.items) ? data.items : []
       } catch (e) {
