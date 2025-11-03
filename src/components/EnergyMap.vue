@@ -20,7 +20,13 @@
         <label>
           <input type="radio" v-model="heatmapType" value="generation"> Generation Heatmap
         </label>
-       
+        <label>
+          <input type="checkbox" v-model="showFlows" />
+        </label>
+        Show Cross-Border Flows
+        <button @click="refreshHeatmapData" :disabled="isRefreshing">
+          {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
+        </button>
         <!-- NEW: Arrange modals button -->
         <!-- <button @click="autoArrangeSeparateModals" 
                 v-if="separateModals.length > 0"
@@ -43,80 +49,64 @@
       ></div>
 
       <!-- Separate Modal Windows for Charts -->
-       <div
-  v-for="modal in separateModals"
-  :key="modal.id"
-  class="separate-modal"
-  :style="getSeparateModalStyle(modal.id)"
-  v-show="modal.visible"
->
-  <!-- Draggable header -->
-  <div
-    class="separate-modal-header"
-    @mousedown="startSeparateModalDrag($event, modal.id)"
-    style="cursor: move;"
-  >
-    <h4>{{ modal.country }} - {{ modal.title }}</h4>
-    <button
-      @click="closeSeparateModal(modal.id)"
-      class="separate-modal-close"
-    >×</button>
-  </div>
-
-  <!-- Modal content -->
-  <div class="separate-modal-content">
-    <div v-if="modal.loading" class="separate-modal-loading">
-      <div class="loading-spinner-small"></div>
-      <p>Loading {{ modal.type }} data...</p>
-    </div>
-
-    <div v-else-if="modal.error" class="separate-modal-error">
-      <p>Error: {{ modal.error }}</p>
-      <button @click="retrySeparateModalData(modal.id)">Retry</button>
-    </div>
-
-    <div v-else-if="modal.type === 'powerflow'" class="chart-container">
-      <PowerFlow
-        :pvGen="modal.data.pvGen"
-        :homeLoad="modal.data.homeLoad"
-        :gridImport="modal.data.gridImport"
-        :gridExport="modal.data.gridExport"
-        :batteryCharge="modal.data.batteryCharge"
-        :batteryDischarge="modal.data.batteryDischarge"
-        :pvToHome="modal.data.pvToHome"
-        :pvToGrid="modal.data.pvToGrid"
-        :pvToBattery="modal.data.pvToBattery"
-        :gridToHome="modal.data.gridToHome"
-        :gridToBattery="modal.data.gridToBattery"
-        :batteryToHome="modal.data.batteryToHome"
-        :homeToPv="modal.data.homeToPv"
-        unit="MW"
-        :minStroke="2.5"
-        :maxStroke="10"
-      />
-    </div>
-
-    <div v-else class="chart-container">
-      <canvas :id="'separate-chart-' + modal.id"></canvas>
-    </div>
-  </div>
-
-  <!-- Resize handles -->
-  <div
-    class="separate-modal-resize-handle separate-modal-resize-right"
-    @mousedown="startSeparateModalResize($event, modal.id, 'right')"
-  ></div>
-  <div
-    class="separate-modal-resize-handle separate-modal-resize-bottom"
-    @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"
-  ></div>
-  <div
-    class="separate-modal-resize-handle separate-modal-resize-corner"
-    @mousedown="startSeparateModalResize($event, modal.id, 'corner')"
-  ></div>
-</div>
-
-
+      <div v-for="modal in separateModals" 
+          :key="modal.id" 
+          class="separate-modal" 
+          :style="getSeparateModalStyle(modal.id)" 
+          v-show="modal.visible">
+        
+        <!-- Draggable header -->
+        <div class="separate-modal-header" 
+            @mousedown="startSeparateModalDrag($event, modal.id)"
+            style="cursor: move;">
+          <h4>{{ modal.country }} - {{ modal.title }}</h4>
+          <button @click="closeSeparateModal(modal.id)" 
+                  class="separate-modal-close">×</button>
+        </div>
+        
+        <!-- Modal content -->
+        <div class="separate-modal-content">
+          <div v-if="modal.loading" class="separate-modal-loading">
+            <div class="loading-spinner-small"></div>
+            <p>Loading {{ modal.type }} data...</p>
+          </div>
+          <div v-else-if="modal.error" class="separate-modal-error">
+            <p>Error: {{ modal.error }}</p>
+            <button @click="retrySeparateModalData(modal.id)">Retry</button>
+          </div>
+          <div v-else-if="modal.type === 'powerflow'" class="chart-container">
+              <PowerFlow
+                :pvGen="modal.data.pvGen"
+                :homeLoad="modal.data.homeLoad"
+                :gridImport="modal.data.gridImport"
+                :gridExport="modal.data.gridExport"
+                :batteryCharge="modal.data.batteryCharge"
+                :batteryDischarge="modal.data.batteryDischarge"
+                :pvToHome="modal.data.pvToHome"
+                :pvToGrid="modal.data.pvToGrid"
+                :pvToBattery="modal.data.pvToBattery"
+                :gridToHome="modal.data.gridToHome"
+                :gridToBattery="modal.data.gridToBattery"
+                :batteryToHome="modal.data.batteryToHome"
+                :homeToPv="modal.data.homeToPv"
+                unit="MW"
+                :minStroke="2.5"
+                :maxStroke="10"
+              />
+            </div>
+          <div v-else class="chart-container">
+            <canvas :id="'separate-chart-' + modal.id"></canvas>
+          </div>
+        </div>
+        
+        <!-- Resize handles -->
+        <div class="separate-modal-resize-handle separate-modal-resize-right"
+            @mousedown="startSeparateModalResize($event, modal.id, 'right')"></div>
+        <div class="separate-modal-resize-handle separate-modal-resize-bottom"
+            @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"></div>
+        <div class="separate-modal-resize-handle separate-modal-resize-corner"
+            @mousedown="startSeparateModalResize($event, modal.id, 'corner')"></div>
+      </div>
 
       <!-- Map column -->
       <div class="map-col">
@@ -311,6 +301,12 @@ export default {
 
   data() {
     return {
+      modalDefaults: {
+        width: 480,     // initial/default width
+        height: 320,    // initial/default height
+        minWidth: 480,  // block resizing smaller than this width
+        minHeight: 320, // block resizing smaller than this height
+      },
       // Separate Modal System
       separateModals: [],
       separateModalIdCounter: 0,
@@ -406,7 +402,7 @@ export default {
       pricePollingMs: 5 * 60 * 1000,
       priceTimer: null,
 
-      zoom: 4,
+      zoom: 5,
       center: [54, 20],
       showTooltips: true,
       selectedColorScheme: 'ylOrRd',
@@ -705,42 +701,71 @@ export default {
 
   methods: {
 
+    // --- 2x2 grid helper ----------------------------------------------------
+    // Returns {x,y} for a given slotIndex in a 2×2 grid.
+    // Slots: 0 (row0,col0), 1 (row0,col1), 2 (row1,col0), 3 (row1,col1).
+    // For 5th+ modals, continues new rows (2 columns).
+    _gridPosition(slotIndex, modalWidth = 400, modalHeight = 300) {
+      const cols = 2
+      const marginFromEdge = 20   // left/top margin to the viewport
+      const gapX = 16             // horizontal gap between columns
+      const gapY = 16             // vertical gap between rows
+      const startY = 100          // initial top offset
+
+      const col = slotIndex % cols
+      const row = Math.floor(slotIndex / cols)
+
+      const x = marginFromEdge + col * (modalWidth + gapX)
+      const y = startY + row * (modalHeight + gapY)
+      return { x, y }
+    },
+ 
+
+
      getSeparateModalStyle(modalId) {
-    // find modal by id
     const modal = this.separateModals.find(m => m.id === modalId)
     if (!modal) {
       return {}
     }
 
-    // If we've already stored runtime position/size on the modal (from dragging/resizing),
-    // use that.
-    if (modal.runtimeStyle) {
-        return modal.runtimeStyle
+    // If modal has been manually positioned/resized, use that
+    if (modal.position && modal.size && modal.userModified) {
+      return {
+        position: 'fixed',
+        left: `${modal.position.x}px`,
+        top: `${modal.position.y}px`,
+        width: `${modal.size.width}px`,
+        height: `${modal.size.height}px`,
+        backgroundColor: 'white',
+        border: '2px solid #333',
+        borderRadius: '8px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        zIndex: 1200 + modalId,
+        overflow: 'hidden',
+        minWidth: '300px',
+        minHeight: '200px',
+        maxWidth: '90vw',
+        maxHeight: '90vh'
+      }
     }
 
-    // Otherwise, provide a default "2x2 grid" layout based on index
-    const index = this.separateModals.findIndex(m => m.id === modalId)
-
-    // tweak these numbers to taste
-    const modalWidth = 400
-    const modalHeight = 300
-    const gap = 16
-
-    // row: 0 or 1, col: 0 or 1
-    const row = Math.floor(index / 2) // 0,0,1,1 for 0,1,2,3
-    const col = index % 2             // 0,1,0,1 for 0,1,2,3
-
-    const top  = 80  + row * (modalHeight + gap)
-    const left = 80  + col * (modalWidth  + gap)
-
+    // Use initial grid position
     return {
-      position: 'absolute',
-      top:  top  + 'px',
-      left: left + 'px',
-      width: modalWidth + 'px',
-      height: modalHeight + 'px',
-      // keep your existing styles like z-index, background, border-radius, etc
-      'z-index': modal.zIndex || 1000 + index,
+      position: 'fixed',
+      left: `${modal.position.x}px`,
+      top: `${modal.position.y}px`,
+      width: `${modal.size.width}px`,
+      height: `${modal.size.height}px`,
+      backgroundColor: 'white',
+      border: '12px solid #333',
+      borderRadius: '8px',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      zIndex: 1200 + modalId,
+      overflow: 'hidden',
+      minWidth: '300px',
+      minHeight: '200px',
+      maxWidth: '90vw',
+      maxHeight: '90vh'
     }
   },
     // Simple hash -> stable pseudo-random
@@ -911,10 +936,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 },
 
-
-
-
-
     closeAllSeparateModals() {
       // Destroy charts to avoid leaks
       this.separateModals.forEach(m => {
@@ -1032,49 +1053,40 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return { delta, pct };
     },
 
-
-    // UPDATED: Separate Modal Management Methods
     createSeparateModal(country, type, title) {
       // Check if modal for this country and type already exists
-      const existingModal = this.separateModals.find(m => 
-        m.country === country && m.type === type
+      const existingModal = this.separateModals.find(
+        m => m.country === country && m.type === type
       )
-      
       if (existingModal) {
-        // Just show existing modal if hidden
         existingModal.visible = true
         return existingModal.id
       }
 
       const modalId = this.separateModalIdCounter++
+      const modalWidth = this.modalDefaults.width
+      const modalHeight = this.modalDefaults.height
 
-      // Calculate position for right-side stacking
-      const modalWidth = 400
-      const modalHeight = 300
-      const marginFromEdge = 20
-      const verticalSpacing = 10
-      
-      // Position on right side of screen
-      const rightX = window.innerWidth - modalWidth - marginFromEdge
-      
-      // Calculate Y position based on existing modals
+      // Determine 2×2 grid slot
       const visibleModals = this.separateModals.filter(m => m.visible)
-      const startY = 100 // Start position from top
-      const stackedY = startY + (visibleModals.length * (modalHeight + verticalSpacing))
+      const slotIndex = visibleModals.length
+      const { x, y } = this._gridPosition(slotIndex, modalWidth, modalHeight)
 
       const modal = {
         id: modalId,
-        country: country,
-        type: type,
-        title: title,
+        country,
+        type,
+        title,
         visible: true,
         loading: true,
         error: null,
         chart: null,
         data: null,
-        position: { x: rightX, y: stackedY },
-        size: { width: modalWidth, height: modalHeight }
-      }      
+        position: { x, y },
+        size: { width: modalWidth, height: modalHeight },
+        userModified: false
+      }
+
       this.separateModals.push(modal)
 
       // Initialize drag/resize state
@@ -1093,29 +1105,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         startWidth: 0,
         startHeight: 0
       }
+
       this.loadSeparateModalData(modalId, country, type)
       return modalId
     },
+
     repositionSeparateModals() {
+      // Keep the 2×2 grid when auto-arranging (e.g. on resize),
+      // but don't move modals the user already dragged/resized.
       const modalWidth = 400
       const modalHeight = 300
-      const marginFromEdge = 20
-      const verticalSpacing = 10
-      const startY = 100
-      
-      const rightX = window.innerWidth - modalWidth - marginFromEdge
-      
-      // Get all visible modals sorted by their current Y position
-      const visibleModals = this.separateModals
-        .filter(m => m.visible)
-        .sort((a, b) => a.position.y - b.position.y)
-      
-      // Reposition each modal in a neat stack
-      visibleModals.forEach((modal, index) => {
-        modal.position.x = rightX
-        modal.position.y = startY + (index * (modalHeight + verticalSpacing))
+      const visible = this.separateModals.filter(m => m.visible)
+      let gridIndex = 0
+
+      visible.forEach(modal => {
+        if (modal.userModified) return
+        const { x, y } = this._gridPosition(gridIndex, modalWidth, modalHeight)
+        modal.position.x = x
+        modal.position.y = y
+        gridIndex += 1
       })
     },
+
 
     closeSeparateModal(modalId) {
       const modalIndex = this.separateModals.findIndex(modal => modal.id === modalId)
@@ -1154,8 +1165,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
         zIndex: 1200 + modalId,
         overflow: 'hidden',
-        minWidth: '300px',
-        minHeight: '200px',
+        minWidth: `${this.modalDefaults.minWidth}px`,
+        minHeight: `${this.modalDefaults.minHeight}px`,
         maxWidth: '90vw',
         maxHeight: '90vh'
       }
@@ -1221,6 +1232,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       dragState.isDragging = false
       document.removeEventListener('mousemove', (e) => this.onSeparateModalDrag(e, modalId))
       document.removeEventListener('mouseup', () => this.stopSeparateModalDrag(modalId))
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (modal) modal.userModified = true
+
     },
     // Start resizing separate modal
     startSeparateModalResize(event, modalId, direction) {
@@ -1252,14 +1266,19 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const deltaX = event.clientX - resizeState.startX
       const deltaY = event.clientY - resizeState.startY
 
-      if (resizeState.direction === 'right' || resizeState.direction === 'corner') {
+       if (resizeState.direction === 'right' || resizeState.direction === 'corner') {
         const newWidth = resizeState.startWidth + deltaX
-        modal.size.width = Math.max(300, Math.min(newWidth, window.innerWidth - modal.position.x))
+        const minW = this.modalDefaults.minWidth
+        const maxW = window.innerWidth - modal.position.x
+        modal.size.width = Math.max(minW, Math.min(newWidth, maxW))
       }
 
+      // Height clamp
       if (resizeState.direction === 'bottom' || resizeState.direction === 'corner') {
         const newHeight = resizeState.startHeight + deltaY
-        modal.size.height = Math.max(200, Math.min(newHeight, window.innerHeight - modal.position.y))
+        const minH = this.modalDefaults.minHeight
+        const maxH = window.innerHeight - modal.position.y
+        modal.size.height = Math.max(minH, Math.min(newHeight, maxH))
       }
     },
 
@@ -1276,6 +1295,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.$nextTick(() => {
         this.resizeSeparateModalChart(modalId)
       })
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (modal) modal.userModified = true
     },
 
 
