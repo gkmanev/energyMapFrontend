@@ -132,7 +132,7 @@ export default {
       W: 400,
       H: 400,
       cx: 200,
-      cy: 140,
+      cy: 125,
       centerRadius: 26,
       neighbourRadius: 14,
     }

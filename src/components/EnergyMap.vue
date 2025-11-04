@@ -98,14 +98,14 @@
           </div>
 
           <!-- Resize handles -->
-          <div
+          <!-- <div
             class="separate-modal-resize-handle separate-modal-resize-right"
             @mousedown="startSeparateModalResize($event, modal.id, 'right')"
           ></div>
           <div
             class="separate-modal-resize-handle separate-modal-resize-bottom"
             @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"
-          ></div>
+          ></div> -->
           <div
             class="separate-modal-resize-handle separate-modal-resize-corner"
             @mousedown="startSeparateModalResize($event, modal.id, 'corner')"
@@ -322,8 +322,8 @@ export default {
       modalDefaults: {
         width: 580,     // initial/default width
         height: 420,    // initial/default height
-        minWidth: 480,  // block resizing smaller than this width
-        minHeight: 320, // block resizing smaller than this height
+        minWidth: 580,  // block resizing smaller than this width
+        minHeight: 420, // block resizing smaller than this height
       },
       // Separate Modal System
       separateModals: [],
@@ -1284,20 +1284,47 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const deltaX = event.clientX - resizeState.startX
       const deltaY = event.clientY - resizeState.startY
 
-       if (resizeState.direction === 'right' || resizeState.direction === 'corner') {
-        const newWidth = resizeState.startWidth + deltaX
-        const minW = this.modalDefaults.minWidth
-        const maxW = window.innerWidth - modal.position.x
-        modal.size.width = Math.max(minW, Math.min(newWidth, maxW))
+      // Calculate aspect ratio from initial size
+      const aspectRatio = resizeState.startWidth / resizeState.startHeight
+
+      // Use the larger delta to determine new size (maintains smooth resizing)
+      const delta = Math.max(Math.abs(deltaX), Math.abs(deltaY)) * Math.sign(deltaX)
+      
+      // Calculate new dimensions maintaining aspect ratio
+      let newWidth = resizeState.startWidth + delta
+      let newHeight = newWidth / aspectRatio
+
+      // Apply minimum constraints
+      const minW = this.modalDefaults.minWidth
+      const minH = this.modalDefaults.minHeight
+      
+      if (newWidth < minW) {
+        newWidth = minW
+        newHeight = newWidth / aspectRatio
+      }
+      
+      if (newHeight < minH) {
+        newHeight = minH
+        newWidth = newHeight * aspectRatio
       }
 
-      // Height clamp
-      if (resizeState.direction === 'bottom' || resizeState.direction === 'corner') {
-        const newHeight = resizeState.startHeight + deltaY
-        const minH = this.modalDefaults.minHeight
-        const maxH = window.innerHeight - modal.position.y
-        modal.size.height = Math.max(minH, Math.min(newHeight, maxH))
+      // Apply maximum constraints based on viewport
+      const maxW = window.innerWidth - modal.position.x
+      const maxH = window.innerHeight - modal.position.y
+      
+      if (newWidth > maxW) {
+        newWidth = maxW
+        newHeight = newWidth / aspectRatio
       }
+      
+      if (newHeight > maxH) {
+        newHeight = maxH
+        newWidth = newHeight * aspectRatio
+      }
+
+      // Apply the constrained dimensions
+      modal.size.width = newWidth
+      modal.size.height = newHeight
     },
 
     // Stop resizing separate modal
@@ -3436,14 +3463,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .separate-modal-resize-corner {
   bottom: 0;
   right: 0;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 50%, rgba(102, 126, 234, 0.3) 50%);
+  background: linear-gradient(135deg, transparent 45%, rgba(102, 126, 234, 0.5) 45%);
+  border-bottom-right-radius: 8px;
 }
 
 .separate-modal-resize-handle:hover {
-  background: rgba(102, 126, 234, 0.2);
+  background: linear-gradient(135deg, transparent 45%, rgba(102, 126, 234, 0.7) 45%);
 }
 
 /* Make header draggable */
