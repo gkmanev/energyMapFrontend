@@ -47,66 +47,72 @@
         @click="closePanel"
         aria-hidden="true"
       ></div>
-
-      <!-- Separate Modal Windows for Charts -->
-      <div v-for="modal in separateModals" 
-          :key="modal.id" 
-          class="separate-modal" 
-          :style="getSeparateModalStyle(modal.id)" 
-          v-show="modal.visible">
-        
-        <!-- Draggable header -->
-        <div class="separate-modal-header" 
+      
+       <!-- Separate Modal Windows for Charts -->
+      <transition-group name="modal-fade">
+        <div
+          v-for="modal in separateModals"
+          :key="modal.id"
+          class="separate-modal"
+          :style="getSeparateModalStyle(modal.id)"
+          v-show="modal.visible"
+        >
+          <!-- Draggable header -->
+          <div
+            class="separate-modal-header"
             @mousedown="startSeparateModalDrag($event, modal.id)"
-            style="cursor: move;">
-          <h4>{{ modal.country }} - {{ modal.title }}</h4>
-          <button @click="closeSeparateModal(modal.id)" 
-                  class="separate-modal-close">×</button>
-        </div>
-        
-        <!-- Modal content -->
-        <div class="separate-modal-content">
-          <div v-if="modal.loading" class="separate-modal-loading">
-            <div class="loading-spinner-small"></div>
-            <p>Loading {{ modal.type }} data...</p>
+            style="cursor: move;"
+          >
+            <h4>{{ modal.country }} - {{ modal.title }}</h4>
+            <button
+              @click="closeSeparateModal(modal.id)"
+              class="separate-modal-close"
+            >
+              ×
+            </button>
           </div>
-          <div v-else-if="modal.error" class="separate-modal-error">
-            <p>Error: {{ modal.error }}</p>
-            <button @click="retrySeparateModalData(modal.id)">Retry</button>
-          </div>
-          <div v-else-if="modal.type === 'powerflow'" class="chart-container">
+
+          <!-- Modal content -->
+          <div class="separate-modal-content">
+            <div v-if="modal.loading" class="separate-modal-loading">
+              <div class="loading-spinner-small"></div>
+              <p>Loading {{ modal.type }} data...</p>
+            </div>
+
+            <div v-else-if="modal.error" class="separate-modal-error">
+              <p>Error: {{ modal.error }}</p>
+              <button @click="retrySeparateModalData(modal.id)">Retry</button>
+            </div>
+
+            <!-- FLOWS MODAL: uses /api/flows/latest/?country=XX internally -->
+            <div v-else-if="modal.type === 'powerflow'" class="powerflow-modal-body">
               <PowerFlow
-                :pvGen="modal.data.pvGen"
-                :homeLoad="modal.data.homeLoad"
-                :gridImport="modal.data.gridImport"
-                :gridExport="modal.data.gridExport"
-                :batteryCharge="modal.data.batteryCharge"
-                :batteryDischarge="modal.data.batteryDischarge"
-                :pvToHome="modal.data.pvToHome"
-                :pvToGrid="modal.data.pvToGrid"
-                :pvToBattery="modal.data.pvToBattery"
-                :gridToHome="modal.data.gridToHome"
-                :gridToBattery="modal.data.gridToBattery"
-                :batteryToHome="modal.data.batteryToHome"
-                :homeToPv="modal.data.homeToPv"
-                unit="MW"
-                :minStroke="2.5"
-                :maxStroke="10"
+                :country-iso="getCountryISO2ByName(modal.country) || 'BG'"
               />
             </div>
-          <div v-else class="chart-container">
-            <canvas :id="'separate-chart-' + modal.id"></canvas>
+
+            <!-- Other chart modals (capacity, generation, prices…) -->
+            <div v-else class="chart-container">
+              <canvas :id="'separate-chart-' + modal.id"></canvas>
+            </div>
           </div>
+
+          <!-- Resize handles -->
+          <div
+            class="separate-modal-resize-handle separate-modal-resize-right"
+            @mousedown="startSeparateModalResize($event, modal.id, 'right')"
+          ></div>
+          <div
+            class="separate-modal-resize-handle separate-modal-resize-bottom"
+            @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"
+          ></div>
+          <div
+            class="separate-modal-resize-handle separate-modal-resize-corner"
+            @mousedown="startSeparateModalResize($event, modal.id, 'corner')"
+          ></div>
         </div>
-        
-        <!-- Resize handles -->
-        <div class="separate-modal-resize-handle separate-modal-resize-right"
-            @mousedown="startSeparateModalResize($event, modal.id, 'right')"></div>
-        <div class="separate-modal-resize-handle separate-modal-resize-bottom"
-            @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"></div>
-        <div class="separate-modal-resize-handle separate-modal-resize-corner"
-            @mousedown="startSeparateModalResize($event, modal.id, 'corner')"></div>
-      </div>
+      </transition-group>
+
 
       <!-- Map column -->
       <div class="map-col">
@@ -295,6 +301,18 @@ import {
   interpolateYlOrRd
 } from 'd3-scale-chromatic'
 
+import L from 'leaflet'
+import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png'
+import iconUrl from 'leaflet/dist/images/marker-icon.png'
+import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
+
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl,
+  iconUrl,
+  shadowUrl,
+})
+
 export default {
   name: 'EnergyMap',
   components: { LMap, LTileLayer, LGeoJson, LocalClock, PowerFlow },
@@ -302,8 +320,8 @@ export default {
   data() {
     return {
       modalDefaults: {
-        width: 480,     // initial/default width
-        height: 320,    // initial/default height
+        width: 580,     // initial/default width
+        height: 420,    // initial/default height
         minWidth: 480,  // block resizing smaller than this width
         minHeight: 320, // block resizing smaller than this height
       },
@@ -722,7 +740,7 @@ export default {
  
 
 
-     getSeparateModalStyle(modalId) {
+    getSeparateModalStyle(modalId) {
     const modal = this.separateModals.find(m => m.id === modalId)
     if (!modal) {
       return {}
@@ -745,7 +763,7 @@ export default {
         minWidth: '300px',
         minHeight: '200px',
         maxWidth: '90vw',
-        maxHeight: '90vh'
+        maxHeight: '95vh'
       }
     }
 
@@ -2818,7 +2836,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .separate-modal-content {
   flex: 1;
   padding: 12px;
-  overflow: hidden;
+  overflow: hidden; /* instead of auto */
+  display: flex;
+  flex-direction: column;
 }
 
 .separate-modal-loading {
@@ -3461,5 +3481,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 .play-button + .show-pct-toggle input[type="checkbox"] {
   cursor: pointer;
+}
+
+/* Smooth fade / scale when opening/closing separate modals */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+
+/* Make the flows modal content stretch nicely */
+.powerflow-modal-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.powerflow-modal-body > * {
+  flex: 1;
 }
 </style>
