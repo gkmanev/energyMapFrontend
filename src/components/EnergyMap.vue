@@ -143,59 +143,63 @@
     
     <!-- Price Slider -->
     <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
-      <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
-      <div class="slider-info">
-        <span class="time-display">{{ currentTimeDisplay }}</span>
-        <span class="price-display">{{ averagePriceDisplay }}</span>
-      </div>
-       <!-- Play button before the slider -->
-      <div class="play-controls">
-        <button 
-          @click="togglePlay" 
-          :disabled="!hasTimeData || isRefreshing"
-          class="play-button"
-        >
-          {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
-        </button>
-        <label class="show-pct-toggle">
-          <input type="checkbox" v-model="showPctInTooltip" @change="onPctToggle" />
-          Show %
-        </label>
-      </div>
-      
-      <!-- Enhanced smooth draggable slider -->
-      <div class="slider-wrapper">
-        <div class="custom-slider">
-          <!-- Native range input for smooth dragging -->
-          <input 
-            v-model="currentTimeIndex"
-            type="range" 
-            :min="0" 
-            :max="maxTimeIndex"
-            :disabled="!hasTimeData || isRefreshing"
-            class="smooth-range-slider"
-            @input="onSliderChange"
-            @change="onSliderChange"
-            @pointerdown="onSliderPointerDown"
-            @pointerup="onSliderPointerUp"
-          />
-          
-          <!-- Custom visual track and progress -->
-          <div class="slider-track"></div>
-          <div class="slider-progress" :style="progressStyle"></div>
+      <div class="overlay-header">
+        <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
+        <div class="slider-info">
+          <span class="time-display">{{ currentTimeDisplay }}</span>
+          <span class="price-display">{{ averagePriceDisplay }}</span>
         </div>
-        
-        <!-- Time tick marks BELOW the slider -->
-        <div v-if="hasTimeData" class="time-ticks-below">
-          <div 
-            v-for="(tick, index) in timeTicks" 
-            :key="index"
-            class="time-tick-below"
-            :style="{ left: tick.position }"
-            @click="jumpToTick(tick.index)"
+      </div>
+
+      <div class="slider-row">
+        <div class="play-controls">
+          <button
+            @click="togglePlay"
+            :disabled="!hasTimeData || isRefreshing"
+            class="play-button"
           >
-            <div class="tick-mark-below"></div>
-            <div class="tick-label-below">{{ tick.label }}</div>
+            {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+          </button>
+          <label class="show-pct-toggle">
+            <input type="checkbox" v-model="showPctInTooltip" @change="onPctToggle" />
+            Show %
+          </label>
+        </div>
+
+        <!-- Enhanced smooth draggable slider -->
+        <div class="slider-wrapper">
+          <div class="custom-slider">
+            <!-- Native range input for smooth dragging -->
+            <input
+              v-model="currentTimeIndex"
+              type="range"
+              :min="0"
+              :max="maxTimeIndex"
+              :disabled="!hasTimeData || isRefreshing"
+              class="smooth-range-slider"
+              @input="onSliderChange"
+              @change="onSliderChange"
+              @pointerdown="onSliderPointerDown"
+              @pointerup="onSliderPointerUp"
+            />
+
+            <!-- Custom visual track and progress -->
+            <div class="slider-track"></div>
+            <div class="slider-progress" :style="progressStyle"></div>
+          </div>
+
+          <!-- Time tick marks BELOW the slider -->
+          <div v-if="hasTimeData" class="time-ticks-below">
+            <div
+              v-for="(tick, index) in timeTicks"
+              :key="index"
+              class="time-tick-below"
+              :style="{ left: tick.position }"
+              @click="jumpToTick(tick.index)"
+            >
+              <div class="tick-mark-below"></div>
+              <div class="tick-label-below">{{ tick.label }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -207,43 +211,47 @@
 
     <!-- Generation Slider -->
     <div v-if="heatmapType === 'generation'" class="time-slider-overlay">
-      <h3>Generation Data - Last 48 Hours</h3>
-      <div class="slider-info">
-        <span class="time-display">{{ currentTimeDisplay }}</span>
-        <span class="generation-display">{{ totalGenerationDisplay }}</span>
-      </div>
-      
-      <!-- Enhanced smooth draggable slider -->
-      <div class="slider-wrapper">
-        <div class="custom-slider">
-          <!-- Native range input for smooth dragging -->
-          <input 
-            v-model="currentTimeIndex"
-            type="range" 
-            :min="0" 
-            :max="maxTimeIndex"
-            :disabled="!hasTimeData || isRefreshing"
-            class="smooth-range-slider"
-            @input="onSliderChange"
-            @change="onSliderChange"
-          />
-          
-          <!-- Custom visual track and progress -->
-          <div class="slider-track"></div>
-          <div class="slider-progress" :style="progressStyle"></div>
+      <div class="overlay-header">
+        <h3>Generation Data - Last 48 Hours</h3>
+        <div class="slider-info">
+          <span class="time-display">{{ currentTimeDisplay }}</span>
+          <span class="generation-display">{{ totalGenerationDisplay }}</span>
         </div>
-        
-        <!-- Time tick marks BELOW the slider -->
-        <div v-if="hasTimeData" class="time-ticks-below">
-          <div 
-            v-for="(tick, index) in generationTimeTicks" 
-            :key="index"
-            class="time-tick-below"
-            :style="{ left: tick.position }"
-            @click="jumpToTick(tick.index)"
-          >
-            <div class="tick-mark-below"></div>
-            <div class="tick-label-below">{{ tick.label }}</div>
+      </div>
+
+      <div class="slider-row slider-row--full">
+        <!-- Enhanced smooth draggable slider -->
+        <div class="slider-wrapper">
+          <div class="custom-slider">
+            <!-- Native range input for smooth dragging -->
+            <input
+              v-model="currentTimeIndex"
+              type="range"
+              :min="0"
+              :max="maxTimeIndex"
+              :disabled="!hasTimeData || isRefreshing"
+              class="smooth-range-slider"
+              @input="onSliderChange"
+              @change="onSliderChange"
+            />
+
+            <!-- Custom visual track and progress -->
+            <div class="slider-track"></div>
+            <div class="slider-progress" :style="progressStyle"></div>
+          </div>
+
+          <!-- Time tick marks BELOW the slider -->
+          <div v-if="hasTimeData" class="time-ticks-below">
+            <div
+              v-for="(tick, index) in generationTimeTicks"
+              :key="index"
+              class="time-tick-below"
+              :style="{ left: tick.position }"
+              @click="jumpToTick(tick.index)"
+            >
+              <div class="tick-mark-below"></div>
+              <div class="tick-label-below">{{ tick.label }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -2972,26 +2980,55 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-radius: 8px;
-  padding: 10px 15px;
-  box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 5px 10px 6px;
+  box-shadow: 0 3px 15px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   z-index: 1001;
-  max-height: 145px;
-} 
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: min(860px, 92vw);
+}
+
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
 .time-slider-overlay h3 {
-  margin: 0 0 6px 0;
-  font-size: 14px;
+  margin: 0;
+  font-size: 12px;
   font-weight: 600;
   color: #2d3748;
+  white-space: nowrap;
 }
 
 .slider-info {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-  font-size: 12px;
+  gap: 12px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.slider-info span {
+  line-height: 1.1;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.slider-row--full {
+  gap: 0;
+  width: 100%;
 }
 
 .time-display {
@@ -3006,14 +3043,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .slider-wrapper {
   position: relative;
-  height: 55px;
-  margin: 5px 0;
+  flex: 1;
+  height: 30px;
+  margin: 0;
+  min-width: 200px;
 }
 
 .custom-slider {
   position: relative;
-  height: 28px;
-  margin: 0;
+  height: 16px;
 }
 
 .smooth-range-slider {
@@ -3022,7 +3060,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   left: 0;
   right: 0;
   width: 100%;
-  height: 28px;
+  height: 16px;
   transform: translateY(-50%);
   background: transparent;
   outline: none;
@@ -3033,7 +3071,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .smooth-range-slider::-webkit-slider-track {
-  height: 6px;
+  height: 3px;
   background: transparent;
   border: none;
   border-radius: 3px;
@@ -3041,53 +3079,54 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .smooth-range-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #667eea;
   cursor: grab;
   border: 2px solid white;
-  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
   transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .smooth-range-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
+  transform: scale(1.05);
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.5);
 }
 
 .smooth-range-slider::-webkit-slider-thumb:active {
   cursor: grabbing;
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.8);
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.7);
 }
 
 .smooth-range-slider::-moz-range-track {
-  height: 6px;
+  height: 3px;
   background: transparent;
   border: none;
   border-radius: 3px;
 }
 
 .smooth-range-slider::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #667eea;
   cursor: grab;
   border: 2px solid white;
-  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
   transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .smooth-range-slider::-moz-range-thumb:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
+  transform: scale(1.05);
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.5);
 }
 
 .smooth-range-slider::-moz-range-thumb:active {
   cursor: grabbing;
-  transform: scale(1.05);
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.7);
 }
 
 .slider-track {
@@ -3095,7 +3134,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   top: 50%;
   left: 0;
   right: 0;
-  height: 6px;
+  height: 3px;
   background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e0 100%);
   border-radius: 3px;
   transform: translateY(-50%);
@@ -3106,7 +3145,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   position: absolute;
   top: 50%;
   left: 0;
-  height: 6px;
+  height: 4px;
   background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
   border-radius: 3px 0 0 3px;
   transform: translateY(-50%);
@@ -3116,10 +3155,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .time-ticks-below {
   position: absolute;
-  top: 10px;
+  top: 6px;
   left: 0;
   right: 0;
-  height: 23px;
+  height: 18px;
 }
 
 .time-tick-below {
@@ -3135,21 +3174,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .tick-mark-below {
   width: 2px;
-  height: 8px;
+  height: 6px;
   background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
   border-radius: 1px;
-  margin: 0 auto 4px auto;
+  margin: 0 auto 2px auto;
   transition: all 0.2s ease;
 }
 
 .tick-label-below {
-  font-size: 12px;
+  font-size: 9px;
   color: #6f61c1;
   text-align: center;
   white-space: nowrap;
   font-weight: 500;
   transition: color 0.2s ease;
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
 .time-tick-below:hover .tick-label-below {
@@ -3158,7 +3197,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .time-tick-below:hover .tick-mark-below {
-  height: 12px;
+  height: 9px;
   width: 3px;
 }
 
@@ -3166,8 +3205,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   text-align: center;
   color: #718096;
   font-style: italic;
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: 11px;
 }
 
 /* Footer positioned at the bottom */
@@ -3176,7 +3215,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 35px;
+  height: 22px;
   background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 1000;
@@ -3187,9 +3226,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   align-items: center;
   justify-content: center;
   height: 100%;
+  padding: 0 12px;
   color: #e2e8f0;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
+  line-height: 1;
 }
 
 /* Loading overlay */
@@ -3268,21 +3309,22 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 /* Play controls */
 .play-controls {
   display: flex;
-  justify-content: left;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .play-button {
-  padding: 6px 16px;
+  padding: 3px 10px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  border-radius: 20px;
+  border-radius: 14px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 1px 4px rgba(102, 126, 234, 0.3);
 }
 
 .play-button:hover:not(:disabled) {
@@ -3308,7 +3350,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     text-align: center;
     gap: 4px;
   }
-  
+
+  .slider-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .play-controls {
+    justify-content: center;
+  }
+
   .tick-label-below {
     font-size: 9px;
   }
@@ -3324,28 +3376,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .header {
     padding: 8px 15px;
   }
-  
+
   .header h1 {
     font-size: 1.6rem;
   }
-  
+
   .controls {
     gap: 10px;
     margin-top: 6px;
   }
-  
+
   .slider-wrapper {
-    height: 50px;
+    height: 36px;
   }
-  
+
   .smooth-range-slider::-webkit-slider-thumb {
-    width: 22px;
-    height: 22px;
+    width: 16px;
+    height: 16px;
   }
-  
+
   .smooth-range-slider::-moz-range-thumb {
-    width: 22px;
-    height: 22px;
+    width: 16px;
+    height: 16px;
   }
   
   .tick-label-below {
@@ -3355,11 +3407,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .map-row {
     padding-bottom: 0px;
   }
-  
+
   .app-footer {
-    height: 30px;
+    height: 22px;
   }
-  
+
   .footer-content {
     font-size: 10px;
   }
@@ -3386,10 +3438,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   
   .chart-box--sm {
     height: 300px;
-  }
-  
-  .time-slider-overlay h3 {
-    font-size: 13px;
   }
   
   .tick-label-below {
@@ -3502,10 +3550,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .show-pct-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 10px;
-  font-size: 13px;
-  color: #2c3e50;
+  gap: 4px;
+  margin-left: 0;
+  font-size: 11px;
+  color: #364152;
 }
 .play-button + .show-pct-toggle input[type="checkbox"] {
   cursor: pointer;
