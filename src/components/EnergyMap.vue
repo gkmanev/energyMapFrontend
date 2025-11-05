@@ -98,19 +98,22 @@
                   <span class="generation-total-label">Total output</span>
                   <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
                 </div>
-                <div v-if="modal.meta.topTechnologies.length" class="generation-top-techs">
-                  <div
-                    v-for="tech in modal.meta.topTechnologies"
-                    :key="tech.name"
-                    class="generation-tech-pill"
-                  >
-                    <span class="generation-tech-color" :style="{ backgroundColor: tech.color }"></span>
-                    <span class="generation-tech-name">{{ tech.name }}</span>
-                    <span class="generation-tech-value">{{ formatMegawatts(tech.value) }} MW</span>
-                    <span class="generation-tech-share">({{ formatPercent(tech.share) }})</span>
-                  </div>
-                </div>
                 <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
+              </div>
+              <div
+                v-if="modal.meta && modal.meta.topTechnologies.length"
+                class="generation-top-techs"
+              >
+                <div
+                  v-for="tech in modal.meta.topTechnologies"
+                  :key="tech.name"
+                  class="generation-tech-pill"
+                >
+                  <span class="generation-tech-color" :style="{ backgroundColor: tech.color }"></span>
+                  <span class="generation-tech-name">{{ tech.name }}</span>
+                  <span class="generation-tech-value">{{ formatMegawatts(tech.value) }} MW</span>
+                  <span class="generation-tech-share">({{ formatPercent(tech.share) }})</span>
+                </div>
               </div>
               <div class="chart-container generation-chart">
                 <canvas :id="'separate-chart-' + modal.id"></canvas>
@@ -3642,6 +3645,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 6px;
   font-size: 12px;
   color: #334155;
+  order: 0;
 }
 .generation-total {
   display: flex;
@@ -3664,6 +3668,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  order: 1;
 }
 .generation-tech-pill {
   display: inline-flex;
@@ -3693,6 +3698,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1;
   min-height: 160px;
   min-width: 0;
+  order: 2;
 }
 .generation-legend {
   max-height: 150px;
@@ -3700,6 +3706,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   padding: 4px 2px;
   border-radius: 8px;
   background: #f1f5f9;
+  order: 3;
 }
 .generation-legend-grid {
   display: grid;
@@ -3740,6 +3747,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   margin-left: 6px;
   color: #475569;
   font-size: 10px;
+}
+
+@media (max-width: 400px) {
+  .generation-top-techs {
+    order: 4;
+  }
 }
 :global(.delta-tooltip) {
   background: rgba(0,0,0,0.75) !important;
