@@ -134,6 +134,82 @@
               </div>
             </div>
 
+            <!-- Capacity modal: enriched layout with summary + breakdown -->
+            <div v-else-if="modal.type === 'capacity'" class="capacity-modal">
+              <div v-if="modal.meta" class="capacity-summary">
+                <div class="capacity-metrics">
+                  <div class="capacity-metric">
+                    <span class="capacity-metric-label">Installed capacity</span>
+                    <span class="capacity-metric-value">{{ formatMegawatts(modal.meta.totalCapacity) }} MW</span>
+                  </div>
+                  <div class="capacity-metric">
+                    <span class="capacity-metric-label">Current generation</span>
+                    <span class="capacity-metric-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
+                  </div>
+                  <div class="capacity-metric">
+                    <span class="capacity-metric-label">Utilisation</span>
+                    <span class="capacity-metric-value">{{ formatPercent(modal.meta.utilization) }}</span>
+                  </div>
+                </div>
+                <div v-if="modal.meta.updatedLabel" class="capacity-updated">{{ modal.meta.updatedLabel }}</div>
+              </div>
+
+              <div class="chart-container capacity-chart">
+                <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
+
+              <div
+                v-if="modal.meta && modal.meta.topTechnologies.length"
+                class="capacity-top-techs"
+              >
+                <div
+                  v-for="tech in modal.meta.topTechnologies"
+                  :key="tech.name"
+                  class="capacity-tech-card"
+                >
+                  <span class="capacity-tech-color" :style="{ backgroundColor: tech.color }"></span>
+                  <div class="capacity-tech-content">
+                    <div class="capacity-tech-header">
+                      <span class="capacity-tech-name">{{ tech.name }}</span>
+                      <span class="capacity-tech-share">{{ formatPercent(tech.capacityShare) }} of capacity</span>
+                    </div>
+                    <div class="capacity-tech-values">
+                      <span class="capacity-tech-capacity">{{ formatMegawatts(tech.capacity) }} MW installed</span>
+                      <span class="capacity-tech-generation">{{ formatMegawatts(tech.generation) }} MW now</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="modal.meta && modal.meta.legendItems.length"
+                class="capacity-breakdown"
+              >
+                <div class="capacity-breakdown-header">
+                  <span>Technology</span>
+                  <span class="capacity-breakdown-column">Installed</span>
+                  <span class="capacity-breakdown-column">Current</span>
+                  <span class="capacity-breakdown-column">Utilisation</span>
+                </div>
+                <div
+                  v-for="item in modal.meta.legendItems"
+                  :key="item.name"
+                  class="capacity-breakdown-row"
+                >
+                  <div class="capacity-breakdown-tech">
+                    <span class="capacity-breakdown-swatch" :style="{ backgroundColor: item.color }"></span>
+                    <div class="capacity-breakdown-labels">
+                      <span class="capacity-breakdown-name">{{ item.name }}</span>
+                      <span class="capacity-breakdown-share">{{ formatPercent(item.capacityShare) }} of capacity</span>
+                    </div>
+                  </div>
+                  <span class="capacity-breakdown-value">{{ formatMegawatts(item.capacity) }} MW</span>
+                  <span class="capacity-breakdown-value">{{ formatMegawatts(item.generation) }} MW</span>
+                  <span class="capacity-breakdown-value">{{ formatPercent(item.utilization) }}</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Other chart modals (capacity, prices…) -->
             <div v-else class="chart-container">
               <canvas :id="'separate-chart-' + modal.id"></canvas>
@@ -786,6 +862,38 @@ export default {
       return `${this.percentFormatter.format(bounded)}%`;
     },
 
+    applyAlpha(color, alpha) {
+      if (!color) {
+        return `rgba(100, 116, 139, ${alpha})`
+      }
+
+      if (color.startsWith('#')) {
+        let hex = color.slice(1)
+        if (hex.length === 3) {
+          hex = hex.split('').map(char => char + char).join('')
+        }
+        const int = parseInt(hex, 16)
+        const r = (int >> 16) & 255
+        const g = (int >> 8) & 255
+        const b = int & 255
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`
+      }
+
+      const rgbMatch = color.match(/^rgb\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\)$/i)
+      if (rgbMatch) {
+        const [, r, g, b] = rgbMatch
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`
+      }
+
+      const rgbaMatch = color.match(/^rgba\((\d+)\s*,\s*(\d+)\s*,\s*(\d+),\s*([0-9.]+)\)$/i)
+      if (rgbaMatch) {
+        const [, r, g, b] = rgbaMatch
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`
+      }
+
+      return color
+    },
+
     // --- 2x2 grid helper ----------------------------------------------------
     // Returns {x,y} for a given slotIndex in a 2×2 grid.
     // Slots: 0 (row0,col0), 1 (row0,col1), 2 (row1,col0), 3 (row1,col1).
@@ -1406,7 +1514,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       document.removeEventListener('mouseup', () => this.stopSeparateModalResize(modalId))
       // ADDED: Trigger chart resize after modal resize
       this.$nextTick(() => {
-        this.resizeSeparateModalChart(modalId)
+        requestAnimationFrame(() => {
+          this.resizeSeparateModalChart(modalId)
+          if (modal.chart) {
+            modal.chart.update('none')
+          }
+        })
       })
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) modal.userModified = true
@@ -1518,89 +1631,186 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       if (modal.type === 'capacity') {
 
-        const items = [...modal.data].sort((a, b) => 
+        const items = [...modal.data].sort((a, b) =>
           (b.installed_capacity_mw || 0) - (a.installed_capacity_mw || 0)
         )
-        
+
         const labels = items.map(i => i.psr_name)
-        const capacityValues = items.map(i => i.installed_capacity_mw)
-        
+        const capacityValues = items.map(i => Number(i.installed_capacity_mw) || 0)
+
         // Get ISO2 from modal's country name instead of selectedFeature
         const iso2 = this.getCountryISO2ByName(modal.country)
-        
-        const generationByTech = await this.getGenerationByTechnology(iso2)        
-        const generationMapped = items.map(item => {
-          const genValue = generationByTech[item.psr_name] || 0
-          return genValue
-        })       
+
+        const generationByTech = await this.getGenerationByTechnology(iso2)
+        const generationMapped = items.map(item => Number(generationByTech[item.psr_name]) || 0)
 
         const remainingCapacity = capacityValues.map((cap, i) => {
           const gen = generationMapped[i] || 0
           return Math.max(0, cap - gen)
         })
-        
-        // Use the correct canvas (already defined at the top)
-        // const ctx = canvas.getContext('2d')  <-- Already defined above
-        
+
+        const totalCapacity = capacityValues.reduce((sum, value) => sum + (value || 0), 0)
+        const totalGeneration = generationMapped.reduce((sum, value) => sum + (value || 0), 0)
+        const utilization = totalCapacity > 0 ? (totalGeneration / totalCapacity) * 100 : 0
+
+        const capacityShares = capacityValues.map(value => totalCapacity > 0 ? (value / totalCapacity) * 100 : 0)
+        const utilizationRates = capacityValues.map((cap, index) => cap > 0 ? (generationMapped[index] / cap) * 100 : 0)
+
+        const defaultPalette = { border: '#64748b', fill: 'rgba(100,116,139,0.25)' }
+        const palettes = items.map(item => this.psrColors[item.psr_name] || defaultPalette)
+        const generationBackgroundColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.85))
+        const generationBorderColors = palettes.map(p => p.border || defaultPalette.border)
+        const spareBackgroundColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.18))
+        const spareBorderColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.35))
+
+        const legendItems = items.map((item, index) => ({
+          name: item.psr_name,
+          capacity: capacityValues[index] || 0,
+          generation: generationMapped[index] || 0,
+          remaining: remainingCapacity[index] || 0,
+          capacityShare: capacityShares[index] || 0,
+          generationShare: totalGeneration > 0 ? (generationMapped[index] / totalGeneration) * 100 : 0,
+          utilization: utilizationRates[index] || 0,
+          color: palettes[index].border || defaultPalette.border
+        }))
+
+        const topTechnologies = legendItems
+          .filter(item => item.capacity > 0)
+          .slice(0, 3)
+
+        const lastUpdatedTs = items.reduce((latest, item) => {
+          const candidate = item.datetime_utc || item.updated_at || item.modified || item.timestamp || null
+          const parsed = candidate ? Date.parse(candidate) : NaN
+          if (Number.isFinite(parsed)) {
+            return Math.max(latest, parsed)
+          }
+          return latest
+        }, -Infinity)
+
+        modal.meta = {
+          totalCapacity,
+          totalGeneration,
+          utilization,
+          topTechnologies,
+          legendItems,
+          updatedLabel: Number.isFinite(lastUpdatedTs) && lastUpdatedTs > 0
+            ? `Last updated ${new Date(lastUpdatedTs).toLocaleString()}`
+            : ''
+        }
+
+        const formatMwValue = value => this.formatMegawatts(value)
+        const formatPercentValue = value => this.formatPercent(value)
+
         modal.chart = markRaw(new Chart(ctx, {
           type: 'bar',
           data: {
             labels,
             datasets: [
               {
-                label: 'Current Generation (MW)',
+                label: 'Current Generation',
                 data: generationMapped,
-                backgroundColor: 'rgba(54, 162, 235, 0.85)',
-                borderColor: 'rgb(54, 162, 235)',
-                borderWidth: 2,
-                stack: 'capacity'
+                backgroundColor: generationBackgroundColors,
+                borderColor: generationBorderColors,
+                borderWidth: 1.5,
+                stack: 'capacity',
+                borderRadius: 8,
+                borderSkipped: false
               },
               {
-                label: 'Available Capacity (MW)',
+                label: 'Spare Capacity',
                 data: remainingCapacity,
-                backgroundColor: 'rgba(200, 200, 200, 0.4)',
-                borderColor: 'rgb(150, 150, 150)',
+                backgroundColor: spareBackgroundColors,
+                borderColor: spareBorderColors,
                 borderWidth: 1,
-                stack: 'capacity'
+                stack: 'capacity',
+                borderRadius: { topLeft: 8, topRight: 8 },
+                borderSkipped: false
               }
             ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+              padding: { top: 8, right: 12, bottom: 0, left: 4 }
+            },
             scales: {
-              x: { stacked: true },
-              y: { beginAtZero: true, stacked: true }
+              x: {
+                stacked: true,
+                grid: { display: false, drawBorder: false },
+                ticks: {
+                  color: '#475569',
+                  font: { size: 11, weight: 600 },
+                  maxRotation: 0,
+                  autoSkip: false
+                }
+              },
+              y: {
+                beginAtZero: true,
+                stacked: true,
+                grid: {
+                  color: 'rgba(148, 163, 184, 0.25)',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: '#475569',
+                  callback: value => formatMwValue(value)
+                },
+                title: {
+                  display: true,
+                  text: 'Megawatts (MW)',
+                  color: '#1e293b',
+                  font: { size: 12, weight: 600 }
+                }
+              }
             },
             plugins: {
-              legend: { display: true },
+              legend: {
+                position: 'top',
+                labels: {
+                  color: '#1f2937',
+                  usePointStyle: true,
+                  padding: 18,
+                  font: { size: 11, weight: 500 }
+                }
+              },
               tooltip: {
+                padding: 12,
                 callbacks: {
-                  label: function(context) {
-                    const datasetIndex = context.datasetIndex
-                    if (datasetIndex === 0) {
-                      const value = context.parsed.y
-                      const capacity = capacityValues[context.dataIndex]
-                      const percentage = capacity > 0 ? ((value / capacity) * 100).toFixed(1) : 0
-                      return `Current Generation: ${value.toFixed(0)} MW (${percentage}%)`
-                    } else {
-                      return `Available Capacity: ${context.parsed.y.toFixed(0)} MW`
+                  label: context => {
+                    const index = context.dataIndex
+                    if (context.datasetIndex === 0) {
+                      const value = context.parsed.y || 0
+                      const utilisation = utilizationRates[index] || 0
+                      return `Generation: ${formatMwValue(value)} MW (${formatPercentValue(utilisation)})`
                     }
+                    const spare = context.parsed.y || 0
+                    const capacity = capacityValues[index] || 0
+                    const idleShare = capacity > 0 ? (spare / capacity) * 100 : 0
+                    return `Spare: ${formatMwValue(spare)} MW (${formatPercentValue(idleShare)})`
                   },
-                  footer: function(tooltipItems) {
-                    if (tooltipItems.length > 0) {
-                      const index = tooltipItems[0].dataIndex
-                      const total = capacityValues[index]
-                      return `Total Installed: ${total.toFixed(0)} MW`
-                    }
+                  footer: tooltipItems => {
+                    if (!tooltipItems.length) return ''
+                    const index = tooltipItems[0].dataIndex
+                    const installed = capacityValues[index] || 0
+                    const share = capacityShares[index] || 0
+                    return `Installed: ${formatMwValue(installed)} MW (${formatPercentValue(share)})`
                   }
                 }
               }
-            }
+            },
+            interaction: { mode: 'index', intersect: false }
           }
         }))
-    
-      } else if (modal.type === 'generation') {       
+
+        requestAnimationFrame(() => {
+          this.resizeSeparateModalChart(modalId)
+          if (modal.chart) {
+            modal.chart.update('none')
+          }
+        })
+
+      } else if (modal.type === 'generation') {
 
           // Build a stacked area chart for generation by technology
           const items = Array.isArray(modal.data)
@@ -1838,11 +2048,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const canvas = document.getElementById('separate-chart-' + modalId)
       if (!canvas) return
 
+      if (modal.type === 'capacity' || modal.type === 'generation') {
+        modal.chart.resize()
+        return
+      }
+
       // Calculate available space
-      const headerHeight = 40  // Modal header height  
+      const headerHeight = 40  // Modal header height
       const padding = 24       // Modal content padding (12px * 2)
-      const availableWidth = modal.size.width - (padding * 2)
-      const availableHeight = modal.size.height - headerHeight - (padding * 2)
+      const availableWidth = Math.max(0, modal.size.width - (padding * 2))
+      const availableHeight = Math.max(0, modal.size.height - headerHeight - (padding * 2))
 
       // Update canvas container size
       const container = canvas.parentElement
@@ -3743,6 +3958,214 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   margin-left: 6px;
   color: #475569;
   font-size: 10px;
+}
+
+.capacity-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.capacity-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #334155;
+  font-size: 12px;
+}
+
+.capacity-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.capacity-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+}
+
+.capacity-metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.capacity-metric-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.capacity-updated {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.capacity-top-techs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.capacity-tech-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.capacity-tech-color {
+  width: 10px;
+  height: 36px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
+}
+
+.capacity-tech-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.capacity-tech-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.capacity-tech-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.capacity-tech-share {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.capacity-tech-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 11px;
+  color: #334155;
+}
+
+.capacity-tech-generation {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.capacity-chart {
+  flex: 0 0 auto;
+  height: clamp(220px, 32vh, 340px);
+  min-height: 220px;
+  min-width: 0;
+  padding: 8px 4px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+}
+
+.capacity-breakdown {
+  border-radius: 12px;
+  background: #f1f5f9;
+  padding: 8px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.capacity-breakdown-header {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) repeat(3, minmax(90px, 1fr));
+  padding: 0 16px 6px;
+  font-size: 11px;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.capacity-breakdown-column {
+  text-align: right;
+}
+
+.capacity-breakdown-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) repeat(3, minmax(90px, 1fr));
+  gap: 8px;
+  padding: 8px 16px;
+  align-items: center;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.capacity-breakdown-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.capacity-breakdown-tech {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.capacity-breakdown-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.15);
+}
+
+.capacity-breakdown-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.capacity-breakdown-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.capacity-breakdown-share {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.capacity-breakdown-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #1e293b;
+  text-align: right;
 }
 
 :global(.delta-tooltip) {
