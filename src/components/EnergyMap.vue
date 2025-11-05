@@ -474,6 +474,7 @@ export default {
       resizeDirection: null,
       separateModalDragState: {},  // Track drag state for each modal
       separateModalResizeState: {}, // Track resize state for each modal
+      modalChartResizeRafs: {},
       layerByISO2: {},               // iso2 -> Leaflet layer
       showChangeTooltips: false,      // enable/disable delta bubbles
       deltaHideTimer: null,
@@ -1329,8 +1330,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         if (modal.chart) {
           modal.chart.destroy()
         }
+        if (this.modalChartResizeRafs[modalId]) {
+          cancelAnimationFrame(this.modalChartResizeRafs[modalId])
+          delete this.modalChartResizeRafs[modalId]
+        }
         this.separateModals.splice(modalIndex, 1)
-        
+
         // Clean up drag/resize state
         delete this.separateModalDragState[modalId]
         delete this.separateModalResizeState[modalId]
@@ -1454,7 +1459,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     onSeparateModalResize(event, modalId) {
       const resizeState = this.separateModalResizeState[modalId]
       const modal = this.separateModals.find(m => m.id === modalId)
-      
+
       if (!resizeState?.isResizing || !modal) return
 
       const deltaX = event.clientX - resizeState.startX
@@ -1501,6 +1506,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       // Apply the constrained dimensions
       modal.size.width = newWidth
       modal.size.height = newHeight
+
+      this.queueModalChartResize(modalId)
     },
 
     // Stop resizing separate modal
@@ -1512,17 +1519,31 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       resizeState.direction = null
       document.removeEventListener('mousemove', (e) => this.onSeparateModalResize(e, modalId))
       document.removeEventListener('mouseup', () => this.stopSeparateModalResize(modalId))
-      // ADDED: Trigger chart resize after modal resize
-      this.$nextTick(() => {
-        requestAnimationFrame(() => {
-          this.resizeSeparateModalChart(modalId)
-          if (modal.chart) {
-            modal.chart.update('none')
-          }
-        })
-      })
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) modal.userModified = true
+      this.queueModalChartResize(modalId)
+    },
+
+    queueModalChartResize(modalId) {
+      if (!this.modalChartResizeRafs) {
+        this.modalChartResizeRafs = {}
+      }
+      if (this.modalChartResizeRafs[modalId]) {
+        cancelAnimationFrame(this.modalChartResizeRafs[modalId])
+      }
+
+      this.$nextTick(() => {
+        this.modalChartResizeRafs[modalId] = requestAnimationFrame(() => {
+          const modal = this.separateModals.find(m => m.id === modalId)
+          if (!modal?.chart) {
+            delete this.modalChartResizeRafs[modalId]
+            return
+          }
+          this.resizeSeparateModalChart(modalId)
+          modal.chart.update('none')
+          delete this.modalChartResizeRafs[modalId]
+        })
+      })
     },
 
 
@@ -1701,11 +1722,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const formatMwValue = value => this.formatMegawatts(value)
         const formatPercentValue = value => this.formatPercent(value)
 
-        const desiredChartHeight = Math.max(220, Math.min(520, items.length * 40))
         const chartContainer = canvas.parentElement
         if (chartContainer) {
-          chartContainer.style.setProperty('--capacity-chart-height', `${desiredChartHeight}px`)
-          chartContainer.style.height = `${desiredChartHeight}px`
+          const recommendedHeight = Math.max(220, Math.min(520, items.length * 40))
+          chartContainer.style.setProperty('--capacity-chart-min-height', `${recommendedHeight}px`)
+          chartContainer.style.removeProperty('--capacity-chart-height')
+          chartContainer.style.removeProperty('height')
         }
 
         modal.chart = markRaw(new Chart(ctx, {
@@ -1814,13 +1836,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             interaction: { mode: 'index', intersect: false }
           }
         }))
-
-        requestAnimationFrame(() => {
-          this.resizeSeparateModalChart(modalId)
-          if (modal.chart) {
-            modal.chart.update('none')
-          }
-        })
 
       } else if (modal.type === 'generation') {
 
@@ -1976,9 +1991,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         modal.chart = markRaw(new Chart(ctx, cfg))
       }
-      this.$nextTick(() => {
-        this.resizeSeparateModalChart(modalId)
-      })
+      this.queueModalChartResize(modalId)
     },
 
     // Drag and resize methods
@@ -4093,9 +4106,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .capacity-chart {
-  flex: 0 0 auto;
-  height: var(--capacity-chart-height, clamp(220px, 32vh, 340px));
-  min-height: 220px;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: var(--capacity-chart-min-height, clamp(220px, 32vh, 360px));
   min-width: 0;
   padding: 8px 4px;
   border-radius: 12px;
