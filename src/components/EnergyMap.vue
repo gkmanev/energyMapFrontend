@@ -328,10 +328,10 @@ export default {
   data() {
     return {
       modalDefaults: {
-        width: 580,     // initial/default width
-        height: 420,    // initial/default height
-        minWidth: 580,  // block resizing smaller than this width
-        minHeight: 420, // block resizing smaller than this height
+        width: 350,     // initial/default width
+        height: 280,    // initial/default height
+        minWidth: 200,  // block resizing smaller than this width
+        minHeight: 160, // block resizing smaller than this height
       },
       // Separate Modal System
       separateModals: [],
