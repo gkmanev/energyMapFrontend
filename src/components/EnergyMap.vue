@@ -863,6 +863,16 @@ export default {
       return `${this.percentFormatter.format(bounded)}%`;
     },
 
+    normalizeTechnologyKey(name) {
+      if (!name) return ''
+      return String(name)
+        .trim()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+    },
+
     applyAlpha(color, alpha) {
       if (!color) {
         return `rgba(100, 116, 139, ${alpha})`
@@ -1663,11 +1673,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const iso2 = this.getCountryISO2ByName(modal.country)
 
         const generationByTech = await this.getGenerationByTechnology(iso2)
-        const generationMapped = items.map(item => Number(generationByTech[item.psr_name]) || 0)
+        const generationMapped = items.map(item => {
+          const name = item.psr_name || item.psr_type || 'Unknown'
+          const normalized = this.normalizeTechnologyKey(name)
+          const value = generationByTech[name]
+          if (typeof value === 'number') return value
+          if (normalized && typeof generationByTech[normalized] === 'number') {
+            return generationByTech[normalized]
+          }
+          return 0
+        })
 
         const remainingCapacity = capacityValues.map((cap, i) => {
+          const installed = cap || 0
           const gen = generationMapped[i] || 0
-          return Math.max(0, cap - gen)
+          return Math.max(0, installed - gen)
         })
 
         const totalCapacity = capacityValues.reduce((sum, value) => sum + (value || 0), 0)
@@ -1810,6 +1830,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               },
               tooltip: {
                 padding: 12,
+                mode: 'nearest',
+                intersect: true,
                 callbacks: {
                   label: context => {
                     const index = context.dataIndex
@@ -1833,7 +1855,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 }
               }
             },
-            interaction: { mode: 'index', intersect: false }
+            interaction: { mode: 'nearest', axis: 'y', intersect: true }
           }
         }))
 
@@ -2745,13 +2767,20 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const generationByTech = await this.getGenerationByTechnology(iso2)
 
       const generationMapped = items.map(item => {
-        const genValue = generationByTech[item.psr_name] || 0
-        return genValue
+        const name = item.psr_name || item.psr_type || 'Unknown'
+        const normalized = this.normalizeTechnologyKey(name)
+        const direct = generationByTech[name]
+        if (typeof direct === 'number') return direct
+        if (normalized && typeof generationByTech[normalized] === 'number') {
+          return generationByTech[normalized]
+        }
+        return 0
       })
 
       const remainingCapacity = capacityValues.map((cap, i) => {
+        const installed = Number(cap) || 0
         const gen = generationMapped[i] || 0
-        return Math.max(0, cap - gen)
+        return Math.max(0, installed - gen)
       })
 
       const ctx = canvas.getContext('2d')
@@ -2824,27 +2853,45 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     async getGenerationByTechnology(iso2) {
       if (!iso2) return {}
-      
+
       try {
-        
+
         const url = `https://api.visualize.energy/api/generation/yesterday?country=${encodeURIComponent(iso2)}`
         const { data } = await axios.get(url)
-        const byTech = {}
-        if (Array.isArray(data.items)) {
-          const now = new Date()
-          now.setTime(now.getTime() - (24 * 60 * 60 * 1000))
-          now.setMinutes(0, 0, 0)
-          const currentTimeISO = now.toISOString().split('.')[0] + 'Z'
-          for (const item of data.items) {
-            const tech = item.psr_name || item.psr_type || 'Unknown'
-            const gen = Number(item.generation_mw) || 0
-            const itemDate = item.datetime_utc
-            if (currentTimeISO === itemDate) {
-              byTech[tech] = gen
-            }
+
+        if (!Array.isArray(data.items) || !data.items.length) {
+          return {}
+        }
+
+        const latestByTech = new Map()
+        const updateEntry = (key, value, timestamp) => {
+          if (!key) return
+          const existing = latestByTech.get(key)
+          if (!existing || timestamp > existing.timestamp) {
+            latestByTech.set(key, { value, timestamp })
           }
         }
-        
+
+        for (const item of data.items) {
+          const timestamp = Date.parse(item.datetime_utc)
+          if (!Number.isFinite(timestamp)) continue
+
+          const tech = item.psr_name || item.psr_type || 'Unknown'
+          const value = Number(item.generation_mw) || 0
+
+          updateEntry(tech, value, timestamp)
+
+          const normalized = this.normalizeTechnologyKey(tech)
+          if (normalized && normalized !== tech) {
+            updateEntry(normalized, value, timestamp)
+          }
+        }
+
+        const byTech = {}
+        latestByTech.forEach((entry, key) => {
+          byTech[key] = entry.value
+        })
+
         return byTech
       } catch (e) {
         console.error(`Failed to get generation for ${iso2}`, e)
