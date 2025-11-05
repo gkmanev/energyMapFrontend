@@ -136,6 +136,10 @@
 
             <!-- Capacity modal: enriched layout with summary + breakdown -->
             <div v-else-if="modal.type === 'capacity'" class="capacity-modal">
+              <div class="chart-container capacity-chart">
+                <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
+
               <div v-if="modal.meta" class="capacity-summary">
                 <div class="capacity-metrics">
                   <div class="capacity-metric">
@@ -152,10 +156,6 @@
                   </div>
                 </div>
                 <div v-if="modal.meta.updatedLabel" class="capacity-updated">{{ modal.meta.updatedLabel }}</div>
-              </div>
-
-              <div class="chart-container capacity-chart">
-                <canvas :id="'separate-chart-' + modal.id"></canvas>
               </div>
 
               <div
@@ -1738,12 +1738,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               x: {
                 stacked: true,
                 grid: { display: false, drawBorder: false },
-                ticks: {
-                  color: '#475569',
-                  font: { size: 11, weight: 600 },
-                  maxRotation: 0,
-                  autoSkip: false
-                }
+                ticks: { display: false }
               },
               y: {
                 beginAtZero: true,
