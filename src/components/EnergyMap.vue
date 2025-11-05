@@ -1660,8 +1660,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const palettes = items.map(item => this.psrColors[item.psr_name] || defaultPalette)
         const generationBackgroundColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.85))
         const generationBorderColors = palettes.map(p => p.border || defaultPalette.border)
-        const spareBackgroundColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.18))
-        const spareBorderColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.35))
+        const capacityBackgroundColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.18))
+        const capacityBorderColors = palettes.map(p => this.applyAlpha(p.border || defaultPalette.border, 0.35))
 
         const legendItems = items.map((item, index) => ({
           name: item.psr_name,
@@ -1701,6 +1701,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const formatMwValue = value => this.formatMegawatts(value)
         const formatPercentValue = value => this.formatPercent(value)
 
+        const desiredChartHeight = Math.max(220, Math.min(520, items.length * 40))
+        const chartContainer = canvas.parentElement
+        if (chartContainer) {
+          chartContainer.style.setProperty('--capacity-chart-height', `${desiredChartHeight}px`)
+          chartContainer.style.height = `${desiredChartHeight}px`
+        }
+
         modal.chart = markRaw(new Chart(ctx, {
           type: 'bar',
           data: {
@@ -1717,13 +1724,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 borderSkipped: false
               },
               {
-                label: 'Spare Capacity',
+                label: 'Capacity',
                 data: remainingCapacity,
-                backgroundColor: spareBackgroundColors,
-                borderColor: spareBorderColors,
+                backgroundColor: capacityBackgroundColors,
+                borderColor: capacityBorderColors,
                 borderWidth: 1,
                 stack: 'capacity',
-                borderRadius: { topLeft: 8, topRight: 8 },
+                borderRadius: 8,
                 borderSkipped: false
               }
             ]
@@ -1731,16 +1738,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            indexAxis: 'y',
             layout: {
               padding: { top: 8, right: 12, bottom: 0, left: 4 }
             },
             scales: {
               x: {
-                stacked: true,
-                grid: { display: false, drawBorder: false },
-                ticks: { display: false }
-              },
-              y: {
                 beginAtZero: true,
                 stacked: true,
                 grid: {
@@ -1756,6 +1759,20 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                   text: 'Megawatts (MW)',
                   color: '#1e293b',
                   font: { size: 12, weight: 600 }
+                }
+              },
+              y: {
+                stacked: true,
+                grid: {
+                  display: false,
+                  drawBorder: false
+                },
+                ticks: {
+                  color: '#1f2937',
+                  autoSkip: false,
+                  maxRotation: 0,
+                  minRotation: 0,
+                  font: { size: 11 }
                 }
               }
             },
@@ -1775,14 +1792,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                   label: context => {
                     const index = context.dataIndex
                     if (context.datasetIndex === 0) {
-                      const value = context.parsed.y || 0
+                      const value = context.parsed.x || 0
                       const utilisation = utilizationRates[index] || 0
                       return `Generation: ${formatMwValue(value)} MW (${formatPercentValue(utilisation)})`
                     }
-                    const spare = context.parsed.y || 0
+                    const spare = context.parsed.x || 0
                     const capacity = capacityValues[index] || 0
                     const idleShare = capacity > 0 ? (spare / capacity) * 100 : 0
-                    return `Spare: ${formatMwValue(spare)} MW (${formatPercentValue(idleShare)})`
+                    return `Capacity: ${formatMwValue(spare)} MW (${formatPercentValue(idleShare)})`
                   },
                   footer: tooltipItems => {
                     if (!tooltipItems.length) return ''
@@ -3177,9 +3194,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .separate-modal-content {
   flex: 1;
   padding: 12px;
-  overflow: hidden; /* instead of auto */
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
 .separate-modal-loading {
@@ -4075,13 +4094,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .capacity-chart {
   flex: 0 0 auto;
-  height: clamp(220px, 32vh, 340px);
+  height: var(--capacity-chart-height, clamp(220px, 32vh, 340px));
   min-height: 220px;
   min-width: 0;
   padding: 8px 4px;
   border-radius: 12px;
   background: #ffffff;
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+  position: relative;
 }
 
 .capacity-breakdown {
