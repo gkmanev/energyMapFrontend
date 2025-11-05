@@ -91,7 +91,50 @@
               />
             </div>
 
-            <!-- Other chart modals (capacity, generation, prices…) -->
+            <!-- Generation modal: custom layout for small viewports -->
+            <div v-else-if="modal.type === 'generation'" class="generation-modal">
+              <div v-if="modal.meta" class="generation-summary">
+                <div class="generation-total">
+                  <span class="generation-total-label">Total output</span>
+                  <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
+                </div>
+                <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
+              </div>
+              <div
+                v-if="modal.meta && modal.meta.topTechnologies.length"
+                class="generation-top-techs"
+              >
+                <div
+                  v-for="tech in modal.meta.topTechnologies"
+                  :key="tech.name"
+                  class="generation-tech-pill"
+                >
+                  <span class="generation-tech-color" :style="{ backgroundColor: tech.color }"></span>
+                  <span class="generation-tech-name">{{ tech.name }}</span>
+                  <span class="generation-tech-value">{{ formatMegawatts(tech.value) }} MW</span>
+                  <span class="generation-tech-share">({{ formatPercent(tech.share) }})</span>
+                </div>
+              </div>
+              <div class="chart-container generation-chart">
+                <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
+              <div v-if="modal.meta && modal.meta.legendItems.length" class="generation-legend">
+                <div class="generation-legend-grid">
+                  <div
+                    v-for="item in modal.meta.legendItems"
+                    :key="item.name"
+                    class="generation-legend-item"
+                  >
+                    <span class="generation-legend-swatch" :style="{ backgroundColor: item.color }"></span>
+                    <span class="generation-legend-name">{{ item.name }}</span>
+                    <span class="generation-legend-value">{{ formatMegawatts(item.value) }} MW</span>
+                    <span class="generation-legend-share">{{ formatPercent(item.share) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Other chart modals (capacity, prices…) -->
             <div v-else class="chart-container">
               <canvas :id="'separate-chart-' + modal.id"></canvas>
             </div>
@@ -422,6 +465,11 @@ export default {
         'Biomass':     { border: '#6ba292', fill: 'rgba(107,162,146,0.45)' },
         'Waste':       { border: '#b56576', fill: 'rgba(181,101,118,0.45)' }
       },
+      mwFormatter: new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }),
+      percentFormatter: new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1
+      }),
 
       countryPriceByISO2: {},
       priceByISO2: {},
@@ -726,6 +774,17 @@ export default {
   },
 
   methods: {
+
+    formatMegawatts(value) {
+      if (value == null || Number.isNaN(value)) return '0';
+      return this.mwFormatter.format(Math.round(value));
+    },
+
+    formatPercent(value) {
+      if (value == null || Number.isNaN(value)) return '0%';
+      const bounded = Math.max(0, Math.min(100, value));
+      return `${this.percentFormatter.format(bounded)}%`;
+    },
 
     // --- 2x2 grid helper ----------------------------------------------------
     // Returns {x,y} for a given slotIndex in a 2×2 grid.
@@ -1108,6 +1167,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         error: null,
         chart: null,
         data: null,
+        meta: null,
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
         userModified: false
@@ -1361,6 +1421,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       try {
         modal.loading = true
         modal.error = null
+        modal.meta = null
 
         let data
         if (type === 'capacity') {
@@ -1542,21 +1603,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       } else if (modal.type === 'generation') {       
 
           // Build a stacked area chart for generation by technology
-          const items = JSON.parse(JSON.stringify(modal.data));
-          
+          const items = Array.isArray(modal.data)
+            ? JSON.parse(JSON.stringify(modal.data))
+            : [];
+
           // Extract unique sorted timestamps
           const timestamps = Array.from(
             new Set(items.map(i => Date.parse(i.datetime_utc)))
           ).sort((a, b) => a - b);
+
+          const latestTimestamp = timestamps[timestamps.length - 1] || null;
 
           // Group generation MW by technology and timestamp
           const byTech = new Map();
           items.forEach(i => {
             const tech = i.psr_name || i.psr_type || 'Unknown';
             const time = Date.parse(i.datetime_utc);
+            if (!Number.isFinite(time)) return;
             if (!byTech.has(tech)) byTech.set(tech, new Map());
             byTech.get(tech).set(time, Number(i.generation_mw) || 0);
           });
+
+          const techSummaries = [];
 
           // Assemble datasets with proper x,y format for time series
           const datasets = [];
@@ -1566,6 +1634,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               x: ts,
               y: series.get(ts) || 0
             }));
+            const latestValue = latestTimestamp ? (series.get(latestTimestamp) || 0) : 0;
+            techSummaries.push({
+              name: tech,
+              value: latestValue,
+              color: color.border
+            });
             datasets.push({
               label: tech,
               data,
@@ -1578,6 +1652,27 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               tension: 0.25
             });
           });
+
+          const totalGeneration = techSummaries.reduce((sum, entry) => sum + (entry.value || 0), 0);
+          const sortedSummaries = techSummaries
+            .slice()
+            .sort((a, b) => (b.value || 0) - (a.value || 0));
+
+          const legendItems = sortedSummaries.map(entry => ({
+            name: entry.name,
+            value: entry.value || 0,
+            share: totalGeneration > 0 ? (entry.value / totalGeneration) * 100 : 0,
+            color: entry.color
+          }));
+
+          modal.meta = {
+            totalGeneration,
+            topTechnologies: legendItems.slice(0, 3),
+            legendItems,
+            updatedLabel: latestTimestamp
+              ? `Latest reading: ${new Date(latestTimestamp).toLocaleString()}`
+              : ''
+          };
 
           const cfg = {
             type: 'line',
@@ -1602,7 +1697,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 }
               },
               plugins: {
-                legend: { position: 'bottom' },
+                legend: { display: false },
                 tooltip: { mode: 'index', intersect: false }
               },
               interaction: {
@@ -3536,6 +3631,128 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .chart-container canvas {
   width: 100% !important;
   height: 100% !important;
+}
+.generation-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.generation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #334155;
+  order: 0;
+}
+.generation-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.generation-total-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+.generation-total-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.generation-top-techs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  order: 1;
+}
+.generation-tech-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+  font-size: 11px;
+  color: #0f172a;
+}
+.generation-tech-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.generation-tech-share {
+  color: #475569;
+  font-size: 10px;
+}
+.generation-updated {
+  font-size: 10px;
+  color: #94a3b8;
+}
+.generation-chart {
+  flex: 1;
+  min-height: 160px;
+  min-width: 0;
+  order: 2;
+}
+.generation-legend {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 4px 2px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  order: 3;
+}
+.generation-legend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+}
+.generation-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: white;
+  font-size: 11px;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.generation-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.generation-legend-name {
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.generation-legend-value {
+  margin-left: auto;
+  font-weight: 600;
+  color: #0f172a;
+}
+.generation-legend-share {
+  margin-left: 6px;
+  color: #475569;
+  font-size: 10px;
+}
+
+@media (max-width: 400px) {
+  .generation-top-techs {
+    order: 4;
+  }
 }
 :global(.delta-tooltip) {
   background: rgba(0,0,0,0.75) !important;
