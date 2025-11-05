@@ -21,10 +21,11 @@ import EnergyMap from './components/EnergyMap.vue'
   -moz-osx-font-smoothing: grayscale;
   height: 100vh;
   overflow: hidden;
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
 body {
   margin: 0;
-  background: #1a1a1a;
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
 }
 </style>

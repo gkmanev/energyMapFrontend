@@ -1,5 +1,5 @@
 <template>
-  <div id="app">
+  <div id="app" class="energy-map-app">
     <!-- Loading overlay for initial load -->
     <div v-if="initialLoading" class="initial-loading-overlay">
       <div class="loading-content">
@@ -2680,7 +2680,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 <style scoped>
 /* App container */
-#app {
+.energy-map-app {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: #2c3e50;
   margin: 0;
@@ -2688,6 +2688,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
 /* Compact header */
