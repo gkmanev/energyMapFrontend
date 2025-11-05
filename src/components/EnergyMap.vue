@@ -154,6 +154,10 @@
                 <div v-if="modal.meta.updatedLabel" class="capacity-updated">{{ modal.meta.updatedLabel }}</div>
               </div>
 
+              <div class="chart-container capacity-chart">
+                <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
+
               <div
                 v-if="modal.meta && modal.meta.topTechnologies.length"
                 class="capacity-top-techs"
@@ -175,10 +179,6 @@
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <div class="chart-container capacity-chart">
-                <canvas :id="'separate-chart-' + modal.id"></canvas>
               </div>
 
               <div
@@ -1514,7 +1514,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       document.removeEventListener('mouseup', () => this.stopSeparateModalResize(modalId))
       // ADDED: Trigger chart resize after modal resize
       this.$nextTick(() => {
-        this.resizeSeparateModalChart(modalId)
+        requestAnimationFrame(() => {
+          this.resizeSeparateModalChart(modalId)
+          if (modal.chart) {
+            modal.chart.update('none')
+          }
+        })
       })
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) modal.userModified = true
@@ -1798,7 +1803,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           }
         }))
 
-        this.resizeSeparateModalChart(modalId)
+        requestAnimationFrame(() => {
+          this.resizeSeparateModalChart(modalId)
+          if (modal.chart) {
+            modal.chart.update('none')
+          }
+        })
 
       } else if (modal.type === 'generation') {
 
@@ -2038,11 +2048,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const canvas = document.getElementById('separate-chart-' + modalId)
       if (!canvas) return
 
+      if (modal.type === 'capacity' || modal.type === 'generation') {
+        modal.chart.resize()
+        return
+      }
+
       // Calculate available space
-      const headerHeight = 40  // Modal header height  
+      const headerHeight = 40  // Modal header height
       const padding = 24       // Modal content padding (12px * 2)
-      const availableWidth = modal.size.width - (padding * 2)
-      const availableHeight = modal.size.height - headerHeight - (padding * 2)
+      const availableWidth = Math.max(0, modal.size.width - (padding * 2))
+      const availableHeight = Math.max(0, modal.size.height - headerHeight - (padding * 2))
 
       // Update canvas container size
       const container = canvas.parentElement
@@ -4000,6 +4015,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .capacity-tech-card {
@@ -4063,8 +4079,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .capacity-chart {
-  flex: 1;
-  min-height: 200px;
+  flex: 0 0 auto;
+  height: clamp(220px, 32vh, 340px);
+  min-height: 220px;
   min-width: 0;
   padding: 8px 4px;
   border-radius: 12px;
