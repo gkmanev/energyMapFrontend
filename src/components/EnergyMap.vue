@@ -2972,16 +2972,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-radius: 8px;
-  padding: 10px 15px;
+  padding: 6px 12px;
   box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   z-index: 1001;
-  max-height: 145px;
-} 
+  max-height: 120px;
+}
 
 .time-slider-overlay h3 {
-  margin: 0 0 6px 0;
-  font-size: 14px;
+  margin: 0 0 4px 0;
+  font-size: 13px;
   font-weight: 600;
   color: #2d3748;
 }
@@ -2990,8 +2990,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-  font-size: 12px;
+  margin-bottom: 6px;
+  font-size: 11px;
 }
 
 .time-display {
@@ -3006,13 +3006,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .slider-wrapper {
   position: relative;
-  height: 55px;
-  margin: 5px 0;
+  height: 45px;
+  margin: 4px 0;
 }
 
 .custom-slider {
   position: relative;
-  height: 28px;
+  height: 24px;
   margin: 0;
 }
 
@@ -3022,7 +3022,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   left: 0;
   right: 0;
   width: 100%;
-  height: 28px;
+  height: 24px;
   transform: translateY(-50%);
   background: transparent;
   outline: none;
@@ -3033,7 +3033,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .smooth-range-slider::-webkit-slider-track {
-  height: 6px;
+  height: 4px;
   background: transparent;
   border: none;
   border-radius: 3px;
@@ -3041,53 +3041,54 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .smooth-range-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #667eea;
   cursor: grab;
   border: 2px solid white;
-  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
   transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .smooth-range-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
+  transform: scale(1.05);
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.5);
 }
 
 .smooth-range-slider::-webkit-slider-thumb:active {
   cursor: grabbing;
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.8);
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.7);
 }
 
 .smooth-range-slider::-moz-range-track {
-  height: 6px;
+  height: 4px;
   background: transparent;
   border: none;
   border-radius: 3px;
 }
 
 .smooth-range-slider::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #667eea;
   cursor: grab;
   border: 2px solid white;
-  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
   transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .smooth-range-slider::-moz-range-thumb:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
+  transform: scale(1.05);
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.5);
 }
 
 .smooth-range-slider::-moz-range-thumb:active {
   cursor: grabbing;
-  transform: scale(1.05);
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.7);
 }
 
 .slider-track {
@@ -3095,7 +3096,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   top: 50%;
   left: 0;
   right: 0;
-  height: 6px;
+  height: 4px;
   background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e0 100%);
   border-radius: 3px;
   transform: translateY(-50%);
@@ -3106,7 +3107,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   position: absolute;
   top: 50%;
   left: 0;
-  height: 6px;
+  height: 4px;
   background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
   border-radius: 3px 0 0 3px;
   transform: translateY(-50%);
@@ -3271,20 +3272,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .play-controls {
   display: flex;
   justify-content: left;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  gap: 8px;
 }
 
 .play-button {
-  padding: 6px 16px;
+  padding: 4px 12px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  border-radius: 20px;
+  border-radius: 16px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
 }
 
 .play-button:hover:not(:disabled) {
@@ -3326,28 +3328,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .header {
     padding: 8px 15px;
   }
-  
+
   .header h1 {
     font-size: 1.6rem;
   }
-  
+
   .controls {
     gap: 10px;
     margin-top: 6px;
   }
-  
+
   .slider-wrapper {
-    height: 50px;
+    height: 42px;
   }
-  
+
   .smooth-range-slider::-webkit-slider-thumb {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
   }
-  
+
   .smooth-range-slider::-moz-range-thumb {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
   }
   
   .tick-label-below {
@@ -3504,9 +3506,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .show-pct-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 10px;
-  font-size: 13px;
+  gap: 4px;
+  margin-left: 0;
+  font-size: 12px;
   color: #2c3e50;
 }
 .play-button + .show-pct-toggle input[type="checkbox"] {
