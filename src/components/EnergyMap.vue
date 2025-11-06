@@ -384,6 +384,48 @@ const BULK_REQUEST_CONFIG = {
   retry: 2,
   retryDelay: 1000
 }
+
+const COUNTRY_FLAG_EMOJI = {
+  AL: '🇦🇱',
+  AT: '🇦🇹',
+  BA: '🇧🇦',
+  BE: '🇧🇪',
+  BG: '🇧🇬',
+  CH: '🇨🇭',
+  CY: '🇨🇾',
+  CZ: '🇨🇿',
+  DE: '🇩🇪',
+  DK: '🇩🇰',
+  EE: '🇪🇪',
+  ES: '🇪🇸',
+  FI: '🇫🇮',
+  FR: '🇫🇷',
+  GB: '🇬🇧',
+  GR: '🇬🇷',
+  HR: '🇭🇷',
+  HU: '🇭🇺',
+  IE: '🇮🇪',
+  IS: '🇮🇸',
+  IT: '🇮🇹',
+  LT: '🇱🇹',
+  LU: '🇱🇺',
+  LV: '🇱🇻',
+  MD: '🇲🇩',
+  ME: '🇲🇪',
+  MK: '🇲🇰',
+  MT: '🇲🇹',
+  NL: '🇳🇱',
+  NO: '🇳🇴',
+  PL: '🇵🇱',
+  PT: '🇵🇹',
+  RO: '🇷🇴',
+  RS: '🇷🇸',
+  SE: '🇸🇪',
+  SI: '🇸🇮',
+  SK: '🇸🇰',
+  TR: '🇹🇷',
+  UA: '🇺🇦'
+}
 import PowerFlow from "@/components/PowerFlow.vue";
 import LocalClock from "@/components/LocalClock.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
@@ -459,7 +501,12 @@ export default {
       resizeStartY: 0,
       resizeStartWidth: 0,
       resizeStartHeight: 0,
-      
+
+      flagLayerGroup: null,
+      flagMarkersByISO2: {},
+      layerCentroidByISO2: {},
+      flagUpdatePending: false,
+
       // Heatmap type controls - Price is default
       heatmapType: 'prices',
       isRefreshing: false,
@@ -810,7 +857,8 @@ export default {
           this.hideAllDeltaTooltips();
         }
         this.updateColorScheme()
-       
+        this.updateFlagVisibility()
+
       },
       immediate: false
     },
@@ -818,9 +866,18 @@ export default {
     currentTimeIndex: {
       handler() {
         this.updateColorScheme()
-        if (this.showChangeTooltips) this.updateDeltaTooltips();      
-      },      
+        if (this.showChangeTooltips) this.updateDeltaTooltips();
+      },
     },
+
+    countriesGeoJson: {
+      handler() {
+        this.layerCentroidByISO2 = {}
+        this.flagMarkersByISO2 = {}
+        this.scheduleFlagMarkersRefresh()
+      },
+      deep: false
+    }
   },
 
   methods: {
@@ -876,6 +933,98 @@ export default {
       }
 
       return color
+    },
+
+    scheduleFlagMarkersRefresh() {
+      if (this.flagUpdatePending) return
+      this.flagUpdatePending = true
+      this.$nextTick(() => {
+        this.flagUpdatePending = false
+        this.updateFlagMarkers()
+      })
+    },
+
+    ensureFlagLayerGroup() {
+      if (!this.map) return null
+      if (!this.flagLayerGroup) {
+        this.flagLayerGroup = L.layerGroup()
+      }
+      return this.flagLayerGroup
+    },
+
+    updateFlagMarkers() {
+      if (!this.map || !this.countriesGeoJson) return
+
+      const group = this.ensureFlagLayerGroup()
+      if (!group) return
+
+      group.clearLayers()
+      const markers = {}
+
+      for (const feature of this.countriesGeoJson.features) {
+        const iso2 = this.getCountryISO2(feature)
+        if (!iso2) continue
+
+        const center = this.layerCentroidByISO2[iso2] || this.computeFeatureCenter(feature)
+        const icon = this.createFlagIcon(iso2)
+
+        if (!center || !icon) continue
+
+        const marker = L.marker(center, {
+          icon,
+          interactive: false,
+          pane: 'flagPane'
+        })
+
+        marker.addTo(group)
+        markers[iso2] = marker
+      }
+
+      this.flagMarkersByISO2 = markers
+      this.updateFlagVisibility()
+    },
+
+    updateFlagVisibility() {
+      if (!this.map || !this.flagLayerGroup) return
+
+      const hasLayer = this.map.hasLayer(this.flagLayerGroup)
+      if (this.heatmapType === 'prices') {
+        if (!hasLayer) {
+          this.flagLayerGroup.addTo(this.map)
+        }
+      } else if (hasLayer) {
+        this.map.removeLayer(this.flagLayerGroup)
+      }
+    },
+
+    createFlagIcon(iso2) {
+      const flagEmoji = this.getFlagEmoji(iso2)
+      if (!flagEmoji) return null
+
+      return L.divIcon({
+        className: 'country-flag-icon',
+        html: `<span class="country-flag">${flagEmoji}</span>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      })
+    },
+
+    getFlagEmoji(iso2) {
+      if (!iso2) return null
+      return COUNTRY_FLAG_EMOJI[iso2.toUpperCase()] || null
+    },
+
+    computeFeatureCenter(feature) {
+      try {
+        const layer = L.geoJSON(feature)
+        const bounds = layer.getBounds()
+        if (bounds && bounds.isValid && bounds.isValid()) {
+          return bounds.getCenter()
+        }
+      } catch (error) {
+        console.warn('Failed to compute feature center for flags:', error)
+      }
+      return null
     },
 
     // --- 2x2 grid helper ----------------------------------------------------
@@ -2576,6 +2725,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'
         )
         this.countriesGeoJson = markRaw(response.data)
+        this.layerCentroidByISO2 = {}
+        this.flagMarkersByISO2 = {}
+        this.scheduleFlagMarkersRefresh()
       } catch (err) {
         console.error('Error loading countries data:', err)
       }
@@ -2700,6 +2852,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const iso2Key = vm.getCountryISO2(feature);
         if (iso2Key) {
           vm.layerByISO2[iso2Key] = layer;
+          try {
+            const bounds = layer.getBounds()
+            if (bounds && bounds.isValid && bounds.isValid()) {
+              vm.layerCentroidByISO2[iso2Key] = bounds.getCenter()
+            }
+          } catch (err) {
+            console.warn('Failed to capture country centroid for flags:', err)
+          }
+          vm.scheduleFlagMarkersRefresh()
         }
       } catch (error) {
         console.error('Error setting up layer events:', error)
@@ -2723,13 +2884,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
 
-    onMapReady(mapObject) { 
+    onMapReady(mapObject) {
       this.map = mapObject
       if (!this.map.getPane('flowsPane')) {
         this.map.createPane('flowsPane')
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
       }
- 
+
+      if (!this.map.getPane('flagPane')) {
+        const pane = this.map.createPane('flagPane')
+        pane.style.zIndex = 645
+        pane.style.pointerEvents = 'none'
+      }
+
+      this.ensureFlagLayerGroup()
+      this.updateFlagMarkers()
+      this.updateFlagVisibility()
+
     },
 
     async renderCapacityChart() {
@@ -3033,12 +3204,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     
     if (this.priceTimer) clearInterval(this.priceTimer)
     if (this.playInterval) clearInterval(this.playInterval)
-    
+
     // Clean up drag/resize listeners
     document.removeEventListener('mousemove', this.onDrag)
     document.removeEventListener('mouseup', this.stopDrag)
     document.removeEventListener('mousemove', this.onResize)
     document.removeEventListener('mouseup', this.stopResize)
+
+    if (this.map && this.flagLayerGroup) {
+      this.map.removeLayer(this.flagLayerGroup)
+      this.flagLayerGroup = null
+    }
   }
 }
 </script>
@@ -4191,5 +4367,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .powerflow-modal-body > * {
   flex: 1;
+}
+
+:global(.country-flag-icon) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.25);
+  pointer-events: none;
+}
+
+:global(.country-flag-icon .country-flag) {
+  font-size: 18px;
+  line-height: 1;
 }
 </style>
