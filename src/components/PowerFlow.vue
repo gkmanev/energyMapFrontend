@@ -242,18 +242,18 @@ export default {
       const ux = dx / len
       const uy = dy / len
 
-      // pull export labels outward, but push import labels slightly inward so
-      // they stay inside the viewport (e.g. Greece at the very top)
+      // keep labels hugging the neighbour nodes: export labels sit just
+      // outside the circle, import labels tuck just inside
       const radialDir = kind === 'export' ? 1 : -1
-      const radialDistance = this.neighbourRadius + 12
-      let mx = nb.x + ux * radialDistance * radialDir
-      let my = nb.y + uy * radialDistance * radialDir
+      const radialOffset = this.neighbourRadius + 6
+      let mx = nb.x + ux * radialOffset * radialDir
+      let my = nb.y + uy * radialOffset * radialDir
 
       // perpendicular offset keeps import/export labels separated
       const nx = -uy
       const ny = ux
       const side = kind === 'export' ? 1 : -1
-      const offsetSide = 18
+      const offsetSide = 16
       mx += nx * offsetSide * side
       my += ny * offsetSide * side
 
