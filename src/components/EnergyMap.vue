@@ -1032,6 +1032,12 @@ export default {
 
     computeFeatureCenter(feature) {
       try {
+        const geometry = feature?.geometry || null
+        const preferred = this._preferredGeometryCenter(geometry)
+        if (preferred) {
+          return preferred
+        }
+
         const layer = L.geoJSON(feature)
         const bounds = layer.getBounds()
         if (bounds && bounds.isValid && bounds.isValid()) {
@@ -1041,6 +1047,121 @@ export default {
         console.warn('Failed to compute feature center for flags:', error)
       }
       return null
+    },
+
+    _preferredGeometryCenter(geometry) {
+      if (!geometry) return null
+
+      const { type, coordinates, geometries } = geometry
+
+      if (type === 'Polygon') {
+        const result = this._centroidForPolygon(coordinates)
+        return result ? result.latLng : null
+      }
+
+      if (type === 'MultiPolygon') {
+        let best = null
+        for (const polygonCoords of coordinates || []) {
+          const candidate = this._centroidForPolygon(polygonCoords)
+          if (candidate && (!best || candidate.area > best.area)) {
+            best = candidate
+          }
+        }
+        return best ? best.latLng : null
+      }
+
+      if (type === 'Point') {
+        const [lng, lat] = coordinates || []
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          return L.latLng(lat, lng)
+        }
+        return null
+      }
+
+      if (type === 'MultiPoint') {
+        let sumLat = 0
+        let sumLng = 0
+        let count = 0
+        for (const coord of coordinates || []) {
+          const [lng, lat] = coord || []
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            sumLat += lat
+            sumLng += lng
+            count += 1
+          }
+        }
+        if (count > 0) {
+          return L.latLng(sumLat / count, sumLng / count)
+        }
+        return null
+      }
+
+      if (type === 'GeometryCollection') {
+        for (const geom of geometries || []) {
+          const candidate = this._preferredGeometryCenter(geom)
+          if (candidate) return candidate
+        }
+      }
+
+      return null
+    },
+
+    _centroidForPolygon(polygonCoords) {
+      if (!Array.isArray(polygonCoords) || polygonCoords.length === 0) {
+        return null
+      }
+
+      const outerRing = polygonCoords[0]
+      const result = this._centroidForLinearRing(outerRing)
+      if (!result) return null
+
+      const [lng, lat] = result.centroid
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null
+      }
+
+      return {
+        latLng: L.latLng(lat, lng),
+        area: result.area
+      }
+    },
+
+    _centroidForLinearRing(ring) {
+      if (!Array.isArray(ring) || ring.length < 4) {
+        return null
+      }
+
+      let doubleArea = 0
+      let centroidX = 0
+      let centroidY = 0
+
+      for (let i = 0; i < ring.length - 1; i += 1) {
+        const [x0, y0] = ring[i] || []
+        const [x1, y1] = ring[i + 1] || []
+        if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) {
+          continue
+        }
+        const cross = x0 * y1 - x1 * y0
+        doubleArea += cross
+        centroidX += (x0 + x1) * cross
+        centroidY += (y0 + y1) * cross
+      }
+
+      if (doubleArea === 0) {
+        return null
+      }
+
+      const cx = centroidX / (3 * doubleArea)
+      const cy = centroidY / (3 * doubleArea)
+
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+        return null
+      }
+
+      return {
+        centroid: [cx, cy],
+        area: Math.abs(doubleArea / 2)
+      }
     },
 
     // --- 2x2 grid helper ----------------------------------------------------
@@ -2869,9 +2990,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         if (iso2Key) {
           vm.layerByISO2[iso2Key] = layer;
           try {
-            const bounds = layer.getBounds()
-            if (bounds && bounds.isValid && bounds.isValid()) {
-              vm.layerCentroidByISO2[iso2Key] = bounds.getCenter()
+            const preferredCenter = vm.computeFeatureCenter(feature)
+            if (preferredCenter) {
+              vm.layerCentroidByISO2[iso2Key] = preferredCenter
+            } else {
+              const bounds = layer.getBounds()
+              if (bounds && bounds.isValid && bounds.isValid()) {
+                vm.layerCentroidByISO2[iso2Key] = bounds.getCenter()
+              }
             }
           } catch (err) {
             console.warn('Failed to capture country centroid for flags:', err)
