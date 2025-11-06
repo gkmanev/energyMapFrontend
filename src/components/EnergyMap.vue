@@ -181,33 +181,6 @@
                 </div>
               </div>
 
-              <div
-                v-if="modal.meta && modal.meta.legendItems.length"
-                class="capacity-breakdown"
-              >
-                <div class="capacity-breakdown-header">
-                  <span>Technology</span>
-                  <span class="capacity-breakdown-column">Installed</span>
-                  <span class="capacity-breakdown-column">Current</span>
-                  <span class="capacity-breakdown-column">Utilisation</span>
-                </div>
-                <div
-                  v-for="item in modal.meta.legendItems"
-                  :key="item.name"
-                  class="capacity-breakdown-row"
-                >
-                  <div class="capacity-breakdown-tech">
-                    <span class="capacity-breakdown-swatch" :style="{ backgroundColor: item.color }"></span>
-                    <div class="capacity-breakdown-labels">
-                      <span class="capacity-breakdown-name">{{ item.name }}</span>
-                      <span class="capacity-breakdown-share">{{ formatPercent(item.capacityShare) }} of capacity</span>
-                    </div>
-                  </div>
-                  <span class="capacity-breakdown-value">{{ formatMegawatts(item.capacity) }} MW</span>
-                  <span class="capacity-breakdown-value">{{ formatMegawatts(item.generation) }} MW</span>
-                  <span class="capacity-breakdown-value">{{ formatPercent(item.utilization) }}</span>
-                </div>
-              </div>
             </div>
 
             <!-- Other chart modals (capacity, prices…) -->
@@ -1762,7 +1735,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 borderColor: generationBorderColors,
                 borderWidth: 1.5,
                 stack: 'capacity',
-                borderRadius: 8,
+                borderRadius: {
+                  topLeft: 0,
+                  bottomLeft: 0,
+                  topRight: 0,
+                  bottomRight: 0
+                },
                 borderSkipped: false
               },
               {
@@ -1772,7 +1750,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 borderColor: capacityBorderColors,
                 borderWidth: 1,
                 stack: 'capacity',
-                borderRadius: 8,
+                borderRadius: {
+                  topLeft: 0,
+                  bottomLeft: 0,
+                  topRight: 12,
+                  bottomRight: 12
+                },
                 borderSkipped: false
               }
             ]
@@ -4162,85 +4145,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   background: #ffffff;
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
   position: relative;
-}
-
-.capacity-breakdown {
-  border-radius: 12px;
-  background: #f1f5f9;
-  padding: 8px 0;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.capacity-breakdown-header {
-  display: grid;
-  grid-template-columns: minmax(160px, 2fr) repeat(3, minmax(90px, 1fr));
-  padding: 0 16px 6px;
-  font-size: 11px;
-  color: #475569;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
-}
-
-.capacity-breakdown-column {
-  text-align: right;
-}
-
-.capacity-breakdown-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 2fr) repeat(3, minmax(90px, 1fr));
-  gap: 8px;
-  padding: 8px 16px;
-  align-items: center;
-  font-size: 12px;
-  color: #0f172a;
-}
-
-.capacity-breakdown-row:nth-child(even) {
-  background: rgba(255, 255, 255, 0.65);
-}
-
-.capacity-breakdown-tech {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.capacity-breakdown-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.15);
-}
-
-.capacity-breakdown-labels {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.capacity-breakdown-name {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.capacity-breakdown-share {
-  font-size: 10px;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.capacity-breakdown-value {
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: #1e293b;
-  text-align: right;
 }
 
 :global(.delta-tooltip) {
