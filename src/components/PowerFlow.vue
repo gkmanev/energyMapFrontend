@@ -242,26 +242,15 @@ export default {
       const ux = dx / len
       const uy = dy / len
 
-      // points on edges
-      const sx = this.cx + ux * this.centerRadius
-      const sy = this.cy + uy * this.centerRadius
-      const ex = nb.x - ux * this.neighbourRadius
-      const ey = nb.y - uy * this.neighbourRadius
+      // start just outside the neighbour node so the label hugs the border
+      let mx = nb.x + ux * (this.neighbourRadius + 12)
+      let my = nb.y + uy * (this.neighbourRadius + 12)
 
-      // mid along line
-      let mx = (sx + ex) / 2
-      let my = (sy + ey) / 2
-
-      // move a bit outwards from center
-      const pushAlong = 6
-      mx += ux * pushAlong
-      my += uy * pushAlong
-
-      // perpendicular offset – big enough so text never touches the line
+      // perpendicular offset keeps import/export labels separated
       const nx = -uy
       const ny = ux
       const side = kind === 'export' ? 1 : -1
-      const offsetSide = 26   // <– larger than before
+      const offsetSide = 18
       mx += nx * offsetSide * side
       my += ny * offsetSide * side
 
@@ -388,7 +377,7 @@ export default {
     stroke-dashoffset: 0;
   }
   to {
-    stroke-dashoffset: -40;
+    stroke-dashoffset: 40;
   }
 }
 
@@ -397,7 +386,7 @@ export default {
     stroke-dashoffset: 0;
   }
   to {
-    stroke-dashoffset: 40;
+    stroke-dashoffset: -40;
   }
 }
 
