@@ -998,14 +998,30 @@ export default {
     },
 
     createFlagIcon(iso2) {
-      const flagEmoji = this.getFlagEmoji(iso2)
-      if (!flagEmoji) return null
+      if (!iso2) return null
+
+      const isoLower = iso2.toLowerCase()
+      const fallbackEmoji = this.getFlagEmoji(iso2)
+      const fallbackText = fallbackEmoji || iso2.toUpperCase()
+      const fallbackHtml = `<span class="flag-emoji-fallback">${fallbackText}</span>`
+      const onErrorHandler = "this.style.display='none'; if (this.nextElementSibling) { this.nextElementSibling.style.display='flex'; }"
 
       return L.divIcon({
         className: 'country-flag-icon',
-        html: `<span class="country-flag">${flagEmoji}</span>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
+        html: `
+          <span class="country-flag">
+            <img
+              src="https://flagcdn.com/w40/${isoLower}.png"
+              srcset="https://flagcdn.com/w80/${isoLower}.png 2x"
+              alt="${iso2.toUpperCase()} flag"
+              loading="lazy"
+              onerror="${onErrorHandler}"
+            />
+            ${fallbackHtml}
+          </span>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
       })
     },
 
@@ -4373,17 +4389,41 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 1px solid rgba(15, 23, 42, 0.2);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.25);
   pointer-events: none;
 }
 
 :global(.country-flag-icon .country-flag) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+}
+
+:global(.country-flag-icon .country-flag img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+:global(.country-flag-icon .flag-emoji-fallback) {
+  display: none;
+  align-items: center;
+  justify-content: center;
   font-size: 18px;
   line-height: 1;
+  width: 100%;
+  height: 100%;
 }
 </style>
