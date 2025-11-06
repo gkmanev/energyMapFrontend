@@ -242,26 +242,18 @@ export default {
       const ux = dx / len
       const uy = dy / len
 
-      // points on edges
-      const sx = this.cx + ux * this.centerRadius
-      const sy = this.cy + uy * this.centerRadius
-      const ex = nb.x - ux * this.neighbourRadius
-      const ey = nb.y - uy * this.neighbourRadius
+      // pull export labels outward, but push import labels slightly inward so
+      // they stay inside the viewport (e.g. Greece at the very top)
+      const radialDir = kind === 'export' ? 1 : -1
+      const radialDistance = this.neighbourRadius + 12
+      let mx = nb.x + ux * radialDistance * radialDir
+      let my = nb.y + uy * radialDistance * radialDir
 
-      // mid along line
-      let mx = (sx + ex) / 2
-      let my = (sy + ey) / 2
-
-      // move a bit outwards from center
-      const pushAlong = 6
-      mx += ux * pushAlong
-      my += uy * pushAlong
-
-      // perpendicular offset – big enough so text never touches the line
+      // perpendicular offset keeps import/export labels separated
       const nx = -uy
       const ny = ux
       const side = kind === 'export' ? 1 : -1
-      const offsetSide = 26   // <– larger than before
+      const offsetSide = 18
       mx += nx * offsetSide * side
       my += ny * offsetSide * side
 
@@ -364,6 +356,14 @@ export default {
   fill: #e5e7eb;
 }
 
+.pf-label-text {
+  font-size: 11px;
+  font-weight: 500;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  fill: #f1f5f9;
+}
+
 /* arrows */
 .pf-link {
   fill: none;
@@ -388,7 +388,7 @@ export default {
     stroke-dashoffset: 0;
   }
   to {
-    stroke-dashoffset: -40;
+    stroke-dashoffset: 40;
   }
 }
 
@@ -397,7 +397,7 @@ export default {
     stroke-dashoffset: 0;
   }
   to {
-    stroke-dashoffset: 40;
+    stroke-dashoffset: -40;
   }
 }
 
