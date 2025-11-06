@@ -245,7 +245,7 @@ export default {
       // keep labels hugging the neighbour nodes: export labels sit just
       // outside the circle, import labels tuck just inside
       const radialDir = kind === 'export' ? 1 : -1
-      const radialOffset = this.neighbourRadius + 6
+      const radialOffset = this.neighbourRadius + 17
       let mx = nb.x + ux * radialOffset * radialDir
       let my = nb.y + uy * radialOffset * radialDir
 
@@ -253,7 +253,7 @@ export default {
       const nx = -uy
       const ny = ux
       const side = kind === 'export' ? 1 : -1
-      const offsetSide = 16
+      const offsetSide = 26
       mx += nx * offsetSide * side
       my += ny * offsetSide * side
 
