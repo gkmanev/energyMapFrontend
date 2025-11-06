@@ -242,9 +242,12 @@ export default {
       const ux = dx / len
       const uy = dy / len
 
-      // start just outside the neighbour node so the label hugs the border
-      let mx = nb.x + ux * (this.neighbourRadius + 12)
-      let my = nb.y + uy * (this.neighbourRadius + 12)
+      // pull export labels outward, but push import labels slightly inward so
+      // they stay inside the viewport (e.g. Greece at the very top)
+      const radialDir = kind === 'export' ? 1 : -1
+      const radialDistance = this.neighbourRadius + 12
+      let mx = nb.x + ux * radialDistance * radialDir
+      let my = nb.y + uy * radialDistance * radialDir
 
       // perpendicular offset keeps import/export labels separated
       const nx = -uy
@@ -351,6 +354,14 @@ export default {
   text-anchor: middle;
   dominant-baseline: central;
   fill: #e5e7eb;
+}
+
+.pf-label-text {
+  font-size: 11px;
+  font-weight: 500;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  fill: #f1f5f9;
 }
 
 /* arrows */
