@@ -316,11 +316,18 @@ export default {
     itemsForHour(items, target) {
       if (!Array.isArray(items) || items.length === 0) return []
 
+      const targetIso = `${target.toISOString().slice(0, 19)}Z`
+      const exact = items.filter((item) => item?.datetime_utc === targetIso)
+      if (exact.length > 0) {
+        return exact
+      }
+
       const targetMs = target.getTime()
       const grouped = new Map()
 
       for (const item of items) {
         const ts =
+          item?.datetime_utc ||
           item?.period_start ||
           item?.datetime ||
           item?.time ||
