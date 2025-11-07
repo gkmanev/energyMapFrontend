@@ -235,11 +235,8 @@ export default {
       this.loading = true
       this.error = null
       try {
-        const { start, end, target } = this.currentHourRange()
-        const params = new URLSearchParams({
-          start: start.toISOString(),
-          end: end.toISOString(),
-        })
+        const target = this.currentHourTarget()
+        const params = new URLSearchParams({ period: 'today' })
         const neighbours = COUNTRY_NEIGHBOURS[this.countryIso] || []
         const countrySet = new Set([this.countryIso, ...neighbours])
         params.set('countries', Array.from(countrySet).join(','))
@@ -309,14 +306,11 @@ export default {
       return `translate(${mx},${my})`
     },
 
-    currentHourRange() {
+    currentHourTarget() {
       const now = new Date()
       const target = new Date(now)
       target.setUTCMinutes(0, 0, 0)
-      const start = new Date(target)
-      const end = new Date(target)
-      end.setUTCHours(end.getUTCHours() + 1)
-      return { start, end, target }
+      return target
     },
 
     itemsForHour(items, target) {
