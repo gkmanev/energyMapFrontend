@@ -115,6 +115,23 @@ const ISO_BY_EIC = Object.fromEntries(
   Object.entries(EIC_BY_ISO).map(([iso, eic]) => [eic, iso]),
 )
 
+const COUNTRY_NEIGHBOURS = {
+  BG: ['GR', 'MK', 'RO', 'RS', 'TR'],
+  BY: ['LT', 'PL', 'UA'],
+  CZ: ['DE', 'PL', 'SK'],
+  DE: ['CZ', 'PL', 'SE'],
+  GR: ['BG', 'MK', 'TR'],
+  LT: ['BY', 'PL', 'SE'],
+  MK: ['BG', 'GR', 'RS'],
+  PL: ['BY', 'CZ', 'DE', 'LT', 'SE', 'SK', 'UA'],
+  RO: ['BG', 'RS', 'UA'],
+  RS: ['BG', 'MK', 'RO'],
+  SE: ['DE', 'LT', 'PL'],
+  SK: ['CZ', 'PL', 'UA'],
+  TR: ['BG', 'GR'],
+  UA: ['BY', 'PL', 'RO', 'SK'],
+}
+
 const NAME_BY_ISO = {
   BG: 'Bulgaria',
   BY: 'Belarus',
@@ -183,7 +200,12 @@ export default {
     },
     neighbours() {
       const r = 110
-      const isos = Object.keys(EIC_BY_ISO).filter((i) => i !== this.countryIso)
+      const configured = COUNTRY_NEIGHBOURS[this.countryIso] || []
+      const dynamic = Object.keys(this.aggregated).filter(
+        (iso) => iso !== this.countryIso && !configured.includes(iso),
+      )
+      const isos = [...configured, ...dynamic]
+      if (isos.length === 0) return []
       const step = (2 * Math.PI) / isos.length
       return isos.map((iso, i) => {
         const angle = i * step - Math.PI / 2
@@ -218,7 +240,8 @@ export default {
           start: start.toISOString(),
           end: end.toISOString(),
         })
-        const countrySet = new Set([this.countryIso, ...Object.keys(EIC_BY_ISO)])
+        const neighbours = COUNTRY_NEIGHBOURS[this.countryIso] || []
+        const countrySet = new Set([this.countryIso, ...neighbours])
         params.set('countries', Array.from(countrySet).join(','))
         const url = `${this.apiBaseUrl}/api/flows/range/?${params.toString()}`
         const res = await fetch(url)
