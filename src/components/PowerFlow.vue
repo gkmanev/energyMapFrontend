@@ -217,8 +217,9 @@ export default {
         const params = new URLSearchParams({
           start: start.toISOString(),
           end: end.toISOString(),
-          countries: this.countryIso,
         })
+        const countrySet = new Set([this.countryIso, ...Object.keys(EIC_BY_ISO)])
+        params.set('countries', Array.from(countrySet).join(','))
         const url = `${this.apiBaseUrl}/api/flows/range/?${params.toString()}`
         const res = await fetch(url)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
