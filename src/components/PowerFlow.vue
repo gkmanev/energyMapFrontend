@@ -96,11 +96,19 @@
 <script>
 const EIC_BY_ISO = {
   BG: '10YCA-BULGARIA-R',
+  BY: '10YBY-BELENERGO--5',
+  CZ: '10YCZ-CEPS-----N',
+  DE: '10Y1001A1001A82H',
   GR: '10YGR-HTSO-----Y',
+  LT: '10YLT-LITGRID--A',
   MK: '10YMK-MEPSO----8',
-  TR: '10YTR-TEIAS----W',
+  PL: '10YPL-AREA-----S',
   RO: '10YRO-TEL------P',
   RS: '10YCS-SERBIATSOV',
+  SE: '10YSE-4--------9',
+  SK: '10YSK-SEPS-----K',
+  TR: '10YTR-TEIAS----W',
+  UA: '10YUA-WEPS-----0',
 }
 
 const ISO_BY_EIC = Object.fromEntries(
@@ -109,11 +117,19 @@ const ISO_BY_EIC = Object.fromEntries(
 
 const NAME_BY_ISO = {
   BG: 'Bulgaria',
+  BY: 'Belarus',
+  CZ: 'Czechia',
+  DE: 'Germany',
   GR: 'Greece',
+  LT: 'Lithuania',
   MK: 'North Macedonia',
-  TR: 'Türkiye',
+  PL: 'Poland',
   RO: 'Romania',
   RS: 'Serbia',
+  SE: 'Sweden',
+  SK: 'Slovakia',
+  TR: 'Türkiye',
+  UA: 'Ukraine',
 }
 
 export default {
