@@ -115,6 +115,23 @@ const ISO_BY_EIC = Object.fromEntries(
   Object.entries(EIC_BY_ISO).map(([iso, eic]) => [eic, iso]),
 )
 
+const COUNTRY_NEIGHBOURS = {
+  BG: ['GR', 'MK', 'RO', 'RS', 'TR'],
+  BY: ['LT', 'PL', 'UA'],
+  CZ: ['DE', 'PL', 'SK'],
+  DE: ['CZ', 'PL', 'SE'],
+  GR: ['BG', 'MK', 'TR'],
+  LT: ['BY', 'PL', 'SE'],
+  MK: ['BG', 'GR', 'RS'],
+  PL: ['BY', 'CZ', 'DE', 'LT', 'SE', 'SK', 'UA'],
+  RO: ['BG', 'RS', 'UA'],
+  RS: ['BG', 'MK', 'RO'],
+  SE: ['DE', 'LT', 'PL'],
+  SK: ['CZ', 'PL', 'UA'],
+  TR: ['BG', 'GR'],
+  UA: ['BY', 'PL', 'RO', 'SK'],
+}
+
 const NAME_BY_ISO = {
   BG: 'Bulgaria',
   BY: 'Belarus',
@@ -183,7 +200,12 @@ export default {
     },
     neighbours() {
       const r = 110
-      const isos = Object.keys(EIC_BY_ISO).filter((i) => i !== this.countryIso)
+      const configured = COUNTRY_NEIGHBOURS[this.countryIso] || []
+      const dynamic = Object.keys(this.aggregated).filter(
+        (iso) => iso !== this.countryIso && !configured.includes(iso),
+      )
+      const isos = [...configured, ...dynamic]
+      if (isos.length === 0) return []
       const step = (2 * Math.PI) / isos.length
       return isos.map((iso, i) => {
         const angle = i * step - Math.PI / 2
@@ -213,13 +235,24 @@ export default {
       this.loading = true
       this.error = null
       try {
-        const url = `${this.apiBaseUrl}/api/flows/latest/?country=${encodeURIComponent(
-          this.countryIso,
-        )}`
+        const { start, end, target } = this.currentHourRange()
+        const params = new URLSearchParams({
+          start: start.toISOString(),
+          end: end.toISOString(),
+        })
+        const neighbours = COUNTRY_NEIGHBOURS[this.countryIso] || []
+        const countrySet = new Set([this.countryIso, ...neighbours])
+        params.set('countries', Array.from(countrySet).join(','))
+        const url = `${this.apiBaseUrl}/api/flows/range/?${params.toString()}`
         const res = await fetch(url)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = await res.json()
-        this.items = json.items || []
+        const rawItems = Array.isArray(json.items)
+          ? json.items
+          : Array.isArray(json.data)
+            ? json.data
+            : []
+        this.items = this.itemsForHour(rawItems, target)
       } catch (e) {
         this.error = e.message || 'Failed to load flows'
       } finally {
@@ -274,6 +307,89 @@ export default {
       my += ny * offsetSide * side
 
       return `translate(${mx},${my})`
+    },
+
+    currentHourRange() {
+      const now = new Date()
+      const target = new Date(now)
+      target.setUTCMinutes(0, 0, 0)
+      const start = new Date(target)
+      const end = new Date(target)
+      end.setUTCHours(end.getUTCHours() + 1)
+      return { start, end, target }
+    },
+
+    itemsForHour(items, target) {
+      if (!Array.isArray(items) || items.length === 0) return []
+
+      const targetMs = target.getTime()
+      const grouped = new Map()
+
+      for (const item of items) {
+        const ts =
+          item?.period_start ||
+          item?.datetime ||
+          item?.time ||
+          item?.interval_start ||
+          item?.timestamp ||
+          null
+
+        if (!ts) {
+          if (!grouped.has('unknown')) grouped.set('unknown', [])
+          grouped.get('unknown').push(item)
+          continue
+        }
+
+        const ms = Date.parse(ts)
+        if (Number.isNaN(ms)) {
+          if (!grouped.has('unknown')) grouped.set('unknown', [])
+          grouped.get('unknown').push(item)
+          continue
+        }
+
+        if (!grouped.has(ms)) grouped.set(ms, [])
+        grouped.get(ms).push(item)
+      }
+
+      if (grouped.size === 0) return []
+
+      const exactOrBefore = [...grouped.keys()]
+        .filter((key) => key !== 'unknown' && Number(key) <= targetMs)
+        .map(Number)
+
+      let bestKey = null
+      let bestDiff = Infinity
+
+      for (const key of exactOrBefore) {
+        const diff = targetMs - key
+        if (diff < bestDiff) {
+          bestDiff = diff
+          bestKey = key
+        }
+      }
+
+      if (bestKey === null) {
+        const allKnown = [...grouped.keys()]
+          .filter((key) => key !== 'unknown')
+          .map(Number)
+        for (const key of allKnown) {
+          const diff = Math.abs(targetMs - key)
+          if (diff < bestDiff) {
+            bestDiff = diff
+            bestKey = key
+          }
+        }
+      }
+
+      if (bestKey !== null && grouped.has(bestKey)) {
+        return grouped.get(bestKey)
+      }
+
+      if (grouped.has('unknown')) {
+        return grouped.get('unknown')
+      }
+
+      return []
     },
   },
 }
