@@ -432,7 +432,7 @@ export default {
     stroke-dashoffset: 0;
   }
   to {
-    stroke-dashoffset: 40;
+    stroke-dashoffset: -40;
   }
 }
 
