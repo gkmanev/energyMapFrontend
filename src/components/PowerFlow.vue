@@ -235,12 +235,8 @@ export default {
       this.loading = true
       this.error = null
       try {
-        const target = this.currentHourTarget()
-        const params = new URLSearchParams({ period: 'today' })
-        const neighbours = COUNTRY_NEIGHBOURS[this.countryIso] || []
-        const countrySet = new Set([this.countryIso, ...neighbours])
-        params.set('countries', Array.from(countrySet).join(','))
-        const url = `${this.apiBaseUrl}/api/flows/range/?${params.toString()}`
+        const params = new URLSearchParams({ country: this.countryIso, neighbors: '1' })
+        const url = `${this.apiBaseUrl}/api/flows/latest/?${params.toString()}`
         const res = await fetch(url)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = await res.json()
@@ -249,7 +245,7 @@ export default {
           : Array.isArray(json.data)
             ? json.data
             : []
-        this.items = this.itemsForHour(rawItems, target)
+        this.items = rawItems
       } catch (e) {
         this.error = e.message || 'Failed to load flows'
       } finally {
@@ -306,92 +302,6 @@ export default {
       return `translate(${mx},${my})`
     },
 
-    currentHourTarget() {
-      const now = new Date()
-      const target = new Date(now)
-      target.setUTCMinutes(0, 0, 0)
-      return target
-    },
-
-    itemsForHour(items, target) {
-      if (!Array.isArray(items) || items.length === 0) return []
-
-      const targetIso = `${target.toISOString().slice(0, 19)}Z`
-      const exact = items.filter((item) => item?.datetime_utc === targetIso)
-      if (exact.length > 0) {
-        return exact
-      }
-
-      const targetMs = target.getTime()
-      const grouped = new Map()
-
-      for (const item of items) {
-        const ts =
-          item?.datetime_utc ||
-          item?.period_start ||
-          item?.datetime ||
-          item?.time ||
-          item?.interval_start ||
-          item?.timestamp ||
-          null
-
-        if (!ts) {
-          if (!grouped.has('unknown')) grouped.set('unknown', [])
-          grouped.get('unknown').push(item)
-          continue
-        }
-
-        const ms = Date.parse(ts)
-        if (Number.isNaN(ms)) {
-          if (!grouped.has('unknown')) grouped.set('unknown', [])
-          grouped.get('unknown').push(item)
-          continue
-        }
-
-        if (!grouped.has(ms)) grouped.set(ms, [])
-        grouped.get(ms).push(item)
-      }
-
-      if (grouped.size === 0) return []
-
-      const exactOrBefore = [...grouped.keys()]
-        .filter((key) => key !== 'unknown' && Number(key) <= targetMs)
-        .map(Number)
-
-      let bestKey = null
-      let bestDiff = Infinity
-
-      for (const key of exactOrBefore) {
-        const diff = targetMs - key
-        if (diff < bestDiff) {
-          bestDiff = diff
-          bestKey = key
-        }
-      }
-
-      if (bestKey === null) {
-        const allKnown = [...grouped.keys()]
-          .filter((key) => key !== 'unknown')
-          .map(Number)
-        for (const key of allKnown) {
-          const diff = Math.abs(targetMs - key)
-          if (diff < bestDiff) {
-            bestDiff = diff
-            bestKey = key
-          }
-        }
-      }
-
-      if (bestKey !== null && grouped.has(bestKey)) {
-        return grouped.get(bestKey)
-      }
-
-      if (grouped.has('unknown')) {
-        return grouped.get('unknown')
-      }
-
-      return []
-    },
   },
 }
 </script>
@@ -507,6 +417,7 @@ export default {
 
 .pf-link-export {
   stroke: #22c55e;
+  stroke-dasharray: 6 6;
   animation: pf-flow-export 2.2s linear infinite;
 }
 
@@ -521,7 +432,7 @@ export default {
     stroke-dashoffset: 0;
   }
   to {
-    stroke-dashoffset: 40;
+    stroke-dashoffset: -40;
   }
 }
 
