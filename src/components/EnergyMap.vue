@@ -4072,6 +4072,37 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   100% { transform: rotate(360deg); }
 }
 
+@keyframes liquid-orbit {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes liquid-drift {
+  0% {
+    transform: rotate(0deg) translate3d(0, 0, 0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: rotate(140deg) translate3d(2%, -1%, 0);
+    opacity: 0.55;
+  }
+  80% {
+    transform: rotate(300deg) translate3d(-3%, 2%, 0);
+    opacity: 0.38;
+  }
+  100% {
+    transform: rotate(360deg) translate3d(0, 0, 0);
+    opacity: 0.45;
+  }
+}
+
 /* Leaflet fixes */
 :global(.custom-tooltip) {
   background: rgba(0,0,0,0.8) !important;
