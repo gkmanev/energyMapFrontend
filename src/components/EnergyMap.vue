@@ -3573,28 +3573,61 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 /* Separate Modal Styles */
 .separate-modal {
+  position: relative;
+  z-index: 0;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.25), transparent 45%),
-    rgba(15, 23, 42, 0.85);
-  border-radius: 14px;
+  background: rgba(12, 21, 38, 0.68);
+  border-radius: 18px;
   overflow: hidden;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  box-shadow: 0 24px 55px rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(26px) saturate(160%);
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow:
+    0 30px 70px rgba(8, 15, 32, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.45);
   color: #e2e8f0;
 }
 
+.separate-modal::before,
+.separate-modal::after {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background: conic-gradient(from 120deg, rgba(59, 130, 246, 0.15), rgba(236, 72, 153, 0.08), rgba(129, 140, 248, 0.18), rgba(14, 165, 233, 0.12), rgba(59, 130, 246, 0.15));
+  filter: blur(0);
+  opacity: 0.75;
+  mix-blend-mode: screen;
+  transform-origin: center;
+  animation: liquid-orbit 26s linear infinite;
+  pointer-events: none;
+}
+
+.separate-modal::after {
+  inset: -45%;
+  background: radial-gradient(circle at 25% 20%, rgba(255, 255, 255, 0.22), transparent 45%),
+    radial-gradient(circle at 80% 15%, rgba(59, 130, 246, 0.18), transparent 55%),
+    radial-gradient(circle at 55% 85%, rgba(14, 165, 233, 0.22), transparent 55%);
+  opacity: 0.35;
+  filter: blur(20px);
+  animation-duration: 34s;
+}
+
 .separate-modal-header {
-  background: linear-gradient(135deg, rgba(30, 64, 175, 0.78), rgba(59, 130, 246, 0.68));
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.95), rgba(79, 70, 229, 0.78));
   color: #f8fafc;
-  padding: 10px 14px;
+  padding: 12px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
-  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.15);
+  letter-spacing: 0.01em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(12, 18, 31, 0.85);
 }
 
 .separate-modal-header h4 {
@@ -3605,36 +3638,42 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .separate-modal-close {
-  background: rgba(15, 23, 42, 0.35);
-  border: 1px solid rgba(226, 232, 240, 0.35);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(79, 70, 229, 0.45));
+  border: 1px solid rgba(226, 232, 240, 0.45);
   color: #f8fafc;
   font-size: 16px;
   cursor: pointer;
   padding: 0;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+  border-radius: 999px;
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.35);
+  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .separate-modal-close:hover {
-  background-color: rgba(148, 163, 184, 0.32);
-  border-color: rgba(226, 232, 240, 0.55);
-  transform: scale(1.05);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.85), rgba(129, 140, 248, 0.88));
+  border-color: rgba(226, 232, 240, 0.7);
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 14px 28px rgba(99, 102, 241, 0.45);
 }
 
 .separate-modal-content {
+  position: relative;
+  z-index: 1;
   flex: 1;
-  padding: 14px;
+  padding: 18px;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.65), rgba(2, 6, 23, 0.82));
+  gap: 16px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .separate-modal-loading {
@@ -4034,6 +4073,37 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   100% { transform: rotate(360deg); }
 }
 
+@keyframes liquid-orbit {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes liquid-drift {
+  0% {
+    transform: rotate(0deg) translate3d(0, 0, 0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: rotate(140deg) translate3d(2%, -1%, 0);
+    opacity: 0.55;
+  }
+  80% {
+    transform: rotate(300deg) translate3d(-3%, 2%, 0);
+    opacity: 0.38;
+  }
+  100% {
+    transform: rotate(360deg) translate3d(0, 0, 0);
+    opacity: 0.45;
+  }
+}
+
 /* Leaflet fixes */
 :global(.custom-tooltip) {
   background: rgba(0,0,0,0.8) !important;
@@ -4294,13 +4364,34 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   height: 100%;
   position: relative;
   min-height: 150px;
-  padding: 14px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(2, 6, 23, 0.95));
-  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.16);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 18px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.58), rgba(3, 7, 18, 0.82));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.55),
+    0 12px 35px rgba(8, 15, 32, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  overflow: hidden;
+}
+
+.chart-container::before {
+  content: "";
+  position: absolute;
+  inset: -40% -60%;
+  background: radial-gradient(circle at 35% 30%, rgba(59, 130, 246, 0.28), transparent 55%),
+    radial-gradient(circle at 75% 70%, rgba(236, 72, 153, 0.18), transparent 60%),
+    conic-gradient(from 200deg, rgba(148, 163, 184, 0.18), rgba(15, 23, 42, 0));
+  opacity: 0.45;
+  transform-origin: center;
+  animation: liquid-drift 32s linear infinite;
+  pointer-events: none;
 }
 .chart-container canvas {
+  position: relative;
+  z-index: 1;
   width: 100% !important;
   height: 100% !important;
 }
