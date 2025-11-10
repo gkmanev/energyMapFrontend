@@ -2058,17 +2058,18 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 beginAtZero: true,
                 stacked: true,
                 grid: {
-                  color: 'rgba(148, 163, 184, 0.25)',
-                  drawBorder: false
+                  color: 'rgba(148, 163, 184, 0.2)',
+                  drawBorder: false,
+                  lineWidth: 1
                 },
                 ticks: {
-                  color: '#475569',
+                  color: '#e2e8f0',
                   callback: value => formatMwValue(value)
                 },
                 title: {
                   display: true,
                   text: 'Megawatts (MW)',
-                  color: '#1e293b',
+                  color: '#f8fafc',
                   font: { size: 12, weight: 600 }
                 }
               },
@@ -2079,7 +2080,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                   drawBorder: false
                 },
                 ticks: {
-                  color: '#1f2937',
+                  color: '#e2e8f0',
                   autoSkip: false,
                   maxRotation: 0,
                   minRotation: 0,
@@ -2091,7 +2092,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               legend: {
                 position: 'top',
                 labels: {
-                  color: '#1f2937',
+                  color: '#f8fafc',
                   usePointStyle: true,
                   padding: 18,
                   font: { size: 11, weight: 500 }
@@ -2101,6 +2102,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 padding: 12,
                 mode: 'nearest',
                 intersect: true,
+                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                titleColor: '#f8fafc',
+                bodyColor: '#e2e8f0',
+                borderColor: 'rgba(148, 163, 184, 0.35)',
+                borderWidth: 1,
                 callbacks: {
                   label: context => {
                     const index = context.dataIndex
@@ -2213,20 +2219,45 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               scales: {
                 x: {
                   type: 'time',
-                  time: { unit: 'hour', tooltipFormat: 'HH:mm' }
+                  time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+                  grid: {
+                    color: 'rgba(148, 163, 184, 0.14)',
+                    drawBorder: false
+                  },
+                  ticks: {
+                    color: '#cbd5f5'
+                  }
                 },
                 y: {
                   stacked: true,
                   beginAtZero: true,
-                  title: { display: true, text: 'Generation (MW)' },
+                  title: {
+                    display: true,
+                    text: 'Generation (MW)',
+                    color: '#f8fafc',
+                    font: { size: 12, weight: 600 }
+                  },
+                  grid: {
+                    color: 'rgba(148, 163, 184, 0.12)',
+                    drawBorder: false
+                  },
                   ticks: {
-                    callback: v => Intl.NumberFormat().format(v)
+                    callback: v => Intl.NumberFormat().format(v),
+                    color: '#cbd5f5'
                   }
                 }
               },
               plugins: {
                 legend: { display: false },
-                tooltip: { mode: 'index', intersect: false }
+                tooltip: {
+                  mode: 'index',
+                  intersect: false,
+                  backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                  titleColor: '#f8fafc',
+                  bodyColor: '#e2e8f0',
+                  borderColor: 'rgba(148, 163, 184, 0.35)',
+                  borderWidth: 1
+                }
               },
               interaction: {
                 mode: 'index',
@@ -2264,17 +2295,50 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             scales: {
               x: {
                 type: 'time',
-                time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' }
+                time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' },
+                grid: {
+                  color: 'rgba(148, 163, 184, 0.14)',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: '#cbd5f5'
+                }
               },
               y: {
                 beginAtZero: false,
-                title: { display: true, text: 'EUR/MWh' },
-                ticks: { callback: v => Intl.NumberFormat().format(v) }
+                title: {
+                  display: true,
+                  text: 'EUR/MWh',
+                  color: '#f8fafc',
+                  font: { size: 12, weight: 600 }
+                },
+                grid: {
+                  color: 'rgba(148, 163, 184, 0.12)',
+                  drawBorder: false
+                },
+                ticks: {
+                  callback: v => Intl.NumberFormat().format(v),
+                  color: '#cbd5f5'
+                }
               }
             },
             plugins: {
-              legend: { display: true, position: 'bottom' },
-              tooltip: { mode: 'index', intersect: false }
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  color: '#f8fafc'
+                }
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                titleColor: '#f8fafc',
+                bodyColor: '#e2e8f0',
+                borderColor: 'rgba(148, 163, 184, 0.35)',
+                borderWidth: 1
+              }
             },
             interaction: { mode: 'index', intersect: false }
           }
@@ -3511,90 +3575,103 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .separate-modal {
   display: flex;
   flex-direction: column;
-  background: white;
-  border-radius: 8px;
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.25), transparent 45%),
+    rgba(15, 23, 42, 0.85);
+  border-radius: 14px;
   overflow: hidden;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 24px 55px rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
 }
 
 .separate-modal-header {
-  background-color: #2c3e50;
-  color: white;
-  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.78), rgba(59, 130, 246, 0.68));
+  color: #f8fafc;
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
+  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.15);
 }
 
 .separate-modal-header h4 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .separate-modal-close {
-  background: none;
-  border: none;
-  color: white;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(226, 232, 240, 0.35);
+  color: #f8fafc;
   font-size: 16px;
   cursor: pointer;
   padding: 0;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: background-color 0.3s;
+  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
 }
 
 .separate-modal-close:hover {
-  background-color: rgba(255,255,255,0.2);
+  background-color: rgba(148, 163, 184, 0.32);
+  border-color: rgba(226, 232, 240, 0.55);
+  transform: scale(1.05);
 }
 
 .separate-modal-content {
   flex: 1;
-  padding: 12px;
+  padding: 14px;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.65), rgba(2, 6, 23, 0.82));
 }
 
 .separate-modal-loading {
   text-align: center;
-  color: #666;
+  color: #cbd5f5;
   font-size: 12px;
 }
 
 .separate-modal-error {
   text-align: center;
-  color: #e74c3c;
+  color: #fca5a5;
   font-size: 12px;
 }
 
 .separate-modal-error button {
-  background-color: #e74c3c;
-  color: white;
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.9), rgba(239, 68, 68, 0.85));
+  color: #f8fafc;
   border: none;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 5px 10px;
+  border-radius: 999px;
   cursor: pointer;
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 11px;
-  transition: background-color 0.3s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 18px rgba(248, 113, 113, 0.35);
 }
 
 .separate-modal-error button:hover {
-  background-color: #c0392b;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(248, 113, 113, 0.4);
 }
 
 .loading-spinner-small {
   width: 20px;
   height: 20px;
-  border: 2px solid #f3f3f3;
-  border-top: 2px solid #3498db;
+  border: 2px solid rgba(148, 163, 184, 0.28);
+  border-top: 2px solid rgba(96, 165, 250, 0.95);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 8px;
@@ -4217,6 +4294,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   height: 100%;
   position: relative;
   min-height: 150px;
+  padding: 14px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(2, 6, 23, 0.95));
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.18);
 }
 .chart-container canvas {
   width: 100% !important;
@@ -4225,33 +4307,33 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .generation-modal {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
 }
 .generation-summary {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
-  color: #334155;
+  color: #cbd5f5;
 }
 .generation-total {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .generation-total-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: rgba(148, 163, 184, 0.85);
 }
 .generation-total-value {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
-  color: #0f172a;
+  color: #f8fafc;
 }
 .generation-top-techs {
   display: flex;
@@ -4263,24 +4345,27 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  padding: 4px 10px;
-  background: #f8fafc;
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+  padding: 5px 12px;
+  background: rgba(15, 23, 42, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.32), 0 10px 24px rgba(15, 23, 42, 0.45);
   font-size: 11px;
-  color: #0f172a;
+  color: #e2e8f0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .generation-tech-color {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.45);
 }
 .generation-tech-share {
-  color: #475569;
+  color: rgba(226, 232, 240, 0.75);
   font-size: 10px;
 }
 .generation-updated {
   font-size: 10px;
-  color: #94a3b8;
+  color: rgba(148, 163, 184, 0.75);
 }
 .generation-chart {
   flex: 1;
@@ -4290,9 +4375,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .generation-legend {
   max-height: 150px;
   overflow-y: auto;
-  padding: 4px 2px;
-  border-radius: 8px;
-  background: #f1f5f9;
+  padding: 6px 4px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.2);
 }
 .generation-legend-grid {
   display: grid;
@@ -4302,13 +4389,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .generation-legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: white;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.8);
   font-size: 11px;
-  color: #0f172a;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  color: #e2e8f0;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.18);
 }
 .generation-legend-swatch {
   width: 10px;
@@ -4327,18 +4415,18 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .generation-legend-value {
   margin-left: auto;
   font-weight: 600;
-  color: #0f172a;
+  color: #f8fafc;
 }
 .generation-legend-share {
   margin-left: 6px;
-  color: #475569;
+  color: rgba(226, 232, 240, 0.7);
   font-size: 10px;
 }
 
 .capacity-modal {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   flex: 1;
   min-height: 0;
 }
@@ -4346,25 +4434,25 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .capacity-summary {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  color: #334155;
+  gap: 10px;
+  color: #cbd5f5;
   font-size: 12px;
 }
 
 .capacity-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .capacity-metric {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: #f8fafc;
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.24), 0 12px 28px rgba(15, 23, 42, 0.45);
 }
 
 .capacity-metric-label {
@@ -4372,70 +4460,71 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: rgba(148, 163, 184, 0.85);
 }
 
 .capacity-metric-value {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  color: #0f172a;
+  color: #f8fafc;
 }
 
 .capacity-updated {
   font-size: 10px;
-  color: #94a3b8;
+  color: rgba(148, 163, 184, 0.75);
 }
 
 .capacity-top-techs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .capacity-tech-card {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.8);
+  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.55);
   border: 1px solid rgba(148, 163, 184, 0.2);
-  flex: 1 1 220px;
+  flex: 1 1 240px;
   min-width: 0;
+  color: #e2e8f0;
 }
 
 .capacity-tech-color {
-  width: 10px;
-  height: 36px;
+  width: 12px;
+  height: 40px;
   border-radius: 999px;
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35);
 }
 
 .capacity-tech-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
 .capacity-tech-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   align-items: baseline;
 }
 
 .capacity-tech-name {
   font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: #f8fafc;
 }
 
 .capacity-tech-share {
   font-size: 10px;
-  color: #64748b;
+  color: rgba(226, 232, 240, 0.7);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -4443,13 +4532,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .capacity-tech-values {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 14px;
   font-size: 11px;
-  color: #334155;
+  color: rgba(226, 232, 240, 0.85);
 }
 
 .capacity-tech-generation {
-  color: #0f172a;
+  color: #f8fafc;
   font-weight: 500;
 }
 
@@ -4458,10 +4547,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   height: auto;
   min-height: var(--capacity-chart-min-height, clamp(220px, 32vh, 360px));
   min-width: 0;
-  padding: 8px 4px;
+  padding: 0;
   border-radius: 12px;
-  background: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
+  background: transparent;
+  box-shadow: none;
   position: relative;
 }
 
@@ -4482,7 +4571,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 4px;
   margin-left: 0;
   font-size: 11px;
-  color: #364152;
+  color: rgba(226, 232, 240, 0.75);
 }
 .play-button + .show-pct-toggle input[type="checkbox"] {
   cursor: pointer;
