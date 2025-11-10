@@ -417,6 +417,7 @@ export default {
 
 .pf-link-export {
   stroke: #22c55e;
+  stroke-dasharray: 6 6;
   animation: pf-flow-export 2.2s linear infinite;
 }
 
