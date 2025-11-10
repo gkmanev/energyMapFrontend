@@ -3577,16 +3577,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   z-index: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(12, 21, 38, 0.68);
-  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.62));
+  border-radius: 20px;
   overflow: hidden;
-  backdrop-filter: blur(26px) saturate(160%);
-  -webkit-backdrop-filter: blur(26px) saturate(160%);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid rgba(148, 163, 184, 0.24);
   box-shadow:
-    0 30px 70px rgba(8, 15, 32, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.45);
+    0 28px 60px rgba(8, 15, 32, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.55);
   color: #e2e8f0;
 }
 
@@ -3594,71 +3594,70 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .separate-modal::after {
   content: "";
   position: absolute;
-  inset: -30%;
-  background: conic-gradient(from 120deg, rgba(59, 130, 246, 0.15), rgba(236, 72, 153, 0.08), rgba(129, 140, 248, 0.18), rgba(14, 165, 233, 0.12), rgba(59, 130, 246, 0.15));
-  filter: blur(0);
-  opacity: 0.75;
-  mix-blend-mode: screen;
-  transform-origin: center;
-  animation: liquid-orbit 26s linear infinite;
   pointer-events: none;
+  border-radius: inherit;
+}
+
+.separate-modal::before {
+  inset: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(15, 23, 42, 0));
+  mix-blend-mode: screen;
 }
 
 .separate-modal::after {
-  inset: -45%;
-  background: radial-gradient(circle at 25% 20%, rgba(255, 255, 255, 0.22), transparent 45%),
-    radial-gradient(circle at 80% 15%, rgba(59, 130, 246, 0.18), transparent 55%),
-    radial-gradient(circle at 55% 85%, rgba(14, 165, 233, 0.22), transparent 55%);
-  opacity: 0.35;
-  filter: blur(20px);
-  animation-duration: 34s;
+  inset: -35% -30% 55% -30%;
+  background: radial-gradient(circle at 18% 22%, rgba(148, 163, 184, 0.22), transparent 58%),
+    radial-gradient(circle at 78% 8%, rgba(56, 189, 248, 0.18), transparent 55%),
+    radial-gradient(circle at 62% 85%, rgba(37, 99, 235, 0.15), transparent 60%);
+  opacity: 0.6;
+  filter: blur(12px);
 }
 
 .separate-modal-header {
   position: relative;
   z-index: 1;
-  background: linear-gradient(135deg, rgba(30, 64, 175, 0.95), rgba(79, 70, 229, 0.78));
-  color: #f8fafc;
-  padding: 12px 18px;
+  padding: 14px 18px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
   letter-spacing: 0.01em;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 -1px 0 rgba(12, 18, 31, 0.85);
+  color: #f1f5f9;
+  background: transparent;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
 }
 
 .separate-modal-header h4 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
 }
 
 .separate-modal-close {
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(79, 70, 229, 0.45));
-  border: 1px solid rgba(226, 232, 240, 0.45);
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.35);
   color: #f8fafc;
-  font-size: 16px;
+  font-size: 18px;
   cursor: pointer;
   padding: 0;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.35);
-  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .separate-modal-close:hover {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.85), rgba(129, 140, 248, 0.88));
-  border-color: rgba(226, 232, 240, 0.7);
-  transform: translateY(-1px) scale(1.04);
-  box-shadow: 0 14px 28px rgba(99, 102, 241, 0.45);
+  transform: translateY(-1px);
+  box-shadow:
+    0 18px 36px rgba(30, 64, 175, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .separate-modal-content {
@@ -4366,27 +4365,26 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   min-height: 150px;
   padding: 18px;
   border-radius: 16px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.58), rgba(3, 7, 18, 0.82));
+  background: linear-gradient(150deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.54));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.55),
-    0 12px 35px rgba(8, 15, 32, 0.45);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.6),
+    0 18px 40px rgba(8, 15, 32, 0.48);
   border: 1px solid rgba(148, 163, 184, 0.22);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
   overflow: hidden;
 }
 
 .chart-container::before {
   content: "";
   position: absolute;
-  inset: -40% -60%;
-  background: radial-gradient(circle at 35% 30%, rgba(59, 130, 246, 0.28), transparent 55%),
-    radial-gradient(circle at 75% 70%, rgba(236, 72, 153, 0.18), transparent 60%),
-    conic-gradient(from 200deg, rgba(148, 163, 184, 0.18), rgba(15, 23, 42, 0));
-  opacity: 0.45;
+  inset: -40% -55% 45% -55%;
+  background: radial-gradient(circle at 30% 28%, rgba(148, 163, 184, 0.18), transparent 60%),
+    radial-gradient(circle at 80% 65%, rgba(59, 130, 246, 0.18), transparent 62%),
+    conic-gradient(from 220deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0));
+  opacity: 0.5;
   transform-origin: center;
-  animation: liquid-drift 32s linear infinite;
   pointer-events: none;
 }
 .chart-container canvas {
