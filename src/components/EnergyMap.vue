@@ -918,8 +918,20 @@ export default {
       return `${this.percentFormatter.format(bounded)}%`;
     },
 
+    getAnimationTimeline() {
+      if (this.heatmapType === 'generation' && this.availableGenerationTimestamps.length) {
+        return this.availableGenerationTimestamps
+      }
+
+      return this.availableTimestamps
+    },
+
     getGenerationCursorTimestamp() {
-      return this.availableGenerationTimestamps[this.currentTimeIndex] ?? null
+      const timeline = this.getAnimationTimeline()
+      if (!timeline.length) return null
+
+      const clampedIndex = Math.min(this.currentTimeIndex, timeline.length - 1)
+      return timeline[clampedIndex] ?? null
     },
 
     applyGenerationCursor(chart, timestamp) {
@@ -2188,6 +2200,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             new Set(items.map(i => Date.parse(i.datetime_utc)))
           ).sort((a, b) => a - b);
 
+          const timeline = this.getAnimationTimeline();
+          const xMin = timeline.length ? timeline[0] : undefined;
+          const xMax = timeline.length ? timeline[timeline.length - 1] : undefined;
+
           const latestTimestamp = timestamps[timestamps.length - 1] || null;
 
           // Group generation MW by technology and timestamp
@@ -2263,6 +2279,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 x: {
                   type: 'time',
                   time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+                  min: xMin,
+                  max: xMax,
                   grid: {
                     color: 'rgba(148, 163, 184, 0.14)',
                     drawBorder: false
@@ -3354,6 +3372,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const timestamps = Array.from(new Set(items.map(i => Date.parse(i.datetime_utc))))
         .sort((a, b) => a - b)
 
+      const timeline = this.getAnimationTimeline()
+      const xMin = timeline.length ? timeline[0] : undefined
+      const xMax = timeline.length ? timeline[timeline.length - 1] : undefined
+
       const byTech = new Map()
       for (const it of items) {
         const key = it.psr_name || it.psr_type || 'Unknown'
@@ -3401,7 +3423,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           scales: {
             x: {
               type: 'time',
-              time: { unit: 'hour', tooltipFormat: 'HH:mm' }
+              time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+              min: xMin,
+              max: xMax
             },
             y: {
               stacked: true,
