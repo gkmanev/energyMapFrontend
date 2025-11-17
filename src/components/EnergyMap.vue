@@ -455,14 +455,13 @@ L.Icon.Default.mergeOptions({
   shadowUrl,
 })
 
+const generationCursorState = new Map()
+
 const generationCursorPlugin = {
   id: 'generationCursor',
-  // Prevent Chart.js from trying to resolve plugin options as scriptable values
-  // which can trigger recursion errors when options are merged post-render.
-  _scriptable: false,
-  _indexable: false,
-  afterDatasetsDraw(chart, args, opts) {
-    const timestamp = opts?.timestamp
+  afterDatasetsDraw(chart) {
+    const state = generationCursorState.get(chart.id)
+    const timestamp = state?.timestamp
     const xScale = chart.scales?.x
     if (!Number.isFinite(timestamp) || !xScale) return
 
@@ -472,14 +471,17 @@ const generationCursorPlugin = {
 
     const ctx = chart.ctx
     ctx.save()
-    ctx.strokeStyle = opts?.color || '#f97316'
-    ctx.lineWidth = opts?.lineWidth || 2
-    ctx.setLineDash(opts?.dash || [6, 4])
+    ctx.strokeStyle = state?.color || '#f97316'
+    ctx.lineWidth = state?.lineWidth || 2
+    ctx.setLineDash(state?.dash || [6, 4])
     ctx.beginPath()
     ctx.moveTo(x, top)
     ctx.lineTo(x, bottom)
     ctx.stroke()
     ctx.restore()
+  },
+  afterDestroy(chart) {
+    generationCursorState.delete(chart.id)
   }
 }
 
@@ -938,14 +940,15 @@ export default {
       return timeline[clampedIndex] ?? null
     },
 
-    applyGenerationCursor(chart, timestamp) {
-      if (!chart?.options) return
+    applyGenerationCursor(chart, timestamp, style = {}) {
+      if (!chart) return
 
-      chart.options.plugins = chart.options.plugins || {}
-      chart.options.plugins.generationCursor = {
-        ...(chart.options.plugins.generationCursor || {}),
-        timestamp
-      }
+      generationCursorState.set(chart.id, {
+        timestamp,
+        color: style.color || '#fb923c',
+        lineWidth: style.lineWidth || 1.5,
+        dash: style.dash || [5, 4]
+      })
 
       chart.update('none')
     },
@@ -3417,12 +3420,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           plugins: {
             legend: { position: 'bottom' },
             tooltip: { mode: 'index', intersect: false },
-            generationCursor: {
-              timestamp: this.getGenerationCursorTimestamp(),
-              color: '#fb923c',
-              lineWidth: 1.5,
-              dash: [5, 4]
-            }
           },
           scales: {
             x: {
