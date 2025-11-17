@@ -3577,16 +3577,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   z-index: 0;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(160deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.62));
-  border-radius: 20px;
+  background: linear-gradient(160deg, rgba(13, 18, 36, 0.82), rgba(10, 16, 32, 0.78)),
+    linear-gradient(120deg, rgba(59, 130, 246, 0.14), rgba(236, 72, 153, 0.1));
+  border-radius: 22px;
   overflow: hidden;
-  backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 28px 60px rgba(8, 15, 32, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.55);
+    0 30px 80px rgba(5, 10, 25, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   color: #e2e8f0;
 }
 
@@ -3599,65 +3600,70 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .separate-modal::before {
+  inset: 12% 14% 30% 16%;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(56, 189, 248, 0.28), transparent 40%),
+    radial-gradient(circle at 78% 8%, rgba(129, 140, 248, 0.25), transparent 38%),
+    radial-gradient(circle at 58% 70%, rgba(236, 72, 153, 0.22), transparent 45%);
+  filter: blur(32px);
+  opacity: 0.75;
+}
+
+.separate-modal::after {
   inset: 1px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(15, 23, 42, 0));
   mix-blend-mode: screen;
 }
 
-.separate-modal::after {
-  inset: -35% -30% 55% -30%;
-  background: radial-gradient(circle at 18% 22%, rgba(148, 163, 184, 0.22), transparent 58%),
-    radial-gradient(circle at 78% 8%, rgba(56, 189, 248, 0.18), transparent 55%),
-    radial-gradient(circle at 62% 85%, rgba(37, 99, 235, 0.15), transparent 60%);
-  opacity: 0.6;
-  filter: blur(12px);
-}
-
 .separate-modal-header {
   position: relative;
   z-index: 1;
-  padding: 14px 18px 12px;
+  padding: 16px 18px 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
   letter-spacing: 0.01em;
   color: #f1f5f9;
-  background: transparent;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .separate-modal-header h4 {
   margin: 0;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .separate-modal-close {
-  background: rgba(15, 23, 42, 0.45);
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.85));
   border: 1px solid rgba(148, 163, 184, 0.35);
   color: #f8fafc;
   font-size: 18px;
   cursor: pointer;
   padding: 0;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 12px;
   box-shadow:
     0 12px 28px rgba(15, 23, 42, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(59, 130, 246, 0.22);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .separate-modal-close:hover {
   transform: translateY(-1px);
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.85));
   box-shadow:
-    0 18px 36px rgba(30, 64, 175, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    0 18px 42px rgba(37, 99, 235, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .separate-modal-content {
@@ -3671,8 +3677,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex-direction: column;
   gap: 16px;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.9));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    linear-gradient(180deg, rgba(13, 20, 38, 0.8), rgba(4, 7, 18, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.55);
 }
 
 .separate-modal-loading {
@@ -4346,12 +4354,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   width: 20px;
   height: 20px;
   cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 45%, rgba(102, 126, 234, 0.5) 45%);
-  border-bottom-right-radius: 8px;
+  background: linear-gradient(135deg, transparent 50%, rgba(59, 130, 246, 0.6) 50%);
+  border-bottom-right-radius: 10px;
 }
 
 .separate-modal-resize-handle:hover {
-  background: linear-gradient(135deg, transparent 45%, rgba(102, 126, 234, 0.7) 45%);
+  background: linear-gradient(135deg, transparent 50%, rgba(59, 130, 246, 0.75) 50%);
 }
 
 /* Make header draggable */
