@@ -1616,8 +1616,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           // Use existing generation method
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
-          
-          const url = `https://api.visualize.energy/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+
+          const end = new Date()
+          const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+          const startDate = encodeURIComponent(start.toISOString())
+          const endDate = encodeURIComponent(end.toISOString())
+
+          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
           console.log(url)
           const { data: response } = await axios.get(url)
           data = response.items || []
@@ -2980,7 +2985,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       try {
 
-        const url = `https://api.visualize.energy/api/generation/yesterday?country=${encodeURIComponent(iso2)}`
+        const end = new Date()
+        const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+        const startDate = encodeURIComponent(start.toISOString())
+        const endDate = encodeURIComponent(end.toISOString())
+
+        const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
         const { data } = await axios.get(url)
 
         if (!Array.isArray(data.items) || !data.items.length) {
@@ -3042,7 +3052,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.destroyGenerationChart()
 
       try {
-        const url = `https://api.visualize.energy/api/generation/yesterday/?country=${encodeURIComponent(iso2)}`
+        const end = new Date()
+        const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+        const startDate = encodeURIComponent(start.toISOString())
+        const endDate = encodeURIComponent(end.toISOString())
+
+        const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
         const { data } = await axios.get(url)
         this.generationItems = Array.isArray(data.items) ? data.items : []
       } catch (e) {
