@@ -455,6 +455,30 @@ L.Icon.Default.mergeOptions({
   shadowUrl,
 })
 
+const generationCursorPlugin = {
+  id: 'generationCursor',
+  afterDatasetsDraw(chart, args, opts) {
+    const timestamp = opts?.timestamp
+    const xScale = chart.scales?.x
+    if (!Number.isFinite(timestamp) || !xScale) return
+
+    const x = xScale.getPixelForValue(timestamp)
+    const { left, right, top, bottom } = chart.chartArea || {}
+    if (!Number.isFinite(x) || x < left || x > right) return
+
+    const ctx = chart.ctx
+    ctx.save()
+    ctx.strokeStyle = opts?.color || '#f97316'
+    ctx.lineWidth = opts?.lineWidth || 2
+    ctx.setLineDash(opts?.dash || [6, 4])
+    ctx.beginPath()
+    ctx.moveTo(x, top)
+    ctx.lineTo(x, bottom)
+    ctx.stroke()
+    ctx.restore()
+  }
+}
+
 export default {
   name: 'EnergyMap',
   components: { LMap, LTileLayer, LGeoJson, LocalClock, PowerFlow },
@@ -866,6 +890,7 @@ export default {
     currentTimeIndex: {
       handler() {
         this.updateColorScheme()
+        this.updateGenerationCursorLines()
         if (this.showChangeTooltips) this.updateDeltaTooltips();
       },
     },
@@ -891,6 +916,47 @@ export default {
       if (value == null || Number.isNaN(value)) return '0%';
       const bounded = Math.max(0, Math.min(100, value));
       return `${this.percentFormatter.format(bounded)}%`;
+    },
+
+    getAnimationTimeline() {
+      if (this.heatmapType === 'generation' && this.availableGenerationTimestamps.length) {
+        return this.availableGenerationTimestamps
+      }
+
+      return this.availableTimestamps
+    },
+
+    getGenerationCursorTimestamp() {
+      const timeline = this.getAnimationTimeline()
+      if (!timeline.length) return null
+
+      const clampedIndex = Math.min(this.currentTimeIndex, timeline.length - 1)
+      return timeline[clampedIndex] ?? null
+    },
+
+    applyGenerationCursor(chart, timestamp) {
+      if (!chart?.options) return
+
+      chart.options.plugins = chart.options.plugins || {}
+      chart.options.plugins.generationCursor = {
+        ...(chart.options.plugins.generationCursor || {}),
+        timestamp
+      }
+
+      chart.update('none')
+    },
+
+    updateGenerationCursorLines() {
+      const timestamp = this.getGenerationCursorTimestamp()
+      if (!Number.isFinite(timestamp)) return
+
+      if (this.generationChartInstance) {
+        this.applyGenerationCursor(this.generationChartInstance, timestamp)
+      }
+
+      this.separateModals
+        .filter(modal => modal.type === 'generation' && modal.chart)
+        .forEach(modal => this.applyGenerationCursor(modal.chart, timestamp))
     },
 
     normalizeTechnologyKey(name) {
@@ -2134,6 +2200,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             new Set(items.map(i => Date.parse(i.datetime_utc)))
           ).sort((a, b) => a - b);
 
+          const timeline = this.getAnimationTimeline();
+          const xMin = timeline.length ? timeline[0] : undefined;
+          const xMax = timeline.length ? timeline[timeline.length - 1] : undefined;
+
           const latestTimestamp = timestamps[timestamps.length - 1] || null;
 
           // Group generation MW by technology and timestamp
@@ -2199,6 +2269,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const cfg = {
             type: 'line',
             data: { datasets },
+            plugins: [generationCursorPlugin],
             options: {
               responsive: true,
               maintainAspectRatio: false,
@@ -2208,6 +2279,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 x: {
                   type: 'time',
                   time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+                  min: xMin,
+                  max: xMax,
                   grid: {
                     color: 'rgba(148, 163, 184, 0.14)',
                     drawBorder: false
@@ -2245,6 +2318,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                   bodyColor: '#e2e8f0',
                   borderColor: 'rgba(148, 163, 184, 0.35)',
                   borderWidth: 1
+                },
+                generationCursor: {
+                  timestamp: this.getGenerationCursorTimestamp(),
+                  color: '#fb923c',
+                  lineWidth: 1.5,
+                  dash: [5, 4]
                 }
               },
               interaction: {
@@ -2254,7 +2333,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             }
           };
 
-          modal.chart = markRaw(new Chart(ctx, cfg));              
+          modal.chart = markRaw(new Chart(ctx, cfg));
+          this.updateGenerationCursorLines();
       }
       else if (modal.type === 'prices') {
         // Expect modal.data as [{ ts, price }]
@@ -3292,6 +3372,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const timestamps = Array.from(new Set(items.map(i => Date.parse(i.datetime_utc))))
         .sort((a, b) => a - b)
 
+      const timeline = this.getAnimationTimeline()
+      const xMin = timeline.length ? timeline[0] : undefined
+      const xMax = timeline.length ? timeline[timeline.length - 1] : undefined
+
       const byTech = new Map()
       for (const it of items) {
         const key = it.psr_name || it.psr_type || 'Unknown'
@@ -3319,17 +3403,29 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const cfg = {
         type: 'line',
         data: { datasets },
+        plugins: [generationCursorPlugin],
         options: {
           responsive: true,
           maintainAspectRatio: false,
           normalized: true,
           parsing: { xAxisKey: 'x', yAxisKey: 'y' },
           interaction: { mode: 'index', intersect: false },
-          plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } },
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: { mode: 'index', intersect: false },
+            generationCursor: {
+              timestamp: this.getGenerationCursorTimestamp(),
+              color: '#fb923c',
+              lineWidth: 1.5,
+              dash: [5, 4]
+            }
+          },
           scales: {
             x: {
               type: 'time',
-              time: { unit: 'hour', tooltipFormat: 'HH:mm' }
+              time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+              min: xMin,
+              max: xMax
             },
             y: {
               stacked: true,
@@ -3343,6 +3439,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       const ctx = canvas.getContext('2d')
       this.generationChartInstance = markRaw(new Chart(ctx, cfg))
+      this.updateGenerationCursorLines()
     },
 
     handleWindowResize() {
