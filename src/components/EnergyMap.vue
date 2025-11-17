@@ -2325,6 +2325,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                   bodyColor: '#e2e8f0',
                   borderColor: 'rgba(148, 163, 184, 0.35)',
                   borderWidth: 1
+                },
+                generationCursor: {
+                  timestamp: this.getGenerationCursorTimestamp(),
+                  color: '#fb923c',
+                  lineWidth: 1.5,
+                  dash: [5, 4]
                 }
               },
               interaction: {
