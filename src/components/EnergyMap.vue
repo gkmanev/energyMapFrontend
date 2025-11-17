@@ -3577,7 +3577,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   z-index: 0;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  background: transparent;
   border-radius: 22px;
   overflow: hidden;
   isolation: isolate;
@@ -4371,7 +4371,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   height: 100%;
   position: relative;
   min-height: 150px;
-  padding: 18px;
+  padding: 0;
   border-radius: 16px;
   background: linear-gradient(150deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.54));
   box-shadow:
