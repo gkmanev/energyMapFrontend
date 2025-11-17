@@ -457,6 +457,10 @@ L.Icon.Default.mergeOptions({
 
 const generationCursorPlugin = {
   id: 'generationCursor',
+  // Prevent Chart.js from trying to resolve plugin options as scriptable values
+  // which can trigger recursion errors when options are merged post-render.
+  _scriptable: false,
+  _indexable: false,
   afterDatasetsDraw(chart, args, opts) {
     const timestamp = opts?.timestamp
     const xScale = chart.scales?.x
