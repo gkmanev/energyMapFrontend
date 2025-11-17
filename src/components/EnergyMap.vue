@@ -385,47 +385,6 @@ const BULK_REQUEST_CONFIG = {
   retryDelay: 1000
 }
 
-const COUNTRY_FLAG_EMOJI = {
-  AL: '🇦🇱',
-  AT: '🇦🇹',
-  BA: '🇧🇦',
-  BE: '🇧🇪',
-  BG: '🇧🇬',
-  CH: '🇨🇭',
-  CY: '🇨🇾',
-  CZ: '🇨🇿',
-  DE: '🇩🇪',
-  DK: '🇩🇰',
-  EE: '🇪🇪',
-  ES: '🇪🇸',
-  FI: '🇫🇮',
-  FR: '🇫🇷',
-  GB: '🇬🇧',
-  GR: '🇬🇷',
-  HR: '🇭🇷',
-  HU: '🇭🇺',
-  IE: '🇮🇪',
-  IS: '🇮🇸',
-  IT: '🇮🇹',
-  LT: '🇱🇹',
-  LU: '🇱🇺',
-  LV: '🇱🇻',
-  MD: '🇲🇩',
-  ME: '🇲🇪',
-  MK: '🇲🇰',
-  MT: '🇲🇹',
-  NL: '🇳🇱',
-  NO: '🇳🇴',
-  PL: '🇵🇱',
-  PT: '🇵🇹',
-  RO: '🇷🇴',
-  RS: '🇷🇸',
-  SE: '🇸🇪',
-  SI: '🇸🇮',
-  SK: '🇸🇰',
-  TR: '🇹🇷',
-  UA: '🇺🇦'
-}
 import PowerFlow from "@/components/PowerFlow.vue";
 import LocalClock from "@/components/LocalClock.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
@@ -531,11 +490,6 @@ export default {
       resizeStartY: 0,
       resizeStartWidth: 0,
       resizeStartHeight: 0,
-
-      flagLayerGroup: null,
-      flagMarkersByISO2: {},
-      layerCentroidByISO2: {},
-      flagUpdatePending: false,
 
       // Heatmap type controls - Price is default
       heatmapType: 'prices',
@@ -887,7 +841,6 @@ export default {
           this.hideAllDeltaTooltips();
         }
         this.updateColorScheme()
-        this.updateFlagVisibility()
 
       },
       immediate: false
@@ -901,14 +854,6 @@ export default {
       },
     },
 
-    countriesGeoJson: {
-      handler() {
-        this.layerCentroidByISO2 = {}
-        this.flagMarkersByISO2 = {}
-        this.scheduleFlagMarkersRefresh()
-      },
-      deep: false
-    }
   },
 
   methods: {
@@ -1006,235 +951,6 @@ export default {
       }
 
       return color
-    },
-
-    scheduleFlagMarkersRefresh() {
-      if (this.flagUpdatePending) return
-      this.flagUpdatePending = true
-      this.$nextTick(() => {
-        this.flagUpdatePending = false
-        this.updateFlagMarkers()
-      })
-    },
-
-    ensureFlagLayerGroup() {
-      if (!this.map) return null
-      if (!this.flagLayerGroup) {
-        this.flagLayerGroup = L.layerGroup()
-      }
-      return this.flagLayerGroup
-    },
-
-    updateFlagMarkers() {
-      if (!this.map || !this.countriesGeoJson) return
-
-      const group = this.ensureFlagLayerGroup()
-      if (!group) return
-
-      group.clearLayers()
-      const markers = {}
-
-      for (const feature of this.countriesGeoJson.features) {
-        const iso2 = this.getCountryISO2(feature)
-        if (!iso2) continue
-
-        const center = this.layerCentroidByISO2[iso2] || this.computeFeatureCenter(feature)
-        const icon = this.createFlagIcon(iso2)
-
-        if (!center || !icon) continue
-
-        const marker = L.marker(center, {
-          icon,
-          interactive: false,
-          pane: 'flagPane'
-        })
-
-        marker.addTo(group)
-        markers[iso2] = marker
-      }
-
-      this.flagMarkersByISO2 = markers
-      this.updateFlagVisibility()
-    },
-
-    updateFlagVisibility() {
-      if (!this.map || !this.flagLayerGroup) return
-
-      const hasLayer = this.map.hasLayer(this.flagLayerGroup)
-      if (this.heatmapType === 'prices') {
-        if (!hasLayer) {
-          this.flagLayerGroup.addTo(this.map)
-        }
-      } else if (hasLayer) {
-        this.map.removeLayer(this.flagLayerGroup)
-      }
-    },
-
-    createFlagIcon(iso2) {
-      if (!iso2) return null
-
-      const isoLower = iso2.toLowerCase()
-      const fallbackEmoji = this.getFlagEmoji(iso2)
-      const fallbackText = fallbackEmoji || iso2.toUpperCase()
-      const fallbackHtml = `<span class="flag-emoji-fallback">${fallbackText}</span>`
-      const onErrorHandler = "this.style.display='none'; if (this.nextElementSibling) { this.nextElementSibling.style.display='flex'; }"
-
-      return L.divIcon({
-        className: 'country-flag-icon',
-        html: `
-          <span class="country-flag">
-            <img
-              src="https://flagcdn.com/w40/${isoLower}.png"
-              srcset="https://flagcdn.com/w80/${isoLower}.png 2x"
-              alt="${iso2.toUpperCase()} flag"
-              loading="lazy"
-              onerror="${onErrorHandler}"
-            />
-            ${fallbackHtml}
-          </span>
-        `,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16]
-      })
-    },
-
-    getFlagEmoji(iso2) {
-      if (!iso2) return null
-      return COUNTRY_FLAG_EMOJI[iso2.toUpperCase()] || null
-    },
-
-    computeFeatureCenter(feature) {
-      try {
-        const geometry = feature?.geometry || null
-        const preferred = this._preferredGeometryCenter(geometry)
-        if (preferred) {
-          return preferred
-        }
-
-        const layer = L.geoJSON(feature)
-        const bounds = layer.getBounds()
-        if (bounds && bounds.isValid && bounds.isValid()) {
-          return bounds.getCenter()
-        }
-      } catch (error) {
-        console.warn('Failed to compute feature center for flags:', error)
-      }
-      return null
-    },
-
-    _preferredGeometryCenter(geometry) {
-      if (!geometry) return null
-
-      const { type, coordinates, geometries } = geometry
-
-      if (type === 'Polygon') {
-        const result = this._centroidForPolygon(coordinates)
-        return result ? result.latLng : null
-      }
-
-      if (type === 'MultiPolygon') {
-        let best = null
-        for (const polygonCoords of coordinates || []) {
-          const candidate = this._centroidForPolygon(polygonCoords)
-          if (candidate && (!best || candidate.area > best.area)) {
-            best = candidate
-          }
-        }
-        return best ? best.latLng : null
-      }
-
-      if (type === 'Point') {
-        const [lng, lat] = coordinates || []
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          return L.latLng(lat, lng)
-        }
-        return null
-      }
-
-      if (type === 'MultiPoint') {
-        let sumLat = 0
-        let sumLng = 0
-        let count = 0
-        for (const coord of coordinates || []) {
-          const [lng, lat] = coord || []
-          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            sumLat += lat
-            sumLng += lng
-            count += 1
-          }
-        }
-        if (count > 0) {
-          return L.latLng(sumLat / count, sumLng / count)
-        }
-        return null
-      }
-
-      if (type === 'GeometryCollection') {
-        for (const geom of geometries || []) {
-          const candidate = this._preferredGeometryCenter(geom)
-          if (candidate) return candidate
-        }
-      }
-
-      return null
-    },
-
-    _centroidForPolygon(polygonCoords) {
-      if (!Array.isArray(polygonCoords) || polygonCoords.length === 0) {
-        return null
-      }
-
-      const outerRing = polygonCoords[0]
-      const result = this._centroidForLinearRing(outerRing)
-      if (!result) return null
-
-      const [lng, lat] = result.centroid
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return null
-      }
-
-      return {
-        latLng: L.latLng(lat, lng),
-        area: result.area
-      }
-    },
-
-    _centroidForLinearRing(ring) {
-      if (!Array.isArray(ring) || ring.length < 4) {
-        return null
-      }
-
-      let doubleArea = 0
-      let centroidX = 0
-      let centroidY = 0
-
-      for (let i = 0; i < ring.length - 1; i += 1) {
-        const [x0, y0] = ring[i] || []
-        const [x1, y1] = ring[i + 1] || []
-        if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) {
-          continue
-        }
-        const cross = x0 * y1 - x1 * y0
-        doubleArea += cross
-        centroidX += (x0 + x1) * cross
-        centroidY += (y0 + y1) * cross
-      }
-
-      if (doubleArea === 0) {
-        return null
-      }
-
-      const cx = centroidX / (3 * doubleArea)
-      const cy = centroidY / (3 * doubleArea)
-
-      if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
-        return null
-      }
-
-      return {
-        centroid: [cx, cy],
-        area: Math.abs(doubleArea / 2)
-      }
     },
 
     // --- 2x2 grid helper ----------------------------------------------------
@@ -3001,9 +2717,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'
         )
         this.countriesGeoJson = markRaw(response.data)
-        this.layerCentroidByISO2 = {}
-        this.flagMarkersByISO2 = {}
-        this.scheduleFlagMarkersRefresh()
       } catch (err) {
         console.error('Error loading countries data:', err)
       }
@@ -3128,20 +2841,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const iso2Key = vm.getCountryISO2(feature);
         if (iso2Key) {
           vm.layerByISO2[iso2Key] = layer;
-          try {
-            const preferredCenter = vm.computeFeatureCenter(feature)
-            if (preferredCenter) {
-              vm.layerCentroidByISO2[iso2Key] = preferredCenter
-            } else {
-              const bounds = layer.getBounds()
-              if (bounds && bounds.isValid && bounds.isValid()) {
-                vm.layerCentroidByISO2[iso2Key] = bounds.getCenter()
-              }
-            }
-          } catch (err) {
-            console.warn('Failed to capture country centroid for flags:', err)
-          }
-          vm.scheduleFlagMarkersRefresh()
         }
       } catch (error) {
         console.error('Error setting up layer events:', error)
@@ -3171,16 +2870,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         this.map.createPane('flowsPane')
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
       }
-
-      if (!this.map.getPane('flagPane')) {
-        const pane = this.map.createPane('flagPane')
-        pane.style.zIndex = 645
-        pane.style.pointerEvents = 'none'
-      }
-
-      this.ensureFlagLayerGroup()
-      this.updateFlagMarkers()
-      this.updateFlagVisibility()
 
     },
 
@@ -3502,11 +3191,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     document.removeEventListener('mouseup', this.stopDrag)
     document.removeEventListener('mousemove', this.onResize)
     document.removeEventListener('mouseup', this.stopResize)
-
-    if (this.map && this.flagLayerGroup) {
-      this.map.removeLayer(this.flagLayerGroup)
-      this.flagLayerGroup = null
-    }
   }
 }
 </script>
@@ -4785,45 +4469,4 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1;
 }
 
-:global(.country-flag-icon) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid rgba(15, 23, 42, 0.2);
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.25);
-  pointer-events: none;
-}
-
-:global(.country-flag-icon .country-flag) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  overflow: hidden;
-  position: relative;
-}
-
-:global(.country-flag-icon .country-flag img) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-  display: block;
-}
-
-:global(.country-flag-icon .flag-emoji-fallback) {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  line-height: 1;
-  width: 100%;
-  height: 100%;
-}
 </style>
