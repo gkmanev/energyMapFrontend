@@ -91,6 +91,33 @@
               />
             </div>
 
+            <!-- Net flows modal -->
+            <div v-else-if="modal.type === 'netflows'" class="netflow-modal">
+              <div v-if="modal.meta" class="netflow-summary">
+                <div class="netflow-summary-item">
+                  <span class="netflow-summary-label">Latest net flow</span>
+                  <span class="netflow-summary-value" :class="{ 'is-import': (modal.meta.latestNet || 0) < 0 }">
+                    {{ formatMegawatts(Math.abs(modal.meta.latestNet || 0)) }} MW
+                    <small>{{ (modal.meta.latestNet || 0) >= 0 ? 'export' : 'import' }}</small>
+                  </span>
+                </div>
+                <div class="netflow-summary-item">
+                  <span class="netflow-summary-label">Peak export</span>
+                  <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakExport || 0) }} MW</span>
+                </div>
+                <div class="netflow-summary-item">
+                  <span class="netflow-summary-label">Peak import</span>
+                  <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakImport || 0) }} MW</span>
+                </div>
+              </div>
+              <div class="chart-container netflow-chart">
+                <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
+              <div v-if="modal.meta?.latestTimestamp" class="netflow-updated">
+                Updated: {{ modal.meta.latestTimestamp }}
+              </div>
+            </div>
+
             <!-- Generation modal: custom layout for small viewports -->
             <div v-else-if="modal.type === 'generation'" class="generation-modal">
               <div v-if="modal.meta" class="generation-summary">
@@ -1165,6 +1192,55 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.flowsData = out
     },
 
+    buildCountryNetFlowsSeries(iso2) {
+      if (!iso2 || !this.flowsData) return []
+
+      const relevantEdges = Object.entries(this.flowsData).filter(([key]) => {
+        if (!key.includes('-')) return false
+        const [a, b] = key.split('-')
+        return a === iso2 || b === iso2
+      })
+      if (!relevantEdges.length) return []
+
+      const timestampsSet = new Set()
+      relevantEdges.forEach(([, series]) => {
+        Object.keys(series || {}).forEach(ts => timestampsSet.add(Number(ts)))
+      })
+      const timestamps = Array.from(timestampsSet).filter(Number.isFinite).sort((a, b) => a - b)
+
+      return timestamps.map(ts => {
+        let imports = 0
+        let exports = 0
+
+        relevantEdges.forEach(([key, series]) => {
+          const [a, b] = key.split('-')
+          const value = Number(series?.[ts])
+          if (!Number.isFinite(value) || value === 0) return
+
+          if (iso2 === a) {
+            if (value > 0) {
+              exports += value
+            } else {
+              imports += Math.abs(value)
+            }
+          } else if (iso2 === b) {
+            if (value > 0) {
+              imports += value
+            } else {
+              exports += Math.abs(value)
+            }
+          }
+        })
+
+        return {
+          ts,
+          imports,
+          exports,
+          net: exports - imports
+        }
+      }).filter(point => (point.imports || 0) > 0 || (point.exports || 0) > 0)
+    },
+
     // Get a country’s visual center from its Leaflet layer bounds (cheap & good-enough)
     getCountryCenter(iso2) {
       const lyr = this.layerByISO2[iso2]
@@ -1696,11 +1772,29 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         }else if (type === 'powerflow') {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
-          data = this.buildPowerFlowForCountry(iso2, Number(this.currentTimestamp))           
-        
+          data = this.buildPowerFlowForCountry(iso2, Number(this.currentTimestamp))
+        }else if (type === 'netflows') {
+          const iso2 = this.getCountryISO2ByName(country)
+          if (!iso2) throw new Error('Country not found')
+          const series = this.buildCountryNetFlowsSeries(iso2)
+          if (!series.length) {
+            throw new Error('No cross-border flow data available')
+          }
+          data = series
+          const latestPoint = series[series.length - 1] || {}
+          const peakExport = series.reduce((max, point) => Math.max(max, point.exports || 0), 0)
+          const peakImport = series.reduce((max, point) => Math.max(max, point.imports || 0), 0)
+          modal.meta = {
+            latestNet: latestPoint.net ?? 0,
+            latestTimestamp: latestPoint.ts
+              ? new Date(latestPoint.ts).toLocaleString()
+              : '',
+            peakExport,
+            peakImport
+          }
         }else {
           throw new Error(`Unknown modal type: ${type}`)
-        }        
+        }
 
         modal.data = data
         modal.loading = false
@@ -2221,6 +2315,110 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 bodyColor: '#e2e8f0',
                 borderColor: 'rgba(148, 163, 184, 0.35)',
                 borderWidth: 1
+              }
+            },
+            interaction: { mode: 'index', intersect: false }
+          }
+        }
+
+        modal.chart = markRaw(new Chart(ctx, cfg))
+      }
+      else if (modal.type === 'netflows') {
+        const series = Array.isArray(modal.data) ? modal.data : []
+        if (!series.length) return
+
+        const exportsData = series.map(point => ({ x: point.ts, y: point.exports || 0 }))
+        const importsData = series.map(point => ({ x: point.ts, y: -(point.imports || 0) }))
+        const netData = series.map(point => ({ x: point.ts, y: point.net || 0 }))
+
+        const cfg = {
+          type: 'bar',
+          data: {
+            datasets: [
+              {
+                label: 'Exports',
+                data: exportsData,
+                backgroundColor: 'rgba(34,197,94,0.75)',
+                borderColor: 'rgba(34,197,94,1)',
+                borderWidth: 1,
+                stack: 'flows'
+              },
+              {
+                label: 'Imports',
+                data: importsData,
+                backgroundColor: 'rgba(248,113,113,0.75)',
+                borderColor: 'rgba(239,68,68,1)',
+                borderWidth: 1,
+                stack: 'flows'
+              },
+              {
+                label: 'Net flow',
+                data: netData,
+                type: 'line',
+                borderColor: '#facc15',
+                backgroundColor: 'rgba(250,204,21,0.2)',
+                pointRadius: 0,
+                borderWidth: 2,
+                fill: false,
+                tension: 0.25,
+                yAxisID: 'y'
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+            scales: {
+              x: {
+                type: 'time',
+                time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' },
+                grid: {
+                  color: 'rgba(148, 163, 184, 0.14)',
+                  drawBorder: false
+                },
+                ticks: { color: '#cbd5f5' }
+              },
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'MW',
+                  color: '#f8fafc',
+                  font: { size: 12, weight: 600 }
+                },
+                grid: {
+                  color: 'rgba(148, 163, 184, 0.12)',
+                  drawBorder: false
+                },
+                ticks: {
+                  callback: v => Intl.NumberFormat().format(v),
+                  color: '#cbd5f5'
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: { color: '#f8fafc' }
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                titleColor: '#f8fafc',
+                bodyColor: '#e2e8f0',
+                borderColor: 'rgba(148, 163, 184, 0.35)',
+                borderWidth: 1,
+                callbacks: {
+                  label(context) {
+                    const label = context.dataset?.label || ''
+                    const value = context.parsed.y || 0
+                    const magnitude = Math.abs(value)
+                    return `${label}: ${Intl.NumberFormat().format(magnitude)} MW`
+                  }
+                }
               }
             },
             interaction: { mode: 'index', intersect: false }
@@ -2921,6 +3119,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 vm.createSeparateModal(name, 'generation', 'Energy Generation')
                 vm.createSeparateModal(name, 'prices', 'Energy Prices (48h)')
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
+                vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
               } else {
                 vm.capacityError = 'Missing ISO-2 code for this feature'
                 vm.generationError = 'Missing ISO-2 code for this feature'
@@ -4625,6 +4824,67 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   background: transparent;
   box-shadow: none;
   position: relative;
+}
+
+.netflow-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.netflow-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.netflow-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #e2e8f0;
+}
+
+.netflow-summary-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.netflow-summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #34d399;
+}
+
+.netflow-summary-value small {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.8);
+  text-transform: uppercase;
+}
+
+.netflow-summary-value.is-import {
+  color: #f87171;
+}
+
+.netflow-chart {
+  flex: 1;
+  min-height: 220px;
+  min-width: 0;
+}
+
+.netflow-updated {
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.75);
+  text-align: right;
 }
 
 :global(.delta-tooltip) {
