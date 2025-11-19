@@ -98,6 +98,21 @@
                   <span class="generation-total-label">Total output</span>
                   <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
                 </div>
+                <div
+                  v-if="modal.meta.todayForecastTotal !== undefined && modal.meta.todayForecastTotal !== null"
+                  class="generation-forecast"
+                >
+                  <div class="generation-forecast-header">
+                    <span class="generation-forecast-label">Today's forecast</span>
+                    <span class="generation-forecast-value">{{ formatMegawatts(modal.meta.todayForecastTotal) }} MW</span>
+                  </div>
+                  <div
+                    v-if="modal.meta.todayForecastLabel"
+                    class="generation-forecast-subtext"
+                  >
+                    {{ modal.meta.todayForecastLabel }}
+                  </div>
+                </div>
                 <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
               </div>
               <div class="chart-container generation-chart">
@@ -1326,6 +1341,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         error: null,
         chart: null,
         data: null,
+        forecastData: null,
         meta: null,
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
@@ -1602,6 +1618,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.loading = true
         modal.error = null
         modal.meta = null
+        modal.forecastData = null
 
         let data
         if (type === 'capacity') {
@@ -1624,8 +1641,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
           const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
           console.log(url)
-          const { data: response } = await axios.get(url)
+          const [rangeResponse, forecastItems] = await Promise.all([
+            axios.get(url),
+            this.fetchGenerationForecastRange(iso2)
+          ])
+          const response = rangeResponse?.data || {}
           data = response.items || []
+          modal.forecastData = forecastItems
         }
         else if (type === 'prices') {
           // New: prices modal (last 48h). Reuse your historical price fetcher.
@@ -1929,10 +1951,22 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           ).sort((a, b) => a - b);
 
           const timeline = this.getAnimationTimeline();
-          const xMin = timeline.length ? timeline[0] : undefined;
-          const xMax = timeline.length ? timeline[timeline.length - 1] : undefined;
+          let xMin = timeline.length ? timeline[0] : undefined;
+          let xMax = timeline.length ? timeline[timeline.length - 1] : undefined;
 
           const latestTimestamp = timestamps[timestamps.length - 1] || null;
+          const forecastSeries = this.prepareForecastSeries(modal.forecastData);
+
+          if (forecastSeries.length) {
+            const firstForecast = forecastSeries[0]?.x;
+            const lastForecast = forecastSeries[forecastSeries.length - 1]?.x;
+            if (Number.isFinite(firstForecast) && (xMin === undefined || firstForecast < xMin)) {
+              xMin = firstForecast;
+            }
+            if (Number.isFinite(lastForecast) && (xMax === undefined || lastForecast > xMax)) {
+              xMax = lastForecast;
+            }
+          }
 
           // Group generation MW by technology and timestamp
           const byTech = new Map();
@@ -1973,6 +2007,24 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             });
           });
 
+          if (forecastSeries.length) {
+            datasets.push({
+              label: "Today's forecast",
+              data: forecastSeries,
+              type: 'line',
+              borderColor: '#facc15',
+              backgroundColor: 'rgba(250, 204, 21, 0.18)',
+              borderDash: [6, 3],
+              pointRadius: 0,
+              borderWidth: 2,
+              fill: false,
+              spanGaps: true,
+              tension: 0.25,
+              yAxisID: 'y',
+              order: 0
+            });
+          }
+
           const totalGeneration = techSummaries.reduce((sum, entry) => sum + (entry.value || 0), 0);
           const sortedSummaries = techSummaries
             .slice()
@@ -1985,13 +2037,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             color: entry.color
           }));
 
+          const forecastSummary = this.summarizeTodayForecast(forecastSeries);
+
           modal.meta = {
             totalGeneration,
             topTechnologies: legendItems.slice(0, 3),
             legendItems,
             updatedLabel: latestTimestamp
               ? `Latest reading: ${new Date(latestTimestamp).toLocaleString()}`
-              : ''
+              : '',
+            todayForecastTotal: forecastSummary ? forecastSummary.total : null,
+            todayForecastLabel: forecastSummary?.label || ''
           };
 
           const cfg = {
@@ -3030,6 +3086,73 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       } catch (e) {
         console.error(`Failed to get generation for ${iso2}`, e)
         return {}
+      }
+    },
+
+    async fetchGenerationForecastRange(iso2) {
+      if (!iso2) return []
+
+      try {
+        const start = new Date()
+        start.setHours(0, 0, 0, 0)
+        const end = new Date(start)
+        end.setDate(end.getDate() + 1)
+
+        const url = `https://api.visualize.energy/api/generation-forecast/range/?country=${encodeURIComponent(iso2)}&start=${start.toISOString()}&end=${end.toISOString()}`
+        const { data } = await axios.get(url)
+
+        if (!data || !Array.isArray(data.items)) {
+          return []
+        }
+
+        return data.items
+      } catch (error) {
+        console.error(`Failed to fetch generation forecast for ${iso2}`, error)
+        return []
+      }
+    },
+
+    prepareForecastSeries(forecastItems) {
+      if (!Array.isArray(forecastItems) || !forecastItems.length) return []
+
+      const hourly = new Map()
+      const HOUR_MS = 60 * 60 * 1000
+
+      for (const item of forecastItems) {
+        const timestamp = Date.parse(item.datetime_utc)
+        if (!Number.isFinite(timestamp)) continue
+        const value = Number(item.forecast_mw ?? item.generation_mw ?? item.total_generation_mw ?? item.value)
+        if (!Number.isFinite(value)) continue
+
+        const hourTs = Math.floor(timestamp / HOUR_MS) * HOUR_MS
+        hourly.set(hourTs, (hourly.get(hourTs) || 0) + value)
+      }
+
+      return Array.from(hourly.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([x, y]) => ({ x, y }))
+    },
+
+    summarizeTodayForecast(series) {
+      if (!Array.isArray(series) || !series.length) return null
+
+      const startOfDay = new Date()
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(startOfDay)
+      endOfDay.setDate(endOfDay.getDate() + 1)
+
+      const filtered = series.filter(point => (
+        point.x >= startOfDay.getTime() && point.x < endOfDay.getTime()
+      ))
+
+      if (!filtered.length) return null
+
+      const total = filtered.reduce((sum, point) => sum + (Number(point.y) || 0), 0)
+      const formattedDate = startOfDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+
+      return {
+        total,
+        label: `Forecast window: ${formattedDate}`
       }
     },
 
@@ -4206,6 +4329,38 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.generation-forecast {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.12);
+}
+.generation-forecast-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.generation-forecast-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(250, 204, 21, 0.85);
+}
+.generation-forecast-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #fef9c3;
+}
+.generation-forecast-subtext {
+  font-size: 10px;
+  color: rgba(250, 204, 21, 0.7);
 }
 .generation-total-label {
   font-size: 11px;
