@@ -405,6 +405,7 @@ import LocalClock from "@/components/LocalClock.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import Chart from 'chart.js/auto'
+import { Tooltip } from 'chart.js'
 import 'chartjs-adapter-date-fns'
 import axios from 'axios'
 import { scaleSequential } from 'd3-scale'
@@ -433,24 +434,28 @@ const generationCursorState = new Map()
 
 const CURSOR_TOOLTIP_OFFSET = 32
 
-Chart.Tooltip.positioners.cursorLeft = function cursorLeft(elements, eventPosition) {
-  if (!elements?.length) {
-    return false
-  }
+const tooltipPositioners = Tooltip?.positioners || Chart?.Tooltip?.positioners
 
-  const basePosition = Chart.Tooltip.positioners.nearest.call(this, elements, eventPosition)
-  if (!basePosition) {
-    return false
-  }
+if (tooltipPositioners) {
+  tooltipPositioners.cursorLeft = function cursorLeft(elements, eventPosition) {
+    if (!elements?.length) {
+      return false
+    }
 
-  const chartArea = this.chart?.chartArea || {}
-  const desiredX = eventPosition?.x != null ? eventPosition.x - CURSOR_TOOLTIP_OFFSET : basePosition.x
-  const minX = (chartArea.left ?? 0) + CURSOR_TOOLTIP_OFFSET
-  const boundedX = Math.max(minX, desiredX)
+    const basePosition = tooltipPositioners.nearest.call(this, elements, eventPosition)
+    if (!basePosition) {
+      return false
+    }
 
-  return {
-    x: boundedX,
-    y: basePosition.y
+    const chartArea = this.chart?.chartArea || {}
+    const desiredX = eventPosition?.x != null ? eventPosition.x - CURSOR_TOOLTIP_OFFSET : basePosition.x
+    const minX = (chartArea.left ?? 0) + CURSOR_TOOLTIP_OFFSET
+    const boundedX = Math.max(minX, desiredX)
+
+    return {
+      x: boundedX,
+      y: basePosition.y
+    }
   }
 }
 
