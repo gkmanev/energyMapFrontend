@@ -405,6 +405,7 @@ import LocalClock from "@/components/LocalClock.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import Chart from 'chart.js/auto'
+import { Tooltip } from 'chart.js'
 import 'chartjs-adapter-date-fns'
 import axios from 'axios'
 import { scaleSequential } from 'd3-scale'
@@ -430,6 +431,33 @@ L.Icon.Default.mergeOptions({
 })
 
 const generationCursorState = new Map()
+
+const CURSOR_TOOLTIP_OFFSET = 32
+
+const tooltipPositioners = Tooltip?.positioners || Chart?.Tooltip?.positioners
+
+if (tooltipPositioners) {
+  tooltipPositioners.cursorLeft = function cursorLeft(elements, eventPosition) {
+    if (!elements?.length) {
+      return false
+    }
+
+    const basePosition = tooltipPositioners.nearest.call(this, elements, eventPosition)
+    if (!basePosition) {
+      return false
+    }
+
+    const chartArea = this.chart?.chartArea || {}
+    const desiredX = eventPosition?.x != null ? eventPosition.x - CURSOR_TOOLTIP_OFFSET : basePosition.x
+    const minX = (chartArea.left ?? 0) + CURSOR_TOOLTIP_OFFSET
+    const boundedX = Math.max(minX, desiredX)
+
+    return {
+      x: boundedX,
+      y: basePosition.y
+    }
+  }
+}
 
 const generationCursorPlugin = {
   id: 'generationCursor',
@@ -2095,13 +2123,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               plugins: {
                 legend: { display: false },
                 tooltip: {
+                  position: 'cursorLeft',
                   mode: 'index',
                   intersect: false,
                   backgroundColor: 'rgba(15, 23, 42, 0.92)',
                   titleColor: '#f8fafc',
                   bodyColor: '#e2e8f0',
                   borderColor: 'rgba(148, 163, 184, 0.35)',
-                  borderWidth: 1
+                  borderWidth: 1,
+                  xAlign: 'right',
+                  caretPadding: 10
                 },
                 generationCursor: {
                   timestamp: this.getGenerationCursorTimestamp(),
