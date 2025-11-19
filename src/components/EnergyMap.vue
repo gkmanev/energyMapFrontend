@@ -3156,12 +3156,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         if (!Number.isFinite(value)) continue
 
         const hourTs = Math.floor(timestamp / HOUR_MS) * HOUR_MS
-        hourly.set(hourTs, (hourly.get(hourTs) || 0) + value)
+        const bucket = hourly.get(hourTs) || { sum: 0, count: 0 }
+        bucket.sum += value
+        bucket.count += 1
+        hourly.set(hourTs, bucket)
       }
 
       return Array.from(hourly.entries())
         .sort((a, b) => a[0] - b[0])
-        .map(([x, y]) => ({ x, y }))
+        .map(([x, bucket]) => ({ x, y: bucket.count ? bucket.sum / bucket.count : 0 }))
     },
 
     summarizeTodayForecast(series) {
