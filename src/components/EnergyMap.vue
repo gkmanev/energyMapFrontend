@@ -93,6 +93,9 @@
 
             <!-- Net flows modal -->
             <div v-else-if="modal.type === 'netflows'" class="netflow-modal">
+              <div class="chart-container netflow-chart">
+                <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
               <div v-if="modal.meta" class="netflow-summary">
                 <div class="netflow-summary-item">
                   <span class="netflow-summary-label">Latest net flow</span>
@@ -109,9 +112,6 @@
                   <span class="netflow-summary-label">Peak import</span>
                   <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakImport || 0) }} MW</span>
                 </div>
-              </div>
-              <div class="chart-container netflow-chart">
-                <canvas :id="'separate-chart-' + modal.id"></canvas>
               </div>
               <div v-if="modal.meta?.latestTimestamp" class="netflow-updated">
                 Updated: {{ modal.meta.latestTimestamp }}
