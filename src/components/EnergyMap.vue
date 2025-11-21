@@ -4541,7 +4541,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   z-index: 1;
   width: 100% !important;
   height: 100% !important;
-  background: #020617;
+  background: transparent;
   border-radius: 12px;
 }
 .generation-modal {
