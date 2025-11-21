@@ -438,7 +438,7 @@ export default {
 
 <style scoped>
 .pf-card {
-  background: #020617;
+  background: transparent;
   border-radius: 16px;
   padding: 10px 12px 8px;
   border: 1px solid rgba(148, 163, 184, 0.5);
