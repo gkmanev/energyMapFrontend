@@ -289,10 +289,29 @@ export default {
     centerName() {
       return NAME_BY_ISO[this.countryIso] || this.countryIso
     },
+    latestTimestamp() {
+      let latest = null
+      for (const row of this.items) {
+        if (!row.datetime_utc) continue
+        const ts = new Date(row.datetime_utc).getTime()
+        if (Number.isNaN(ts)) continue
+        if (latest === null || ts > latest) latest = ts
+      }
+      return latest
+    },
+    latestItems() {
+      const ts = this.latestTimestamp
+      if (ts === null) return []
+      return this.items.filter((row) => {
+        if (!row.datetime_utc) return false
+        const rowTs = new Date(row.datetime_utc).getTime()
+        return !Number.isNaN(rowTs) && rowTs === ts
+      })
+    },
     aggregated() {
       const res = {}
       if (!this.centerEic) return res
-      for (const row of this.items) {
+      for (const row of this.latestItems) {
         const { out_domain_eic, in_domain_eic, quantity_mw } = row
         if (!quantity_mw) continue
         if (out_domain_eic === this.centerEic) {
