@@ -73,6 +73,22 @@
             </button>
           </div>
 
+          <div v-if="modal.thumbnail" class="separate-modal-thumbnail-preview">
+            <div class="thumbnail-icon-badge">
+              <span class="thumbnail-icon-glyph">{{ getModalIconSymbol(modal.type) }}</span>
+              <span class="thumbnail-icon-label">{{ getModalIconLabel(modal.type) }}</span>
+            </div>
+            <div class="thumbnail-icon-row">
+              <span
+                v-for="icon in getModalSparkIcons(modal.type)"
+                :key="icon"
+                class="thumbnail-spark-icon"
+              >
+                {{ icon }}
+              </span>
+            </div>
+          </div>
+
           <!-- Modal content -->
           <div class="separate-modal-content">
             <div v-if="modal.loading" class="separate-modal-loading">
@@ -1081,6 +1097,15 @@ export default {
       return { width, height }
     },
 
+    shouldUseThumbnailMode() {
+      if (typeof window === 'undefined') return false
+
+      const viewportWidth = window.innerWidth || 0
+      const viewportHeight = window.innerHeight || 0
+
+      return viewportWidth <= 1366 || viewportHeight <= 900
+    },
+
     getSeparateModalStyle(modalId) {
       const modal = this.separateModals.find(m => m.id === modalId)
       if (!modal) return {}
@@ -1462,6 +1487,36 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return baseDefaults
     },
 
+    getModalIconSymbol(modalType) {
+      const icons = {
+        powerflow: '⚡',
+        netflows: '🌐',
+        generation: '🌞',
+        capacity: '📊'
+      }
+
+      return icons[modalType] || '📈'
+    },
+
+    getModalIconLabel(modalType) {
+      const labels = {
+        powerflow: 'Power flow',
+        netflows: 'Net flows',
+        generation: 'Generation',
+        capacity: 'Capacity'
+      }
+
+      return labels[modalType] || 'Chart'
+    },
+
+    getModalSparkIcons(modalType) {
+      if (modalType === 'powerflow') return ['⚡', '🔀', '⚡']
+      if (modalType === 'netflows') return ['🌐', '↔️', '🛰️']
+      if (modalType === 'generation') return ['🌤️', '📈', '🌿']
+      if (modalType === 'capacity') return ['🏭', '📊', '📈']
+      return ['📈', '📊', '✨']
+    },
+
     toggleSeparateModalView(modalId) {
       const modal = this.separateModals.find(m => m.id === modalId)
       if (!modal) return
@@ -1495,8 +1550,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const modalId = this.separateModalIdCounter++
       const thumbnailSize = this.getThumbnailDefaults()
       const expandedSize = this.getResponsiveModalDefaults(type)
-      const modalWidth = thumbnailSize.width
-      const modalHeight = thumbnailSize.height
+      const useThumbnailMode = this.shouldUseThumbnailMode()
+      const modalSize = useThumbnailMode ? thumbnailSize : expandedSize
+      const modalWidth = modalSize.width
+      const modalHeight = modalSize.height
 
       // Determine 2×2 grid slot
       const visibleModals = this.separateModals.filter(m => m.visible)
@@ -1518,7 +1575,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
         lastExpandedSize: expandedSize,
-        thumbnail: true,
+        thumbnail: useThumbnailMode,
         userModified: false
       }
 
@@ -1556,7 +1613,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         const baseSize = modal.thumbnail
           ? this.getThumbnailDefaults()
-          : this.getResponsiveModalDefaults()
+          : this.getResponsiveModalDefaults(modal.type)
 
         const { x, y } = this._gridPosition(gridIndex, baseSize.width, baseSize.height)
         modal.position.x = x
@@ -1564,6 +1621,26 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.size.width = baseSize.width
         modal.size.height = baseSize.height
         gridIndex += 1
+      })
+    },
+
+    syncSeparateModalModes() {
+      const shouldUseThumbnails = this.shouldUseThumbnailMode()
+
+      this.separateModals.forEach(modal => {
+        if (modal.userModified) return
+
+        if (shouldUseThumbnails && !modal.thumbnail) {
+          const thumbnailSize = this.getThumbnailDefaults()
+          modal.thumbnail = true
+          modal.size = { ...thumbnailSize }
+        }
+
+        if (!shouldUseThumbnails && modal.thumbnail) {
+          const expandedSize = modal.lastExpandedSize || this.getResponsiveModalDefaults(modal.type)
+          modal.thumbnail = false
+          modal.size = { ...expandedSize }
+        }
       })
     },
 
@@ -3565,6 +3642,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     handleWindowResize() {
         // Reposition modals when window is resized
         this.updateModalDefaultsFromViewport()
+        this.syncSeparateModalModes()
         this.repositionSeparateModals()
 
       },
@@ -3826,6 +3904,65 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   background: radial-gradient(circle at 22% 22%, rgba(59, 130, 246, 0.42), transparent 48%),
               radial-gradient(circle at 78% 18%, rgba(236, 72, 153, 0.36), transparent 52%),
               rgba(255, 255, 255, 0.66);
+}
+
+.separate-modal-thumbnail-preview {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 6px;
+  gap: 8px;
+}
+
+.thumbnail-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.85), rgba(99, 102, 241, 0.82));
+  color: #eef2ff;
+  box-shadow:
+    0 10px 24px rgba(59, 130, 246, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(255, 255, 255, 0.24);
+}
+
+.thumbnail-icon-glyph {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.thumbnail-icon-label {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  font-size: 11px;
+}
+
+.thumbnail-icon-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.thumbnail-spark-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 11px;
+  background: linear-gradient(135deg, rgba(226, 232, 240, 0.85), rgba(241, 245, 249, 0.9));
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .separate-modal-header {
