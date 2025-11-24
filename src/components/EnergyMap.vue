@@ -1084,14 +1084,16 @@ export default {
 
 
     getThumbnailDefaults() {
+      const minWidth = 238
+
       if (typeof window === 'undefined') {
-        return { width: 180, height: 70 }
+        return { width: minWidth, height: 70 }
       }
 
       const viewportWidth = window.innerWidth || 800
       const viewportHeight = window.innerHeight || 600
 
-      const width = Math.max(140, Math.round(viewportWidth * 0.14))
+      const width = Math.max(minWidth, Math.round(viewportWidth * 0.14))
       const height = Math.max(60, Math.round(viewportHeight * 0.1))
 
       return { width, height }
@@ -3903,52 +3905,68 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     0 0 0 1px rgba(255, 255, 255, 0.12);
   background: radial-gradient(circle at 22% 22%, rgba(59, 130, 246, 0.42), transparent 48%),
               radial-gradient(circle at 78% 18%, rgba(236, 72, 153, 0.36), transparent 52%),
-              rgba(255, 255, 255, 0.66);
+              rgba(255, 255, 255, 0.8);
+  padding: 6px 8px 12px;
+  min-width: 238px;
+  max-width: 320px;
 }
 
 .separate-modal-thumbnail-preview {
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 6px;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  padding: 12px;
+  gap: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 14px 30px rgba(15, 23, 42, 0.14);
 }
 
 .thumbnail-icon-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.85), rgba(99, 102, 241, 0.82));
-  color: #eef2ff;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.92), rgba(99, 102, 241, 0.88));
+  color: #f8fafc;
   box-shadow:
-    0 10px 24px rgba(59, 130, 246, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 12px 30px rgba(59, 130, 246, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
     0 0 0 1px rgba(255, 255, 255, 0.24);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  justify-content: center;
 }
 
 .thumbnail-icon-glyph {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
 }
 
 .thumbnail-icon-label {
   font-weight: 700;
-  letter-spacing: 0.01em;
-  font-size: 11px;
+  letter-spacing: 0.05em;
+  font-size: 12px;
 }
 
 .thumbnail-icon-row {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.06), rgba(15, 23, 42, 0.12));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 8px 20px rgba(15, 23, 42, 0.12);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .thumbnail-spark-icon {
@@ -3959,10 +3977,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   justify-content: center;
   border-radius: 50%;
   font-size: 11px;
-  background: linear-gradient(135deg, rgba(226, 232, 240, 0.85), rgba(241, 245, 249, 0.9));
+  background: linear-gradient(135deg, rgba(226, 232, 240, 0.92), rgba(241, 245, 249, 0.95));
   box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    0 8px 18px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: #0f172a;
 }
 
 .separate-modal-header {
@@ -3988,15 +4007,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .separate-modal--thumbnail .separate-modal-header {
-  padding: 14px 16px;
-  justify-content: center;
-  gap: 8px;
+  padding: 14px 16px 10px;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 14px 30px rgba(15, 23, 42, 0.14);
 }
 
 .separate-modal--thumbnail .separate-modal-header h4 {
   font-size: 12px;
   font-weight: 800;
-  text-align: center;
+  text-align: left;
+  color: #0f172a;
 }
 
 .separate-modal-close {
@@ -4031,6 +4056,27 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     0 18px 42px rgba(37, 99, 235, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
     0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 1400px) {
+  .separate-modal--thumbnail {
+    padding: 8px 10px 14px;
+    max-width: 280px;
+  }
+
+  .separate-modal-thumbnail-preview {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .thumbnail-icon-badge {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+
+  .thumbnail-icon-row {
+    padding: 7px 8px;
+  }
 }
 
 .separate-modal-content {
