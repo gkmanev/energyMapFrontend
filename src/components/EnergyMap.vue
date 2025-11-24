@@ -3766,9 +3766,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-size: 13px;
   letter-spacing: 0.01em;
   color: #0f172a;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08));
-  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
+  background: none;
+  border-bottom: none;
+  box-shadow: none;
 }
 
 .separate-modal-header h4 {
@@ -3817,11 +3817,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.22);
+  background:none;
+  box-shadow:none;
 }
 
 .separate-modal-loading {
