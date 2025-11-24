@@ -1438,15 +1438,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.modalDefaults.height = responsiveSize.height
     },
 
-    getResponsiveModalDefaults() {
+    getResponsiveModalDefaults(modalType = null) {
       const responsiveSize = calculateResponsiveModalSize()
       this.modalDefaults.width = responsiveSize.width
       this.modalDefaults.height = responsiveSize.height
 
-      return {
+      const baseDefaults = {
         ...this.modalDefaults,
         ...responsiveSize,
       }
+
+      if (modalType === 'powerflow') {
+        const flowWidth = Math.min(baseDefaults.width, Math.max(220, Math.round(baseDefaults.width * 0.82)))
+        const flowHeight = Math.min(baseDefaults.height, Math.max(180, Math.round(baseDefaults.height * 0.82)))
+
+        return {
+          ...baseDefaults,
+          width: flowWidth,
+          height: flowHeight,
+        }
+      }
+
+      return baseDefaults
     },
 
     toggleSeparateModalView(modalId) {
@@ -1454,7 +1467,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!modal) return
 
       if (modal.thumbnail) {
-        const expandedSize = this.getResponsiveModalDefaults()
+        const expandedSize = this.getResponsiveModalDefaults(modal.type)
         modal.size = { ...expandedSize }
         modal.lastExpandedSize = expandedSize
         modal.thumbnail = false
@@ -1481,7 +1494,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       const modalId = this.separateModalIdCounter++
       const thumbnailSize = this.getThumbnailDefaults()
-      const expandedSize = this.getResponsiveModalDefaults()
+      const expandedSize = this.getResponsiveModalDefaults(type)
       const modalWidth = thumbnailSize.width
       const modalHeight = thumbnailSize.height
 
@@ -1598,8 +1611,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       dragState.startPosX = modal.position.x
       dragState.startPosY = modal.position.y
 
-      document.addEventListener('mousemove', (e) => this.onSeparateModalDrag(e, modalId))
-      document.addEventListener('mouseup', () => this.stopSeparateModalDrag(modalId))
+      dragState.moveHandler = (e) => this.onSeparateModalDrag(e, modalId)
+      dragState.upHandler = () => this.stopSeparateModalDrag(modalId)
+
+      document.addEventListener('mousemove', dragState.moveHandler)
+      document.addEventListener('mouseup', dragState.upHandler)
       event.preventDefault()
     },
 
@@ -1639,8 +1655,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!dragState) return
 
       dragState.isDragging = false
-      document.removeEventListener('mousemove', (e) => this.onSeparateModalDrag(e, modalId))
-      document.removeEventListener('mouseup', () => this.stopSeparateModalDrag(modalId))
+      if (dragState.moveHandler) {
+        document.removeEventListener('mousemove', dragState.moveHandler)
+        dragState.moveHandler = null
+      }
+      if (dragState.upHandler) {
+        document.removeEventListener('mouseup', dragState.upHandler)
+        dragState.upHandler = null
+      }
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) modal.userModified = true
 
@@ -1659,8 +1681,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       resizeState.startWidth = modal.size.width
       resizeState.startHeight = modal.size.height
 
-      document.addEventListener('mousemove', (e) => this.onSeparateModalResize(e, modalId))
-      document.addEventListener('mouseup', () => this.stopSeparateModalResize(modalId))
+      resizeState.moveHandler = (e) => this.onSeparateModalResize(e, modalId)
+      resizeState.upHandler = () => this.stopSeparateModalResize(modalId)
+
+      document.addEventListener('mousemove', resizeState.moveHandler)
+      document.addEventListener('mouseup', resizeState.upHandler)
       event.preventDefault()
       event.stopPropagation()
     },
@@ -1678,12 +1703,41 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       // Calculate aspect ratio from initial size
       const aspectRatio = resizeState.startWidth / resizeState.startHeight
 
-      // Use the larger delta to determine new size (maintains smooth resizing)
-      const delta = Math.max(Math.abs(deltaX), Math.abs(deltaY)) * Math.sign(deltaX)
-      
+      // Determine delta based on the handle being dragged
+      let primaryDelta
+      if (resizeState.direction === 'bottom') {
+        primaryDelta = deltaY
+      } else if (resizeState.direction === 'right') {
+        primaryDelta = deltaX
+      } else {
+        primaryDelta = Math.abs(deltaX) >= Math.abs(deltaY) ? deltaX : deltaY
+      }
+
       // Calculate new dimensions maintaining aspect ratio
-      let newWidth = resizeState.startWidth + delta
-      let newHeight = newWidth / aspectRatio
+      let newWidth
+      let newHeight
+
+      if (resizeState.direction === 'bottom') {
+        newHeight = resizeState.startHeight + primaryDelta
+        newWidth = newHeight * aspectRatio
+      } else {
+        newWidth = resizeState.startWidth + primaryDelta
+        newHeight = newWidth / aspectRatio
+      }
+
+      // Prevent collapsing the modal completely
+      const minWidth = 120
+      const minHeight = 90
+
+      if (newWidth < minWidth) {
+        newWidth = minWidth
+        newHeight = newWidth / aspectRatio
+      }
+
+      if (newHeight < minHeight) {
+        newHeight = minHeight
+        newWidth = newHeight * aspectRatio
+      }
 
       // Apply maximum constraints based on viewport
       const maxW = window.innerWidth - modal.position.x
@@ -1715,8 +1769,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       resizeState.isResizing = false
       resizeState.direction = null
-      document.removeEventListener('mousemove', (e) => this.onSeparateModalResize(e, modalId))
-      document.removeEventListener('mouseup', () => this.stopSeparateModalResize(modalId))
+      if (resizeState.moveHandler) {
+        document.removeEventListener('mousemove', resizeState.moveHandler)
+        resizeState.moveHandler = null
+      }
+      if (resizeState.upHandler) {
+        document.removeEventListener('mouseup', resizeState.upHandler)
+        resizeState.upHandler = null
+      }
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) modal.userModified = true
       this.queueModalChartResize(modalId)
