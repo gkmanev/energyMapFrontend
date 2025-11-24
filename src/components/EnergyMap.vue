@@ -421,6 +421,31 @@ const SUPPORTED_CAPACITY_ISO2 = new Set([
 // Generation uses same countries as capacity for now
 const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
 
+const DEFAULT_MODAL_WIDTH = 350
+const DEFAULT_MODAL_HEIGHT = 280
+
+const calculateResponsiveModalSize = () => {
+  if (typeof window === 'undefined') {
+    return { width: DEFAULT_MODAL_WIDTH, height: DEFAULT_MODAL_HEIGHT }
+  }
+
+  const viewportWidth = window.innerWidth || DEFAULT_MODAL_WIDTH
+  const viewportHeight = window.innerHeight || DEFAULT_MODAL_HEIGHT
+  const isCompactViewport = viewportWidth <= 1440 || viewportHeight <= 900
+
+  if (!isCompactViewport) {
+    return { width: DEFAULT_MODAL_WIDTH, height: DEFAULT_MODAL_HEIGHT }
+  }
+
+  const compactWidth = Math.max(220, Math.round(viewportWidth * 0.22))
+  const compactHeight = Math.max(180, Math.round(viewportHeight * 0.28))
+
+  return {
+    width: Math.min(DEFAULT_MODAL_WIDTH, compactWidth),
+    height: Math.min(DEFAULT_MODAL_HEIGHT, compactHeight),
+  }
+}
+
 const BULK_REQUEST_CONFIG = {
   timeout: 30000,
   retry: 2,
@@ -521,8 +546,7 @@ export default {
   data() {
     return {
       modalDefaults: {
-        width: 350,     // initial/default width
-        height: 280,    // initial/default height
+        ...calculateResponsiveModalSize(),
         minWidth: 200,  // block resizing smaller than this width
         minHeight: 160, // block resizing smaller than this height
       },
@@ -1416,6 +1440,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return { delta, pct };
     },
 
+    updateModalDefaultsFromViewport() {
+      const responsiveSize = calculateResponsiveModalSize()
+      this.modalDefaults.width = responsiveSize.width
+      this.modalDefaults.height = responsiveSize.height
+    },
+
+    getResponsiveModalDefaults() {
+      const responsiveSize = calculateResponsiveModalSize()
+      this.modalDefaults.width = responsiveSize.width
+      this.modalDefaults.height = responsiveSize.height
+
+      return {
+        ...this.modalDefaults,
+        ...responsiveSize,
+      }
+    },
+
     createSeparateModal(country, type, title) {
       // Check if modal for this country and type already exists
       const existingModal = this.separateModals.find(
@@ -1427,8 +1468,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       const modalId = this.separateModalIdCounter++
-      const modalWidth = this.modalDefaults.width
-      const modalHeight = this.modalDefaults.height
+      const { width: modalWidth, height: modalHeight } = this.getResponsiveModalDefaults()
 
       // Determine 2×2 grid slot
       const visibleModals = this.separateModals.filter(m => m.visible)
@@ -1478,8 +1518,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     repositionSeparateModals() {
       // Keep the 2×2 grid when auto-arranging (e.g. on resize),
       // but don't move modals the user already dragged/resized.
-      const modalWidth = 400
-      const modalHeight = 300
+      const { width: modalWidth, height: modalHeight } = this.getResponsiveModalDefaults()
       const visible = this.separateModals.filter(m => m.visible)
       let gridIndex = 0
 
@@ -1488,6 +1527,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { x, y } = this._gridPosition(gridIndex, modalWidth, modalHeight)
         modal.position.x = x
         modal.position.y = y
+        modal.size.width = modalWidth
+        modal.size.height = modalHeight
         gridIndex += 1
       })
     },
@@ -3505,8 +3546,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     handleWindowResize() {
         // Reposition modals when window is resized
+        this.updateModalDefaultsFromViewport()
         this.repositionSeparateModals()
-     
+
       },
     autoArrangeSeparateModals() {
         this.repositionSeparateModals()
@@ -3519,7 +3561,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   },
 
   async mounted() {
-    
+
+    this.updateModalDefaultsFromViewport()
     window.addEventListener('resize', this.handleWindowResize)
     window.addEventListener('keydown', this.onKeydown)
     this.initialLoading = true
