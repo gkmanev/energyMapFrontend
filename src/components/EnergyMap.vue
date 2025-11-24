@@ -1084,14 +1084,16 @@ export default {
 
 
     getThumbnailDefaults() {
+      const minWidth = 238
+
       if (typeof window === 'undefined') {
-        return { width: 180, height: 70 }
+        return { width: minWidth, height: 70 }
       }
 
       const viewportWidth = window.innerWidth || 800
       const viewportHeight = window.innerHeight || 600
 
-      const width = Math.max(140, Math.round(viewportWidth * 0.14))
+      const width = Math.max(minWidth, Math.round(viewportWidth * 0.14))
       const height = Math.max(60, Math.round(viewportHeight * 0.1))
 
       return { width, height }
