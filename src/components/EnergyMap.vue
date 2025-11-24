@@ -233,14 +233,14 @@
           </div>
 
           <!-- Resize handles -->
-          <!-- <div
+          <div
             class="separate-modal-resize-handle separate-modal-resize-right"
             @mousedown="startSeparateModalResize($event, modal.id, 'right')"
           ></div>
           <div
             class="separate-modal-resize-handle separate-modal-resize-bottom"
             @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"
-          ></div> -->
+          ></div>
           <div
             class="separate-modal-resize-handle separate-modal-resize-corner"
             @mousedown="startSeparateModalResize($event, modal.id, 'corner')"
@@ -1449,8 +1449,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       if (modalType === 'powerflow') {
-        const flowWidth = Math.min(baseDefaults.width, Math.max(220, Math.round(baseDefaults.width * 0.82)))
-        const flowHeight = Math.min(baseDefaults.height, Math.max(180, Math.round(baseDefaults.height * 0.82)))
+        const flowWidth = Math.min(baseDefaults.width, Math.max(200, Math.round(baseDefaults.width * 0.7)))
+        const flowHeight = Math.min(baseDefaults.height, Math.max(160, Math.round(baseDefaults.height * 0.65)))
 
         return {
           ...baseDefaults,
@@ -1700,58 +1700,25 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const deltaX = event.clientX - resizeState.startX
       const deltaY = event.clientY - resizeState.startY
 
-      // Calculate aspect ratio from initial size
-      const aspectRatio = resizeState.startWidth / resizeState.startHeight
+      let newWidth = resizeState.startWidth
+      let newHeight = resizeState.startHeight
 
-      // Determine delta based on the handle being dragged
-      let primaryDelta
-      if (resizeState.direction === 'bottom') {
-        primaryDelta = deltaY
-      } else if (resizeState.direction === 'right') {
-        primaryDelta = deltaX
-      } else {
-        primaryDelta = Math.abs(deltaX) >= Math.abs(deltaY) ? deltaX : deltaY
+      if (resizeState.direction === 'right' || resizeState.direction === 'corner') {
+        newWidth = resizeState.startWidth + deltaX
       }
 
-      // Calculate new dimensions maintaining aspect ratio
-      let newWidth
-      let newHeight
-
-      if (resizeState.direction === 'bottom') {
-        newHeight = resizeState.startHeight + primaryDelta
-        newWidth = newHeight * aspectRatio
-      } else {
-        newWidth = resizeState.startWidth + primaryDelta
-        newHeight = newWidth / aspectRatio
+      if (resizeState.direction === 'bottom' || resizeState.direction === 'corner') {
+        newHeight = resizeState.startHeight + deltaY
       }
 
-      // Prevent collapsing the modal completely
-      const minWidth = 120
-      const minHeight = 90
+      const minWidth = 180
+      const minHeight = 120
 
-      if (newWidth < minWidth) {
-        newWidth = minWidth
-        newHeight = newWidth / aspectRatio
-      }
+      const maxWidth = Math.max(minWidth, window.innerWidth - modal.position.x - 12)
+      const maxHeight = Math.max(minHeight, window.innerHeight - modal.position.y - 12)
 
-      if (newHeight < minHeight) {
-        newHeight = minHeight
-        newWidth = newHeight * aspectRatio
-      }
-
-      // Apply maximum constraints based on viewport
-      const maxW = window.innerWidth - modal.position.x
-      const maxH = window.innerHeight - modal.position.y
-      
-      if (newWidth > maxW) {
-        newWidth = maxW
-        newHeight = newWidth / aspectRatio
-      }
-      
-      if (newHeight > maxH) {
-        newHeight = maxH
-        newWidth = newHeight * aspectRatio
-      }
+      newWidth = Math.min(Math.max(newWidth, minWidth), maxWidth)
+      newHeight = Math.min(Math.max(newHeight, minHeight), maxHeight)
 
       // Apply the constrained dimensions
       modal.size.width = newWidth
