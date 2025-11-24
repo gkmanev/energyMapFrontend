@@ -53,7 +53,7 @@
         <div
           v-for="modal in separateModals"
           :key="modal.id"
-          class="separate-modal"
+          :class="['separate-modal', { 'separate-modal--thumbnail': modal.thumbnail }]"
           :style="getSeparateModalStyle(modal.id)"
           v-show="modal.visible"
         >
@@ -61,6 +61,7 @@
           <div
             class="separate-modal-header"
             @mousedown="startSeparateModalDrag($event, modal.id)"
+            @dblclick="toggleSeparateModalView(modal.id)"
             style="cursor: move;"
           >
             <h4>{{ modal.country }} - {{ modal.title }}</h4>
@@ -421,6 +422,31 @@ const SUPPORTED_CAPACITY_ISO2 = new Set([
 // Generation uses same countries as capacity for now
 const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
 
+const DEFAULT_MODAL_WIDTH = 350
+const DEFAULT_MODAL_HEIGHT = 280
+
+const calculateResponsiveModalSize = () => {
+  if (typeof window === 'undefined') {
+    return { width: DEFAULT_MODAL_WIDTH, height: DEFAULT_MODAL_HEIGHT }
+  }
+
+  const viewportWidth = window.innerWidth || DEFAULT_MODAL_WIDTH
+  const viewportHeight = window.innerHeight || DEFAULT_MODAL_HEIGHT
+  const isCompactViewport = viewportWidth <= 1440 || viewportHeight <= 900
+
+  if (!isCompactViewport) {
+    return { width: DEFAULT_MODAL_WIDTH, height: DEFAULT_MODAL_HEIGHT }
+  }
+
+  const compactWidth = Math.max(220, Math.round(viewportWidth * 0.22))
+  const compactHeight = Math.max(180, Math.round(viewportHeight * 0.28))
+
+  return {
+    width: Math.min(DEFAULT_MODAL_WIDTH, compactWidth),
+    height: Math.min(DEFAULT_MODAL_HEIGHT, compactHeight),
+  }
+}
+
 const BULK_REQUEST_CONFIG = {
   timeout: 30000,
   retry: 2,
@@ -521,10 +547,7 @@ export default {
   data() {
     return {
       modalDefaults: {
-        width: 350,     // initial/default width
-        height: 280,    // initial/default height
-        minWidth: 200,  // block resizing smaller than this width
-        minHeight: 160, // block resizing smaller than this height
+        ...calculateResponsiveModalSize(),
       },
       // Separate Modal System
       separateModals: [],
@@ -1041,17 +1064,27 @@ export default {
       const y = startY + row * (modalHeight + gapY)
       return { x, y }
     },
- 
 
+
+
+    getThumbnailDefaults() {
+      if (typeof window === 'undefined') {
+        return { width: 180, height: 70 }
+      }
+
+      const viewportWidth = window.innerWidth || 800
+      const viewportHeight = window.innerHeight || 600
+
+      const width = Math.max(140, Math.round(viewportWidth * 0.14))
+      const height = Math.max(60, Math.round(viewportHeight * 0.1))
+
+      return { width, height }
+    },
 
     getSeparateModalStyle(modalId) {
-    const modal = this.separateModals.find(m => m.id === modalId)
-    if (!modal) {
-      return {}
-    }
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal) return {}
 
-    // If modal has been manually positioned/resized, use that
-    if (modal.position && modal.size && modal.userModified) {
       return {
         position: 'fixed',
         left: `${modal.position.x}px`,
@@ -1060,28 +1093,11 @@ export default {
         height: `${modal.size.height}px`,
         zIndex: 1200 + modalId,
         overflow: 'hidden',
-        minWidth: '300px',
-        minHeight: '200px',
         maxWidth: '90vw',
-        maxHeight: '95vh'
+        maxHeight: '95vh',
+        transition: 'width 180ms ease, height 180ms ease'
       }
-    }
-
-    // Use initial grid position
-    return {
-      position: 'fixed',
-      left: `${modal.position.x}px`,
-      top: `${modal.position.y}px`,
-      width: `${modal.size.width}px`,
-      height: `${modal.size.height}px`,
-      zIndex: 1200 + modalId,
-      overflow: 'hidden',
-      minWidth: '300px',
-      minHeight: '200px',
-      maxWidth: '90vw',
-      maxHeight: '90vh'
-    }
-  },
+    },
     // Simple hash -> stable pseudo-random
 _hashInt(s) { let x = 0; for (let i=0;i<s.length;i++) x = (x*31 + s.charCodeAt(i))|0; return Math.abs(x); },
 _rand01(key) { return (this._hashInt(String(key)) % 10000) / 10000; },
@@ -1416,6 +1432,43 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return { delta, pct };
     },
 
+    updateModalDefaultsFromViewport() {
+      const responsiveSize = calculateResponsiveModalSize()
+      this.modalDefaults.width = responsiveSize.width
+      this.modalDefaults.height = responsiveSize.height
+    },
+
+    getResponsiveModalDefaults() {
+      const responsiveSize = calculateResponsiveModalSize()
+      this.modalDefaults.width = responsiveSize.width
+      this.modalDefaults.height = responsiveSize.height
+
+      return {
+        ...this.modalDefaults,
+        ...responsiveSize,
+      }
+    },
+
+    toggleSeparateModalView(modalId) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal) return
+
+      if (modal.thumbnail) {
+        const expandedSize = this.getResponsiveModalDefaults()
+        modal.size = { ...expandedSize }
+        modal.lastExpandedSize = expandedSize
+        modal.thumbnail = false
+      } else {
+        const thumbnailSize = this.getThumbnailDefaults()
+        modal.size = { ...thumbnailSize }
+        modal.thumbnail = true
+      }
+
+      modal.userModified = false
+      this.repositionSeparateModals()
+      this.queueModalChartResize(modalId)
+    },
+
     createSeparateModal(country, type, title) {
       // Check if modal for this country and type already exists
       const existingModal = this.separateModals.find(
@@ -1427,8 +1480,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       const modalId = this.separateModalIdCounter++
-      const modalWidth = this.modalDefaults.width
-      const modalHeight = this.modalDefaults.height
+      const thumbnailSize = this.getThumbnailDefaults()
+      const expandedSize = this.getResponsiveModalDefaults()
+      const modalWidth = thumbnailSize.width
+      const modalHeight = thumbnailSize.height
 
       // Determine 2×2 grid slot
       const visibleModals = this.separateModals.filter(m => m.visible)
@@ -1449,6 +1504,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         meta: null,
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
+        lastExpandedSize: expandedSize,
+        thumbnail: true,
         userModified: false
       }
 
@@ -1478,16 +1535,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     repositionSeparateModals() {
       // Keep the 2×2 grid when auto-arranging (e.g. on resize),
       // but don't move modals the user already dragged/resized.
-      const modalWidth = 400
-      const modalHeight = 300
       const visible = this.separateModals.filter(m => m.visible)
       let gridIndex = 0
 
       visible.forEach(modal => {
         if (modal.userModified) return
-        const { x, y } = this._gridPosition(gridIndex, modalWidth, modalHeight)
+
+        const baseSize = modal.thumbnail
+          ? this.getThumbnailDefaults()
+          : this.getResponsiveModalDefaults()
+
+        const { x, y } = this._gridPosition(gridIndex, baseSize.width, baseSize.height)
         modal.position.x = x
         modal.position.y = y
+        modal.size.width = baseSize.width
+        modal.size.height = baseSize.height
         gridIndex += 1
       })
     },
@@ -1518,24 +1580,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
 
-    getSeparateModalStyle(modalId) {
-      const modal = this.separateModals.find(m => m.id === modalId)
-      if (!modal) return {}
-
-      return {
-        position: 'fixed',
-        left: `${modal.position.x}px`,
-        top: `${modal.position.y}px`,
-        width: `${modal.size.width}px`,
-        height: `${modal.size.height}px`,
-        zIndex: 1200 + modalId,
-        overflow: 'hidden',
-        minWidth: `${this.modalDefaults.minWidth}px`,
-        minHeight: `${this.modalDefaults.minHeight}px`,
-        maxWidth: '90vw',
-        maxHeight: '90vh'
-      }
-    },
     // Start dragging separate modal
     startSeparateModalDrag(event, modalId) {
       if (event.target.closest('.separate-modal-close') || 
@@ -1641,20 +1685,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       let newWidth = resizeState.startWidth + delta
       let newHeight = newWidth / aspectRatio
 
-      // Apply minimum constraints
-      const minW = this.modalDefaults.minWidth
-      const minH = this.modalDefaults.minHeight
-      
-      if (newWidth < minW) {
-        newWidth = minW
-        newHeight = newWidth / aspectRatio
-      }
-      
-      if (newHeight < minH) {
-        newHeight = minH
-        newWidth = newHeight * aspectRatio
-      }
-
       // Apply maximum constraints based on viewport
       const maxW = window.innerWidth - modal.position.x
       const maxH = window.innerHeight - modal.position.y
@@ -1672,6 +1702,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       // Apply the constrained dimensions
       modal.size.width = newWidth
       modal.size.height = newHeight
+      modal.thumbnail = false
+      modal.lastExpandedSize = { width: newWidth, height: newHeight }
 
       this.queueModalChartResize(modalId)
     },
@@ -3505,8 +3537,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     handleWindowResize() {
         // Reposition modals when window is resized
+        this.updateModalDefaultsFromViewport()
         this.repositionSeparateModals()
-     
+
       },
     autoArrangeSeparateModals() {
         this.repositionSeparateModals()
@@ -3519,7 +3552,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   },
 
   async mounted() {
-    
+
+    this.updateModalDefaultsFromViewport()
     window.addEventListener('resize', this.handleWindowResize)
     window.addEventListener('keydown', this.onKeydown)
     this.initialLoading = true
@@ -3756,6 +3790,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   mix-blend-mode: screen;
 }
 
+.separate-modal--thumbnail {
+  border-radius: 18px;
+  box-shadow:
+    0 18px 48px rgba(8, 15, 32, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 0 0 1px rgba(255, 255, 255, 0.12);
+  background: radial-gradient(circle at 22% 22%, rgba(59, 130, 246, 0.42), transparent 48%),
+              radial-gradient(circle at 78% 18%, rgba(236, 72, 153, 0.36), transparent 52%),
+              rgba(255, 255, 255, 0.66);
+}
+
 .separate-modal-header {
   position: relative;
   z-index: 1;
@@ -3778,6 +3823,18 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   letter-spacing: 0.02em;
 }
 
+.separate-modal--thumbnail .separate-modal-header {
+  padding: 14px 16px;
+  justify-content: center;
+  gap: 8px;
+}
+
+.separate-modal--thumbnail .separate-modal-header h4 {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .separate-modal-close {
   background: linear-gradient(145deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.85));
   border: 1px solid rgba(148, 163, 184, 0.35);
@@ -3796,6 +3853,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 0 0 1px rgba(59, 130, 246, 0.22);
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.separate-modal--thumbnail .separate-modal-close {
+  transform: scale(0.9);
+  opacity: 0.9;
 }
 
 .separate-modal-close:hover {
@@ -3819,6 +3881,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 16px;
   background:none;
   box-shadow:none;
+}
+
+.separate-modal--thumbnail .separate-modal-content {
+  display: none;
 }
 
 .separate-modal-loading {
