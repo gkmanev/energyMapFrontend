@@ -8,34 +8,25 @@
       </div>
     </div>
     <div class="header">
-      <h1>Energy App by Entra Energy</h1>
+      <div class="header-top">
+        <h1>Energy App by Entra Energy</h1>
+        <div class="header-clock"><LocalClock /></div>
+      </div>
       <div class="controls">
         <!-- Add toggle for heatmap type -->
-        <label>
-          <input type="radio" v-model="heatmapType" value="prices"> Price Heatmap
+        <label class="radio-pill">
+          <input type="radio" v-model="heatmapType" value="prices">
+          <span>Price</span>
         </label>
-        <label>
-          <input type="radio" v-model="heatmapType" value="capacity"> Capacity Heatmap
+        <label class="radio-pill">
+          <input type="radio" v-model="heatmapType" value="capacity">
+          <span>capacity</span>
         </label>
-        <label>
-          <input type="radio" v-model="heatmapType" value="generation"> Generation Heatmap
+        <label class="radio-pill">
+          <input type="radio" v-model="heatmapType" value="generation">
+          <span>Generation</span>
         </label>
-        <label>
-          <input type="checkbox" v-model="showFlows" />
-        </label>
-        Show Cross-Border Flows
-        <button @click="refreshHeatmapData" :disabled="isRefreshing">
-          {{ isRefreshing ? 'Refreshing...' : 'Refresh Data' }}
-        </button>
-        <!-- NEW: Arrange modals button -->
-        <!-- <button @click="autoArrangeSeparateModals" 
-                v-if="separateModals.length > 0"
-                title="Arrange modals on right side">
-          📐 Arrange Modals
-        </button> -->
-        <div class="ml-auto flex items-center" style="font-size: 25px; text-align: right;"><LocalClock /></div>
       </div>
-      
     </div>
 
     <!-- FLEX ROW: sidebar + map -->
@@ -3752,63 +3743,112 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 /* Compact header */
 .header {
   text-align: center;
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%);
   color: white;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   flex-shrink: 0;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .header h1 {
-  margin: 0 0 8px 0;
-  font-weight: 300;
-  font-size: 1.8rem;
-  line-height: 1.2;
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.2rem;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.header-clock {
+  font-size: 18px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .controls {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
-.controls label {
-  display: flex;
+.radio-pill {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: white;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.controls input[type="radio"] {
-  margin: 0;
-}
-
-.controls button {
   padding: 6px 12px;
-  background-color: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #e0f2fe;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
-  font-size: 14px;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.4);
 }
 
-.controls button:hover:not(:disabled) {
-  background-color: #218838;
+.radio-pill input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.radio-pill span {
+  position: relative;
+  z-index: 1;
+}
+
+.radio-pill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.radio-pill:hover {
   transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.5);
 }
 
-.controls button:disabled {
-  background-color: #6c757d;
-  cursor: not-allowed;
-  transform: none;
+.radio-pill:hover::after {
+  opacity: 1;
+}
+
+.radio-pill input[type="radio"]:checked + span {
+  color: #0b253a;
+}
+
+.radio-pill input[type="radio"]:checked ~ span,
+.radio-pill input[type="radio"]:checked + span {
+  font-weight: 700;
+}
+
+.radio-pill input[type="radio"]:checked + span::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #facc15, #22d3ee);
+  opacity: 0.95;
+  z-index: -1;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.18);
 }
 
 /* Map layout */
