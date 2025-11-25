@@ -60,8 +60,9 @@
           <!-- Draggable header -->
           <div
             class="separate-modal-header"
-            @mousedown="startSeparateModalDrag($event, modal.id)"
+            @pointerdown.stop="startSeparateModalDrag($event, modal.id)"
             @dblclick="toggleSeparateModalView(modal.id)"
+            @click.stop="handleThumbnailTap(modal.id, $event)"
             style="cursor: move;"
           >
             <h4>{{ modal.country }} - {{ modal.title }}</h4>
@@ -73,7 +74,11 @@
             </button>
           </div>
 
-          <div v-if="modal.thumbnail" class="separate-modal-thumbnail-preview">
+          <div
+            v-if="modal.thumbnail"
+            class="separate-modal-thumbnail-preview"
+            @click.stop="handleThumbnailTap(modal.id, $event)"
+          >
             <div class="thumbnail-icon-badge">
               <span class="thumbnail-icon-glyph">{{ getModalIconSymbol(modal.type) }}</span>
               <span class="thumbnail-icon-label">{{ getModalIconLabel(modal.type) }}</span>
@@ -251,15 +256,15 @@
           <!-- Resize handles -->
           <div
             class="separate-modal-resize-handle separate-modal-resize-right"
-            @mousedown="startSeparateModalResize($event, modal.id, 'right')"
+            @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'right')"
           ></div>
           <div
             class="separate-modal-resize-handle separate-modal-resize-bottom"
-            @mousedown="startSeparateModalResize($event, modal.id, 'bottom')"
+            @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'bottom')"
           ></div>
           <div
             class="separate-modal-resize-handle separate-modal-resize-corner"
-            @mousedown="startSeparateModalResize($event, modal.id, 'corner')"
+            @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'corner')"
           ></div>
         </div>
       </transition-group>
@@ -1674,14 +1679,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     // Start dragging separate modal
     startSeparateModalDrag(event, modalId) {
-      if (event.target.closest('.separate-modal-close') || 
+      if (event.target.closest('.separate-modal-close') ||
           event.target.closest('.separate-modal-resize-handle')) {
         return
       }
 
       const dragState = this.separateModalDragState[modalId]
       const modal = this.separateModals.find(m => m.id === modalId)
-      
+
       if (!dragState || !modal) return
 
       dragState.isDragging = true
@@ -1691,19 +1696,22 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       dragState.startPosY = modal.position.y
 
       dragState.moveHandler = (e) => this.onSeparateModalDrag(e, modalId)
-      dragState.upHandler = () => this.stopSeparateModalDrag(modalId)
+      dragState.upHandler = (e) => this.stopSeparateModalDrag(modalId, e)
 
-      document.addEventListener('mousemove', dragState.moveHandler)
-      document.addEventListener('mouseup', dragState.upHandler)
-      event.preventDefault()
+      document.addEventListener('pointermove', dragState.moveHandler, { passive: false })
+      document.addEventListener('pointerup', dragState.upHandler, { passive: false })
     },
 
     // Handle separate modal dragging
     onSeparateModalDrag(event, modalId) {
       const dragState = this.separateModalDragState[modalId]
       const modal = this.separateModals.find(m => m.id === modalId)
-      
+
       if (!dragState?.isDragging || !modal) return
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
 
       const deltaX = event.clientX - dragState.startX
       const deltaY = event.clientY - dragState.startY
@@ -1729,22 +1737,24 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     // Stop dragging separate modal
-    stopSeparateModalDrag(modalId) {
+    stopSeparateModalDrag(modalId, event) {
       const dragState = this.separateModalDragState[modalId]
       if (!dragState) return
 
       dragState.isDragging = false
       if (dragState.moveHandler) {
-        document.removeEventListener('mousemove', dragState.moveHandler)
+        document.removeEventListener('pointermove', dragState.moveHandler)
         dragState.moveHandler = null
       }
       if (dragState.upHandler) {
-        document.removeEventListener('mouseup', dragState.upHandler)
+        document.removeEventListener('pointerup', dragState.upHandler)
         dragState.upHandler = null
       }
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) modal.userModified = true
-
+      if (event?.type === 'pointerup') {
+        event.stopPropagation()
+      }
     },
     // Start resizing separate modal
     startSeparateModalResize(event, modalId, direction) {
@@ -1761,11 +1771,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       resizeState.startHeight = modal.size.height
 
       resizeState.moveHandler = (e) => this.onSeparateModalResize(e, modalId)
-      resizeState.upHandler = () => this.stopSeparateModalResize(modalId)
+      resizeState.upHandler = (e) => this.stopSeparateModalResize(modalId, e)
 
-      document.addEventListener('mousemove', resizeState.moveHandler)
-      document.addEventListener('mouseup', resizeState.upHandler)
-      event.preventDefault()
+      document.addEventListener('pointermove', resizeState.moveHandler, { passive: false })
+      document.addEventListener('pointerup', resizeState.upHandler, { passive: false })
       event.stopPropagation()
     },
 
@@ -1775,6 +1784,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const modal = this.separateModals.find(m => m.id === modalId)
 
       if (!resizeState?.isResizing || !modal) return
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
 
       const deltaX = event.clientX - resizeState.startX
       const deltaY = event.clientY - resizeState.startY
@@ -1809,23 +1822,39 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     // Stop resizing separate modal
-    stopSeparateModalResize(modalId) {
+    stopSeparateModalResize(modalId, event) {
       const resizeState = this.separateModalResizeState[modalId]
       if (!resizeState) return
 
       resizeState.isResizing = false
       resizeState.direction = null
       if (resizeState.moveHandler) {
-        document.removeEventListener('mousemove', resizeState.moveHandler)
+        document.removeEventListener('pointermove', resizeState.moveHandler)
         resizeState.moveHandler = null
       }
       if (resizeState.upHandler) {
-        document.removeEventListener('mouseup', resizeState.upHandler)
+        document.removeEventListener('pointerup', resizeState.upHandler)
         resizeState.upHandler = null
       }
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) modal.userModified = true
+      if (event?.type === 'pointerup') {
+        event.stopPropagation()
+      }
       this.queueModalChartResize(modalId)
+    },
+
+    handleThumbnailTap(modalId, event) {
+      if (event?.target.closest('.separate-modal-close')) return
+
+      const dragState = this.separateModalDragState[modalId]
+      const resizeState = this.separateModalResizeState[modalId]
+      if (dragState?.isDragging || resizeState?.isResizing) return
+
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal || !modal.thumbnail) return
+
+      this.toggleSeparateModalView(modalId)
     },
 
     queueModalChartResize(modalId) {
@@ -4744,6 +4773,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   position: absolute;
   background: transparent;
   z-index: 10;
+  touch-action: none;
 }
 
 .separate-modal-resize-right {
@@ -4779,6 +4809,22 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 /* Make header draggable */
 .separate-modal-header {
   user-select: none;
+  touch-action: none;
+}
+
+@media (max-width: 768px) {
+  .separate-modal-resize-right {
+    width: 14px;
+  }
+
+  .separate-modal-resize-bottom {
+    height: 14px;
+  }
+
+  .separate-modal-resize-corner {
+    width: 28px;
+    height: 28px;
+  }
 }
 .chart-container {
   width: 100%;
