@@ -9,7 +9,7 @@
     </div>
     <div class="header">
       <div class="header-top">
-        <h1>Energy App by Entra Energy</h1>
+        <h1>EnApp by Entra</h1>
         <div class="header-clock"><LocalClock /></div>
       </div>
       <div class="controls">
@@ -3743,7 +3743,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 /* Compact header */
 .header {
   text-align: center;
-  padding: 8px 16px;
+  padding: 6px 12px;
   background: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%);
   color: white;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
@@ -3762,14 +3762,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .header h1 {
   margin: 0;
   font-weight: 600;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   line-height: 1.1;
   letter-spacing: 0.02em;
 }
 
 .header-clock {
-  font-size: 18px;
-  padding: 4px 10px;
+  font-size: 16px;
+  padding: 3px 10px;
   background: rgba(255, 255, 255, 0.18);
   border-radius: 999px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
@@ -3779,21 +3779,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .radio-pill {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 6px 11px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
   border: 1px solid rgba(255, 255, 255, 0.35);
   color: #e0f2fe;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -4697,15 +4697,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 @media (max-width: 768px) {
   .header {
-    padding: 8px 15px;
+    padding: 6px 12px;
   }
 
   .header h1 {
-    font-size: 1.6rem;
+    font-size: 1.2rem;
   }
 
   .controls {
-    gap: 10px;
+    gap: 8px;
     margin-top: 6px;
   }
 
@@ -4742,13 +4742,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 @media (max-width: 600px) {
   .header h1 {
-    font-size: 1.4rem;
-    margin-bottom: 6px;
+    font-size: 1.05rem;
+    margin-bottom: 4px;
   }
-  
+
   .controls {
-    gap: 8px;
-    flex-direction: column;
+    gap: 6px;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
   }
   
   .controls label, .controls button {
