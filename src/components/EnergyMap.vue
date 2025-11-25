@@ -662,7 +662,15 @@ export default {
       pricePollingMs: 5 * 60 * 1000,
       priceTimer: null,
 
-      zoom: 5,
+      defaultZoom: 5,
+      mobileZoomOffset: 2,
+      zoom: (() => {
+        const isClient = typeof window !== 'undefined'
+        const isMobileViewport = isClient && window.innerWidth <= 768
+        const defaultZoom = 5
+        const mobileZoom = Math.max(2, defaultZoom - 2)
+        return isMobileViewport ? mobileZoom : defaultZoom
+      })(),
       center: [54, 20],
       showTooltips: true,
       selectedColorScheme: 'ylOrRd',
@@ -1058,21 +1066,17 @@ export default {
       return color
     },
 
-    // --- 2x2 grid helper ----------------------------------------------------
-    // Returns {x,y} for a given slotIndex in a 2×2 grid.
-    // Slots: 0 (row0,col0), 1 (row0,col1), 2 (row1,col0), 3 (row1,col1).
-    // For 5th+ modals, continues new rows (2 columns).
+    // --- Vertical modal helper ---------------------------------------------
+    // Returns {x,y} for a given slotIndex stacked vertically from the left
+    // edge so multiple modals align in a single column.
     _gridPosition(slotIndex, modalWidth = 400, modalHeight = 300) {
-      const cols = 2
       const marginFromEdge = 20   // left/top margin to the viewport
-      const gapX = 16             // horizontal gap between columns
       const gapY = 16             // vertical gap between rows
       const startY = 100          // initial top offset
 
-      const col = slotIndex % cols
-      const row = Math.floor(slotIndex / cols)
+      const row = slotIndex
 
-      const x = marginFromEdge + col * (modalWidth + gapX)
+      const x = marginFromEdge
       const y = startY + row * (modalHeight + gapY)
       return { x, y }
     },
@@ -1459,6 +1463,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const responsiveSize = calculateResponsiveModalSize()
       this.modalDefaults.width = responsiveSize.width
       this.modalDefaults.height = responsiveSize.height
+    },
+
+    updateResponsiveZoom() {
+      if (typeof window === 'undefined') return
+
+      const isMobileViewport = window.innerWidth <= 768
+      const minZoom = this.mapOptions?.minZoom ?? 0
+      const mobileZoom = Math.max(minZoom, this.defaultZoom - this.mobileZoomOffset)
+      const targetZoom = isMobileViewport ? mobileZoom : this.defaultZoom
+
+      if (this.zoom !== targetZoom) {
+        this.zoom = targetZoom
+
+        if (this.map) {
+          this.map.setZoom(targetZoom)
+        }
+      }
     },
 
     getResponsiveModalDefaults(modalType = null) {
@@ -3320,6 +3341,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
       }
 
+      this.updateResponsiveZoom()
+
     },
 
     async renderCapacityChart() {
@@ -3662,15 +3685,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     handleWindowResize() {
-        // Reposition modals when window is resized
-        this.updateModalDefaultsFromViewport()
-        this.syncSeparateModalModes()
-        this.repositionSeparateModals()
+      // Reposition modals when window is resized
+      this.updateResponsiveZoom()
+      this.updateModalDefaultsFromViewport()
+      this.syncSeparateModalModes()
+      this.repositionSeparateModals()
 
-      },
+    },
     autoArrangeSeparateModals() {
-        this.repositionSeparateModals()
-      },
+      this.repositionSeparateModals()
+    },
 
     destroyGenerationChart() {
       if (this.generationChartInstance?.destroy) this.generationChartInstance.destroy()
@@ -3681,6 +3705,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   async mounted() {
 
     this.updateModalDefaultsFromViewport()
+    this.updateResponsiveZoom()
     window.addEventListener('resize', this.handleWindowResize)
     window.addEventListener('keydown', this.onKeydown)
     this.initialLoading = true
