@@ -33,14 +33,14 @@
     <div class="map-row">
      
       <div
-        v-if="isModalOpen"
+        v-if="!isMobileViewport && isModalOpen"
         class="panel-scrim"
         @click="closePanel"
         aria-hidden="true"
       ></div>
-      
+
        <!-- Separate Modal Windows for Charts -->
-      <transition-group name="modal-fade">
+      <transition-group v-if="!isMobileViewport" name="modal-fade">
         <div
           v-for="modal in separateModals"
           :key="modal.id"
@@ -287,7 +287,31 @@
         </LMap>
       </div>
     </div>
-    
+
+    <div v-if="isMobileViewport && mobilePanelVisible" class="mobile-bottom-panel">
+      <div class="mobile-panel-header">
+        <div class="mobile-panel-titles">
+          <p class="mobile-panel-label">Energy Prices (48h)</p>
+          <h4 class="mobile-panel-country">{{ mobilePanelCountry }}</h4>
+        </div>
+        <button class="mobile-panel-close" @click="closeMobilePanel">Hide</button>
+      </div>
+
+      <div class="mobile-panel-body">
+        <div v-if="mobilePanelLoading" class="mobile-panel-loading">
+          <div class="loading-spinner-small"></div>
+          <p>Loading price data...</p>
+        </div>
+        <div v-else-if="mobilePanelError" class="mobile-panel-error">
+          <p>{{ mobilePanelError }}</p>
+          <button @click="retryMobilePanel">Retry</button>
+        </div>
+        <div v-else class="mobile-panel-chart">
+          <canvas id="mobile-price-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
     <!-- Price Slider -->
     <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
       <div class="overlay-header">
@@ -622,6 +646,13 @@ export default {
       // Existing data properties
       europeBounds: [[34, -25], [72, 45]],
       isModalOpen: false,
+      isMobileViewport: typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+      mobilePanelVisible: false,
+      mobilePanelLoading: false,
+      mobilePanelError: null,
+      mobilePanelCountry: '',
+      mobilePanelISO2: null,
+      mobilePanelChart: null,
       selectedFeature: null,
       currentAbortController: null,
       capacityLoading: false,
@@ -3281,9 +3312,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               console.warn('Error in mouseout handler:', error)
             }
           },
-          async click() {            
+          async click() {
             try {
               vm.closeAllSeparateModals();
+
+              if (vm.isMobileViewport) {
+                if (iso2) {
+                  vm.openMobilePricePanel(name, iso2)
+                }
+                return
+              }
+
               // First, open the original modal
               vm.openModal({ name, value: getVal(), properties: feature.properties })
               await new Promise(r => setTimeout(r, 220))
@@ -3688,6 +3727,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       // Reposition modals when window is resized
       this.updateResponsiveZoom()
       this.updateModalDefaultsFromViewport()
+      this.updateMobileState()
       this.syncSeparateModalModes()
       this.repositionSeparateModals()
 
@@ -3699,15 +3739,160 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     destroyGenerationChart() {
       if (this.generationChartInstance?.destroy) this.generationChartInstance.destroy()
       this.generationChartInstance = null
+    },
+
+    updateMobileState() {
+      const previous = this.isMobileViewport
+      this.isMobileViewport = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+
+      if (this.isMobileViewport) {
+        this.closeAllSeparateModals()
+        this.isModalOpen = false
+      }
+
+      if (previous && !this.isMobileViewport) {
+        this.closeMobilePanel()
+      }
+    },
+
+    async openMobilePricePanel(country, iso2) {
+      this.mobilePanelCountry = country
+      this.mobilePanelISO2 = iso2
+      this.mobilePanelVisible = true
+      this.mobilePanelLoading = true
+      this.mobilePanelError = null
+
+      try {
+        const timeData = await this.fetchHistoricalPricesForCountry(iso2)
+        if (!timeData || !Object.keys(timeData).length) {
+          this.mobilePanelError = 'No price data available'
+          return
+        }
+
+        const points = Object.entries(timeData)
+          .map(([ts, price]) => ({ ts: Number(ts), price }))
+          .sort((a, b) => a.ts - b.ts)
+
+        this.mobilePanelLoading = false
+        await this.$nextTick()
+        this.renderMobilePriceChart(points)
+      } catch (error) {
+        console.error('Failed to open mobile price panel:', error)
+        this.mobilePanelError = 'Unable to load price data'
+      } finally {
+        this.mobilePanelLoading = false
+      }
+    },
+
+    renderMobilePriceChart(points) {
+      if (this.mobilePanelChart) {
+        this.mobilePanelChart.destroy()
+        this.mobilePanelChart = null
+      }
+
+      const canvas = document.getElementById('mobile-price-chart')
+      if (!canvas || !points?.length) return
+
+      const data = points.map(p => ({ x: p.ts, y: Number(p.price) || 0 }))
+      const config = {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: 'Price (EUR/MWh)',
+            data,
+            borderColor: 'rgba(102,126,234,1)',
+            backgroundColor: 'rgba(102,126,234,0.25)',
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.25
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' },
+              grid: {
+                color: 'rgba(148, 163, 184, 0.14)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#cbd5f5'
+              }
+            },
+            y: {
+              beginAtZero: false,
+              title: {
+                display: true,
+                text: 'EUR/MWh',
+                color: '#f8fafc',
+                font: { size: 12, weight: 600 }
+              },
+              grid: {
+                color: 'rgba(148, 163, 184, 0.12)',
+                drawBorder: false
+              },
+              ticks: {
+                callback: v => Intl.NumberFormat().format(v),
+                color: '#cbd5f5'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                color: '#f8fafc'
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(15, 23, 42, 0.92)',
+              titleColor: '#f8fafc',
+              bodyColor: '#e2e8f0',
+              borderColor: 'rgba(148, 163, 184, 0.35)',
+              borderWidth: 1
+            }
+          },
+          interaction: { mode: 'index', intersect: false }
+        }
+      }
+
+      this.mobilePanelChart = markRaw(new Chart(canvas.getContext('2d'), config))
+    },
+
+    closeMobilePanel() {
+      this.mobilePanelVisible = false
+      this.mobilePanelLoading = false
+      this.mobilePanelError = null
+      this.mobilePanelCountry = ''
+      this.mobilePanelISO2 = null
+      if (this.mobilePanelChart) {
+        this.mobilePanelChart.destroy()
+        this.mobilePanelChart = null
+      }
+    },
+
+    retryMobilePanel() {
+      if (this.mobilePanelISO2) {
+        this.openMobilePricePanel(this.mobilePanelCountry, this.mobilePanelISO2)
+      }
     }
   },
 
-  async mounted() {
+    async mounted() {
 
-    this.updateModalDefaultsFromViewport()
-    this.updateResponsiveZoom()
-    window.addEventListener('resize', this.handleWindowResize)
-    window.addEventListener('keydown', this.onKeydown)
+      this.updateModalDefaultsFromViewport()
+      this.updateResponsiveZoom()
+      this.updateMobileState()
+      window.addEventListener('resize', this.handleWindowResize)
+      window.addEventListener('keydown', this.onKeydown)
     this.initialLoading = true
     try {
       await this.loadCountriesData()
@@ -3739,12 +3924,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.chart.destroy()
       }
     })
-    
-    if (this.priceTimer) clearInterval(this.priceTimer)
-    if (this.playInterval) clearInterval(this.playInterval)
 
-    // Clean up drag/resize listeners
-    document.removeEventListener('mousemove', this.onDrag)
+      if (this.priceTimer) clearInterval(this.priceTimer)
+      if (this.playInterval) clearInterval(this.playInterval)
+
+      if (this.mobilePanelChart) {
+        this.mobilePanelChart.destroy()
+        this.mobilePanelChart = null
+      }
+
+      // Clean up drag/resize listeners
+      document.removeEventListener('mousemove', this.onDrag)
     document.removeEventListener('mouseup', this.stopDrag)
     document.removeEventListener('mousemove', this.onResize)
     document.removeEventListener('mouseup', this.stopResize)
@@ -5273,6 +5463,103 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-size: 10px;
   color: rgba(148, 163, 184, 0.75);
   text-align: right;
+}
+
+.mobile-bottom-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(180deg, #0f172a 0%, #0b1224 100%);
+  color: #e2e8f0;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.22);
+  padding: 12px 16px 16px;
+  z-index: 1400;
+}
+
+.mobile-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-panel-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobile-panel-label {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.mobile-panel-country {
+  margin: 0;
+  font-size: 18px;
+  color: #f8fafc;
+}
+
+.mobile-panel-close {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.mobile-panel-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.mobile-panel-body {
+  margin-top: 10px;
+  min-height: 230px;
+}
+
+.mobile-panel-chart {
+  height: 260px;
+  width: 100%;
+}
+
+.mobile-panel-loading,
+.mobile-panel-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  min-height: 240px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.mobile-panel-error button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.25);
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecdd3;
+  cursor: pointer;
+}
+
+@media (min-width: 769px) {
+  .mobile-bottom-panel {
+    display: none;
+  }
 }
 
 :global(.delta-tooltip) {
