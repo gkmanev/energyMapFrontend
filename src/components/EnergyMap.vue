@@ -696,12 +696,13 @@ export default {
       priceBadgeLayer: null,
 
       defaultZoom: 5,
-      mobileZoomOffset: 2,
+      mobileZoomOffset: 0,
       zoom: (() => {
         const isClient = typeof window !== 'undefined'
         const isMobileViewport = isClient && window.innerWidth <= 768
         const defaultZoom = 5
-        const mobileZoom = Math.max(2, defaultZoom - 2)
+        const mobileZoomOffset = 0
+        const mobileZoom = Math.max(2, defaultZoom - mobileZoomOffset)
         return isMobileViewport ? mobileZoom : defaultZoom
       })(),
       center: [54, 20],
