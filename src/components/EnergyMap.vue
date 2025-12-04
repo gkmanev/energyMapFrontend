@@ -609,6 +609,7 @@ export default {
       separateModalResizeState: {}, // Track resize state for each modal
       modalChartResizeRafs: {},
       layerByISO2: {},               // iso2 -> Leaflet layer
+      countryMainCenterByISO2: {},    // cache of main polygon centers per country
       showChangeTooltips: false,      // enable/disable delta bubbles
       deltaHideTimer: null,
       isUserScrubbing: false,
@@ -692,6 +693,7 @@ export default {
       priceByISO2: {},
       pricePollingMs: 5 * 60 * 1000,
       priceTimer: null,
+      priceBadgeLayer: null,
 
       defaultZoom: 5,
       mobileZoomOffset: 2,
@@ -985,6 +987,7 @@ export default {
           this.hideAllDeltaTooltips();
         }
         this.updateColorScheme()
+        this.$nextTick(() => this.updatePriceBadges())
 
       },
       immediate: false
@@ -995,6 +998,7 @@ export default {
         this.updateColorScheme()
         this.updateGenerationCursorLines()
         if (this.showChangeTooltips) this.updateDeltaTooltips();
+        this.updatePriceBadges()
       },
     },
 
@@ -1315,12 +1319,98 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }).filter(point => (point.imports || 0) > 0 || (point.exports || 0) > 0)
     },
 
-    // Get a country’s visual center from its Leaflet layer bounds (cheap & good-enough)
+    normalizeLayerPolygons(latlngs) {
+      if (!Array.isArray(latlngs) || !latlngs.length) return []
+
+      const first = latlngs[0]
+
+      if (first?.lat !== undefined) {
+        return [[latlngs]]
+      }
+
+      if (Array.isArray(first) && first[0]?.lat !== undefined) {
+        return [latlngs]
+      }
+
+      if (Array.isArray(first) && Array.isArray(first[0]) && first[0][0]?.lat !== undefined) {
+        return latlngs
+      }
+
+      return []
+    },
+
+    computeRingAreaAndCentroid(ring = []) {
+      if (!ring.length) return null
+
+      let areaSum = 0
+      let cxSum = 0
+      let cySum = 0
+
+      for (let i = 0; i < ring.length; i += 1) {
+        const current = ring[i]
+        const next = ring[(i + 1) % ring.length]
+        if (!current || !next) continue
+
+        const cross = (current.lng * next.lat) - (next.lng * current.lat)
+        areaSum += cross
+        cxSum += (current.lng + next.lng) * cross
+        cySum += (current.lat + next.lat) * cross
+      }
+
+      const signedArea = areaSum / 2
+      const absArea = Math.abs(signedArea)
+
+      if (absArea > 0) {
+        const cx = cxSum / (3 * areaSum)
+        const cy = cySum / (3 * areaSum)
+        if (Number.isFinite(cx) && Number.isFinite(cy)) {
+          return { area: absArea, centroid: [cy, cx] }
+        }
+      }
+
+      const fallbackPoint = ring.find(pt => pt?.lat !== undefined && pt?.lng !== undefined)
+      if (fallbackPoint) {
+        return { area: 0, centroid: [fallbackPoint.lat, fallbackPoint.lng] }
+      }
+
+      return null
+    },
+
+    // Get a country’s visual center from its main (largest) polygon
     getCountryCenter(iso2) {
-      const lyr = this.layerByISO2[iso2]
-      if (!lyr?.getBounds) return null
-      const c = lyr.getBounds().getCenter()
-      return [c.lat, c.lng]
+      if (!iso2) return null
+      if (!this.countryMainCenterByISO2) this.countryMainCenterByISO2 = {}
+
+      const cached = this.countryMainCenterByISO2[iso2]
+      if (cached) return cached
+
+      const layer = this.layerByISO2[iso2]
+      const latlngs = layer?.getLatLngs ? layer.getLatLngs() : null
+      const polygons = latlngs ? this.normalizeLayerPolygons(latlngs) : []
+
+      let best = null
+
+      polygons.forEach((rings) => {
+        const outerRing = rings?.[0]
+        const stats = this.computeRingAreaAndCentroid(outerRing)
+        if (!stats?.centroid) return
+        if (!best || (stats.area ?? 0) > (best.area ?? 0)) {
+          best = stats
+        }
+      })
+
+      let center = best?.centroid
+
+      if (!center && layer?.getBounds) {
+        const c = layer.getBounds().getCenter()
+        center = [c.lat, c.lng]
+      }
+
+      if (center) {
+        this.countryMainCenterByISO2[iso2] = center
+      }
+
+      return center || null
     },
 
     // Map absolute flow (MW) to a 1..8 px stroke width (tweak as you like)
@@ -2891,11 +2981,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           Object.assign(newHistoricalData, result.value.data)
         }
       })
-      
+
       this.historicalPriceData = newHistoricalData
       this.updateColorScheme()
       if (this.showChangeTooltips) this.$nextTick(() => this.updateDeltaTooltips());
-     
+      this.$nextTick(() => this.updatePriceBadges())
+
     },
 
     async fetchBulkHistoricalPrices(countries) {
@@ -3381,7 +3472,56 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       this.updateResponsiveZoom()
+      this.updatePriceBadges()
 
+    },
+
+    ensurePriceBadgeLayer() {
+      if (!this.map) return null
+
+      if (!this.priceBadgeLayer) {
+        this.priceBadgeLayer = L.layerGroup()
+        this.priceBadgeLayer.addTo(this.map)
+      }
+
+      return this.priceBadgeLayer
+    },
+
+    updatePriceBadges() {
+      const badgeLayer = this.ensurePriceBadgeLayer()
+      if (!badgeLayer) return
+
+      badgeLayer.clearLayers()
+
+      if (this.heatmapType !== 'prices') return
+
+      Object.entries(this.currentDataByISO2).forEach(([iso2, value]) => {
+        if (!Number.isFinite(value)) return
+
+        const center = this.getCountryCenter(iso2)
+        if (!center) return
+
+        const badgeHtml = `
+          <div class="price-badge">
+            <div class="price-badge__value">${value.toFixed(0)}</div>
+            <div class="price-badge__unit">€/MWh</div>
+          </div>
+        `
+
+        const marker = L.marker(center, {
+          icon: L.divIcon({
+            className: 'price-badge-icon',
+            html: badgeHtml,
+            iconSize: [72, 48],
+            iconAnchor: [36, 24]
+          }),
+          interactive: false,
+          keyboard: false,
+          zIndexOffset: 800
+        })
+
+        marker.addTo(badgeLayer)
+      })
     },
 
     async renderCapacityChart() {
@@ -3917,7 +4057,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     window.removeEventListener('keydown', this.onKeydown)
     this.destroyCapacityChart()
     this.destroyGenerationChart()
-    
+
     // Clean up separate modal charts
     this.separateModals.forEach(modal => {
       if (modal.chart) {
@@ -3925,16 +4065,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     })
 
-      if (this.priceTimer) clearInterval(this.priceTimer)
-      if (this.playInterval) clearInterval(this.playInterval)
+    if (this.priceTimer) clearInterval(this.priceTimer)
+    if (this.playInterval) clearInterval(this.playInterval)
 
-      if (this.mobilePanelChart) {
-        this.mobilePanelChart.destroy()
-        this.mobilePanelChart = null
-      }
+    if (this.mobilePanelChart) {
+      this.mobilePanelChart.destroy()
+      this.mobilePanelChart = null
+    }
 
-      // Clean up drag/resize listeners
-      document.removeEventListener('mousemove', this.onDrag)
+    if (this.priceBadgeLayer && this.map) {
+      this.priceBadgeLayer.remove()
+      this.priceBadgeLayer = null
+    }
+
+    // Clean up drag/resize listeners
+    document.removeEventListener('mousemove', this.onDrag)
     document.removeEventListener('mouseup', this.stopDrag)
     document.removeEventListener('mousemove', this.onResize)
     document.removeEventListener('mouseup', this.stopResize)
@@ -4468,6 +4613,44 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
+}
+
+.price-badge-icon {
+  background: transparent;
+  border: none;
+  pointer-events: none !important;
+}
+
+.price-badge {
+  background: rgba(15, 23, 42, 0.88);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  min-width: 64px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(6px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.price-badge__value {
+  font-weight: 700;
+  font-size: 17px;
+  color: #fef3c7;
+  letter-spacing: 0.3px;
+}
+
+.price-badge__unit {
+  font-size: 10px;
+  color: #cbd5e1;
+  margin-top: 0;
+  text-align: center;
+  display: block;
 }
 
 .chart-box {
