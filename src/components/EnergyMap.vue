@@ -1377,7 +1377,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return null
     },
 
-    // Get a country’s visual center from its main (largest) polygon
+    // Get a country’s visual center, preferring provided label coordinates
     getCountryCenter(iso2) {
       if (!iso2) return null
       if (!this.countryMainCenterByISO2) this.countryMainCenterByISO2 = {}
@@ -1386,21 +1386,39 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (cached) return cached
 
       const layer = this.layerByISO2[iso2]
-      const latlngs = layer?.getLatLngs ? layer.getLatLngs() : null
-      const polygons = latlngs ? this.normalizeLayerPolygons(latlngs) : []
+      const props = layer?.feature?.properties || {}
 
-      let best = null
+      const labelLng = props.LABEL_X ?? props.LABEL_LON ?? props.label_x ?? null
+      const labelLat = props.LABEL_Y ?? props.LABEL_LAT ?? props.label_y ?? null
 
-      polygons.forEach((rings) => {
-        const outerRing = rings?.[0]
-        const stats = this.computeRingAreaAndCentroid(outerRing)
-        if (!stats?.centroid) return
-        if (!best || (stats.area ?? 0) > (best.area ?? 0)) {
-          best = stats
-        }
-      })
+      let center = null
 
-      let center = best?.centroid
+      if (Number.isFinite(labelLat) && Number.isFinite(labelLng)) {
+        center = [labelLat, labelLng]
+      }
+
+      if (!center && layer?.getCenter) {
+        const c = layer.getCenter()
+        if (c) center = [c.lat, c.lng]
+      }
+
+      if (!center) {
+        const latlngs = layer?.getLatLngs ? layer.getLatLngs() : null
+        const polygons = latlngs ? this.normalizeLayerPolygons(latlngs) : []
+
+        let best = null
+
+        polygons.forEach((rings) => {
+          const outerRing = rings?.[0]
+          const stats = this.computeRingAreaAndCentroid(outerRing)
+          if (!stats?.centroid) return
+          if (!best || (stats.area ?? 0) > (best.area ?? 0)) {
+            best = stats
+          }
+        })
+
+        center = best?.centroid || null
+      }
 
       if (!center && layer?.getBounds) {
         const c = layer.getBounds().getCenter()
