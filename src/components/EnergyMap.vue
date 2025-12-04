@@ -4628,13 +4628,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 8px 10px;
-  min-width: 64px;
+  width: 72px;
+  height: 48px;
+  box-sizing: border-box;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(6px);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   pointer-events: none;
 }
