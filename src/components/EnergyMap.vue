@@ -692,6 +692,7 @@ export default {
       priceByISO2: {},
       pricePollingMs: 5 * 60 * 1000,
       priceTimer: null,
+      priceBadgeLayer: null,
 
       defaultZoom: 5,
       mobileZoomOffset: 2,
@@ -985,6 +986,7 @@ export default {
           this.hideAllDeltaTooltips();
         }
         this.updateColorScheme()
+        this.$nextTick(() => this.updatePriceBadges())
 
       },
       immediate: false
@@ -995,6 +997,7 @@ export default {
         this.updateColorScheme()
         this.updateGenerationCursorLines()
         if (this.showChangeTooltips) this.updateDeltaTooltips();
+        this.updatePriceBadges()
       },
     },
 
@@ -2891,11 +2894,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           Object.assign(newHistoricalData, result.value.data)
         }
       })
-      
+
       this.historicalPriceData = newHistoricalData
       this.updateColorScheme()
       if (this.showChangeTooltips) this.$nextTick(() => this.updateDeltaTooltips());
-     
+      this.$nextTick(() => this.updatePriceBadges())
+
     },
 
     async fetchBulkHistoricalPrices(countries) {
@@ -3381,7 +3385,59 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       this.updateResponsiveZoom()
+      this.updatePriceBadges()
 
+    },
+
+    ensurePriceBadgeLayer() {
+      if (!this.map) return null
+
+      if (!this.priceBadgeLayer) {
+        this.priceBadgeLayer = L.layerGroup()
+        this.priceBadgeLayer.addTo(this.map)
+      }
+
+      return this.priceBadgeLayer
+    },
+
+    updatePriceBadges() {
+      const badgeLayer = this.ensurePriceBadgeLayer()
+      if (!badgeLayer) return
+
+      badgeLayer.clearLayers()
+
+      if (this.heatmapType !== 'prices') return
+
+      Object.entries(this.currentDataByISO2).forEach(([iso2, value]) => {
+        if (!Number.isFinite(value)) return
+
+        const center = this.getCountryCenter(iso2)
+        if (!center) return
+
+        const badgeHtml = `
+          <div class="price-badge">
+            <div class="price-badge__row">
+              <span class="price-badge__iso">${iso2}</span>
+              <span class="price-badge__value">${value.toFixed(0)}</span>
+            </div>
+            <div class="price-badge__unit">€/MWh</div>
+          </div>
+        `
+
+        const marker = L.marker(center, {
+          icon: L.divIcon({
+            className: 'price-badge-icon',
+            html: badgeHtml,
+            iconSize: [78, 52],
+            iconAnchor: [39, 26]
+          }),
+          interactive: false,
+          keyboard: false,
+          zIndexOffset: 800
+        })
+
+        marker.addTo(badgeLayer)
+      })
     },
 
     async renderCapacityChart() {
@@ -3917,7 +3973,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     window.removeEventListener('keydown', this.onKeydown)
     this.destroyCapacityChart()
     this.destroyGenerationChart()
-    
+
     // Clean up separate modal charts
     this.separateModals.forEach(modal => {
       if (modal.chart) {
@@ -3925,16 +3981,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     })
 
-      if (this.priceTimer) clearInterval(this.priceTimer)
-      if (this.playInterval) clearInterval(this.playInterval)
+    if (this.priceTimer) clearInterval(this.priceTimer)
+    if (this.playInterval) clearInterval(this.playInterval)
 
-      if (this.mobilePanelChart) {
-        this.mobilePanelChart.destroy()
-        this.mobilePanelChart = null
-      }
+    if (this.mobilePanelChart) {
+      this.mobilePanelChart.destroy()
+      this.mobilePanelChart = null
+    }
 
-      // Clean up drag/resize listeners
-      document.removeEventListener('mousemove', this.onDrag)
+    if (this.priceBadgeLayer && this.map) {
+      this.priceBadgeLayer.remove()
+      this.priceBadgeLayer = null
+    }
+
+    // Clean up drag/resize listeners
+    document.removeEventListener('mousemove', this.onDrag)
     document.removeEventListener('mouseup', this.stopDrag)
     document.removeEventListener('mousemove', this.onResize)
     document.removeEventListener('mouseup', this.stopResize)
@@ -4468,6 +4529,54 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
+}
+
+.price-badge-icon {
+  background: transparent;
+  border: none;
+  pointer-events: none !important;
+}
+
+.price-badge {
+  background: rgba(15, 23, 42, 0.88);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 6px 8px;
+  min-width: 70px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(6px);
+  text-align: left;
+  pointer-events: none;
+}
+
+.price-badge__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.price-badge__iso {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  font-size: 11px;
+  color: #38bdf8;
+  text-transform: uppercase;
+}
+
+.price-badge__value {
+  font-weight: 700;
+  font-size: 15px;
+  color: #fef3c7;
+}
+
+.price-badge__unit {
+  font-size: 9px;
+  color: #cbd5e1;
+  margin-top: 2px;
+  text-align: right;
+  display: block;
 }
 
 .chart-box {
