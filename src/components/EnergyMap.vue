@@ -1676,17 +1676,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         ...responsiveSize,
       }
 
-      if (modalType === 'powerflow') {
-        const flowWidth = Math.min(baseDefaults.width, Math.max(200, Math.round(baseDefaults.width * 0.7)))
-        const flowHeight = Math.min(baseDefaults.height, Math.max(160, Math.round(baseDefaults.height * 0.65)))
-
-        return {
-          ...baseDefaults,
-          width: flowWidth,
-          height: flowHeight,
-        }
-      }
-
       return baseDefaults
     },
 
