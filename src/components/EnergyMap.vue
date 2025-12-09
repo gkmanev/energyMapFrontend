@@ -132,14 +132,23 @@
             </div>
 
             <!-- Generation modal: custom layout for small viewports -->
-            <div v-else-if="modal.type === 'generation'" class="generation-modal">
-              <div v-if="modal.meta" class="generation-summary">
-                <div class="generation-total">
-                  <span class="generation-total-label">Total output</span>
-                  <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
+              <div v-else-if="modal.type === 'generation'" class="generation-modal">
+                <div v-if="modal.meta" class="generation-summary">
+                  <div class="generation-total">
+                    <span class="generation-total-label">Total output</span>
+                    <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
+                  </div>
+                  <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
+                </div>
+                <div class="chart-container generation-chart">
+                  <canvas :id="'separate-chart-' + modal.id"></canvas>
                 </div>
                 <div
-                  v-if="modal.meta.todayForecastTotal !== undefined && modal.meta.todayForecastTotal !== null"
+                  v-if="
+                    modal.meta &&
+                    modal.meta.todayForecastTotal !== undefined &&
+                    modal.meta.todayForecastTotal !== null
+                  "
                   class="generation-forecast"
                 >
                   <div class="generation-forecast-header">
@@ -153,15 +162,10 @@
                     {{ modal.meta.todayForecastLabel }}
                   </div>
                 </div>
-                <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
-              </div>
-              <div class="chart-container generation-chart">
-                <canvas :id="'separate-chart-' + modal.id"></canvas>
-              </div>
-              <div
-                v-if="modal.meta && modal.meta.topTechnologies.length"
-                class="generation-top-techs"
-              >
+                <div
+                  v-if="modal.meta && modal.meta.topTechnologies.length"
+                  class="generation-top-techs"
+                >
                 <div
                   v-for="tech in modal.meta.topTechnologies"
                   :key="tech.name"
