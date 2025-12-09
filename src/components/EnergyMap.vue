@@ -1117,6 +1117,50 @@ export default {
       return { x, y }
     },
 
+    isLargeScreenLayout() {
+      if (typeof window === 'undefined') return false
+      return window.innerWidth >= 1200 && window.innerHeight >= 800
+    },
+
+    getDesktopLayoutPosition(modal, baseSize) {
+      if (!this.isLargeScreenLayout()) return null
+      if (modal?.thumbnail) return null
+
+      const marginFromEdge = 20
+      const gap = 16
+      const startY = 80
+
+      if (modal.type === 'capacity') {
+        const fullHeight = Math.max(
+          baseSize.height,
+          (window.innerHeight || baseSize.height) - startY - marginFromEdge
+        )
+
+        return {
+          position: { x: marginFromEdge, y: startY },
+          size: { width: baseSize.width, height: fullHeight }
+        }
+      }
+
+      const layoutOrder = ['generation', 'prices', 'powerflow', 'netflows']
+      const slotIndex = layoutOrder.indexOf(modal.type)
+      if (slotIndex === -1) return null
+
+      const columns = 2
+      const totalWidth = (baseSize.width * columns) + gap
+      const xStart = Math.max(marginFromEdge, (window.innerWidth || 0) - totalWidth - marginFromEdge)
+      const column = slotIndex % columns
+      const row = Math.floor(slotIndex / columns)
+
+      const x = xStart + column * (baseSize.width + gap)
+      const y = startY + row * (baseSize.height + gap)
+
+      return {
+        position: { x, y },
+        size: { ...baseSize }
+      }
+    },
+
 
 
     getThumbnailDefaults() {
@@ -1738,6 +1782,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         userModified: false
       }
 
+      const desktopLayout = this.getDesktopLayoutPosition(modal, modal.size)
+      if (desktopLayout) {
+        modal.position = desktopLayout.position
+        modal.size = desktopLayout.size
+      }
+
       this.separateModals.push(modal)
 
       // Initialize drag/resize state
@@ -1773,6 +1823,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const baseSize = modal.thumbnail
           ? this.getThumbnailDefaults()
           : this.getResponsiveModalDefaults(modal.type)
+
+        const desktopLayout = this.getDesktopLayoutPosition(modal, baseSize)
+        if (desktopLayout) {
+          modal.position = desktopLayout.position
+          modal.size = desktopLayout.size
+          return
+        }
 
         const { x, y } = this._gridPosition(gridIndex, baseSize.width, baseSize.height)
         modal.position.x = x
