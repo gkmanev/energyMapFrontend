@@ -4185,23 +4185,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 /* Compact header */
 .header {
-  text-align: center;
-  padding: 6px 12px;
-  background: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%);
-  color: white;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px;
+  color: #0f172a;
   flex-shrink: 0;
-  border-bottom-left-radius: 10px;
-  border-bottom-right-radius: 10px;
+  gap: 16px;
 }
 
 .header-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
+  flex: 1;
 }
-
 .header h1 {
   margin: 0;
   font-weight: 600;
@@ -4211,38 +4209,33 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .header-clock {
-  font-size: 16px;
-  padding: 3px 10px;
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  font-size: 15px;
+  padding: 0 6px;
+  color: #475569;
 }
 
 .controls {
-  display: flex;
-  justify-content: center;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  margin: 0;
 }
 
 .radio-pill {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  color: #e0f2fe;
-  font-size: 12px;
+  padding: 4px 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  color: #334155;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: all 0.2s ease;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.4);
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .radio-pill input[type="radio"] {
@@ -4254,28 +4247,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .radio-pill span {
   position: relative;
   z-index: 1;
-}
-
-.radio-pill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08));
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  padding-bottom: 2px;
 }
 
 .radio-pill:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 12px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.5);
-}
-
-.radio-pill:hover::after {
-  opacity: 1;
+  color: #0f172a;
 }
 
 .radio-pill input[type="radio"]:checked + span {
-  color: #0b253a;
+  color: #0f172a;
+  border-bottom: 2px solid #0f172a;
 }
 
 .radio-pill input[type="radio"]:checked ~ span,
@@ -4283,15 +4264,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-weight: 700;
 }
 
-.radio-pill input[type="radio"]:checked + span::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #facc15, #22d3ee);
-  opacity: 0.95;
-  z-index: -1;
-  box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+.radio-pill input[type="radio"]:focus-visible + span {
+  outline: 2px solid #0f172a;
+  outline-offset: 4px;
 }
 
 /* Map layout */
