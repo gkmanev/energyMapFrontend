@@ -4669,8 +4669,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .map {
   height: 100%;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 18px;
   overflow: hidden;
+  background: radial-gradient(
+    circle at 50% 38%,
+    rgba(124, 58, 237, 0.38) 0%,
+    rgba(237, 233, 254, 0.92) 48%,
+    #f8fafc 88%
+  );
 }
 
 .price-badge-icon {
