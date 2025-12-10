@@ -21,11 +21,19 @@ import EnergyMap from './components/EnergyMap.vue'
   -moz-osx-font-smoothing: grayscale;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  background: transparent;
 }
 
 body {
   margin: 0;
-  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  min-height: 100vh;
+  background:
+    radial-gradient(120% 90% at 20% 15%, rgba(255, 232, 242, 0.9) 0%, rgba(255, 232, 242, 0) 55%),
+    radial-gradient(110% 80% at 80% 12%, rgba(226, 242, 255, 0.95) 0%, rgba(226, 242, 255, 0) 55%),
+    radial-gradient(90% 75% at 50% 60%, rgba(255, 239, 241, 0.85) 0%, rgba(255, 239, 241, 0) 55%),
+    radial-gradient(90% 80% at 50% 85%, rgba(226, 232, 255, 0.9) 0%, rgba(226, 232, 255, 0) 60%),
+    #f7faff;
+  background-attachment: fixed;
+  color: #0f172a;
 }
 </style>
