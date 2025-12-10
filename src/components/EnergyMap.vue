@@ -7,6 +7,7 @@
         <p>Loading energy data...</p>
       </div>
     </div>
+    <div class="layout-shell">
     <div class="header">
       <div class="header-top">
         <h1>EnApp by Entra</h1>
@@ -442,6 +443,7 @@
         <!-- <span>© 2025 Entra Energy | Energy Data Visualization</span> -->
       </div>
     </footer>
+    </div>
   </div>
 </template>
 
@@ -4166,7 +4168,19 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
   background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.layout-shell {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Compact header */
@@ -4750,6 +4764,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex-direction: column;
   gap: 5px;
   width: min(860px, 92vw);
+  align-self: center;
 }
 
 .overlay-header {
