@@ -4169,7 +4169,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  background: transparent;
 }
 
 .layout-shell {
