@@ -5650,8 +5650,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   min-width: 0;
   padding: 0;
   border-radius: 12px;
-  background: transparent;
-  box-shadow: none;
+  background: linear-gradient(150deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.54));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.6),
+    0 18px 40px rgba(8, 15, 32, 0.48);
   position: relative;
 }
 
