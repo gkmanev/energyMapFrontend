@@ -431,9 +431,57 @@
           </div>
         </div>
       </div>
-      
+
       <div v-if="!hasTimeData && heatmapType === 'generation'" class="no-data-message">
         Click "Refresh Data" to load generation data
+      </div>
+    </div>
+
+    <!-- Capacity Slider (keeps layout consistent even with static data) -->
+    <div v-if="heatmapType === 'capacity'" class="time-slider-overlay">
+      <div class="overlay-header">
+        <h3>Installed Capacity Snapshot</h3>
+        <div class="slider-info">
+          <span class="time-display">{{ currentTimeDisplay }}</span>
+          <span class="generation-display">{{ totalCapacityDisplay }}</span>
+        </div>
+      </div>
+
+      <div class="slider-row slider-row--full">
+        <div class="slider-wrapper">
+          <div class="custom-slider">
+            <input
+              v-model="currentTimeIndex"
+              type="range"
+              :min="0"
+              :max="maxTimeIndex"
+              :disabled="!hasTimeData || isRefreshing"
+              class="smooth-range-slider"
+              @input="onSliderChange"
+              @change="onSliderChange"
+            />
+
+            <div class="slider-track"></div>
+            <div class="slider-progress" :style="progressStyle"></div>
+          </div>
+
+          <div v-if="hasTimeData" class="time-ticks-below">
+            <div
+              v-for="(tick, index) in timeTicks"
+              :key="index"
+              class="time-tick-below"
+              :style="{ left: tick.position }"
+              @click="jumpToTick(tick.index)"
+            >
+              <div class="tick-mark-below"></div>
+              <div class="tick-label-below">{{ tick.label }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!hasTimeData" class="no-data-message">
+        Capacity data is currently static; refresh to sync with the latest snapshot.
       </div>
     </div>
 
@@ -875,6 +923,14 @@ export default {
       if (generations.length === 0) return 'No generation data'
       const total = generations.reduce((sum, gen) => sum + gen, 0)
       return `Total: ${(total/1000).toFixed(1)} GW`
+    },
+
+    totalCapacityDisplay() {
+      const capacities = Object.values(this.countryCapacityByISO2).filter(c => Number.isFinite(c))
+      if (!capacities.length) return 'No capacity data'
+
+      const total = capacities.reduce((sum, cap) => sum + cap, 0)
+      return `Total: ${(total / 1000).toFixed(1)} GW`
     },
 
     currentDataByISO2() {
