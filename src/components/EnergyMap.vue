@@ -4354,7 +4354,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .header-clock {
   font-size: 15px;
   padding: 0 6px;
-  color: #475569;
+  color: #ffffff;
 }
 
 .controls {
@@ -4373,7 +4373,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   border-radius: 0;
   background: transparent;
   border: none;
-  color: #334155;
+  color: #ffffff;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -4394,21 +4394,22 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .radio-pill:hover {
-  color: #0f172a;
+  color: #bbbbbb;
 }
 
 .radio-pill input[type="radio"]:checked + span {
-  color: #0f172a;
-  border-bottom: 2px solid #0f172a;
+  color: #f4f4f4;
+  border-bottom: 2px solid #ffffff;
 }
 
 .radio-pill input[type="radio"]:checked ~ span,
 .radio-pill input[type="radio"]:checked + span {
   font-weight: 700;
+  color: ffffff;
 }
 
 .radio-pill input[type="radio"]:focus-visible + span {
-  outline: 2px solid #0f172a;
+  outline: 2px solid #ffffff;
   outline-offset: 4px;
 }
 

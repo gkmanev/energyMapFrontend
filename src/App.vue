@@ -9,31 +9,18 @@ import EnergyMap from './components/EnergyMap.vue'
 </script>
 
 <style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-#app {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  height: 100vh;
-  overflow: hidden;
-  background: transparent;
-}
-
 body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(120% 90% at 20% 15%, rgba(255, 232, 242, 0.9) 0%, rgba(255, 232, 242, 0) 55%),
-    radial-gradient(110% 80% at 80% 12%, rgba(226, 242, 255, 0.95) 0%, rgba(226, 242, 255, 0) 55%),
-    radial-gradient(90% 75% at 50% 60%, rgba(255, 239, 241, 0.85) 0%, rgba(255, 239, 241, 0) 55%),
-    radial-gradient(90% 80% at 50% 85%, rgba(226, 232, 255, 0.9) 0%, rgba(226, 232, 255, 0) 60%),
-    #f7faff;
+    radial-gradient(46% 60% at 18% 50%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(46% 60% at 82% 50%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 62%),
+    #1a1c20;
   background-attachment: fixed;
-  color: #0f172a;
+  color: #e5e7eb;
+}
+
+#app {
+  min-height: 100vh;
 }
 </style>
