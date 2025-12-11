@@ -4372,7 +4372,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .layout-shell {
-  width: min(900px, 100%);
+  width: min(960px, 100%);
   margin: 0 auto;
   padding: 12px;
   display: flex;
@@ -4865,12 +4865,18 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .map-col {
   flex: 1 1 auto;
   min-width: 0;
-  height: 100%;
+  height: auto;
+  display: flex;
+  justify-content: center;
 }
 
 .map {
-  height: 100%;
   width: 100%;
+  max-width: 900px;
+  aspect-ratio: 1 / 1;
+  height: auto;
+  min-height: 480px;
+  max-height: 72vh;
   border-radius: 18px;
   overflow: hidden;
   background: radial-gradient(
@@ -4948,7 +4954,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 5px;
   width: min(860px, 92vw);
   align-self: center;
-  margin-bottom:50px;
+  margin-top: 18px;
+  margin-bottom: 50px;
 
 }
 
@@ -5393,11 +5400,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     width: 16px;
     height: 16px;
   }
-  
+
   .tick-label-below {
     font-size: 9px;
   }
-  
+
+  .map {
+    min-height: 360px;
+    max-height: 64vh;
+  }
+
   .map-row {
     padding-bottom: 0px;
   }
@@ -5441,12 +5453,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .tick-label-below {
     font-size: 8px;
   }
-  
+
+  .map {
+    min-height: 320px;
+    max-height: 60vh;
+  }
+
   .map-row {
     margin: 0;
     padding-bottom: 0px;
   }
-  
+
+  .time-slider-overlay {
+    margin-top: 12px;
+  }
+
   .slider-info {
     font-size: 11px;
   }
