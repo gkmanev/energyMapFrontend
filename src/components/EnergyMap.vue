@@ -10,7 +10,7 @@
     <div class="layout-shell">
     <div class="header">
       <div class="header-top">
-        <h1>EnApp by Entra</h1>
+        <!-- <h1>EnApp by Entra</h1> -->
         <div class="header-clock"><LocalClock /></div>
       </div>
       <div class="controls">
@@ -21,7 +21,7 @@
         </label>
         <label class="radio-pill">
           <input type="radio" v-model="heatmapType" value="capacity">
-          <span>capacity</span>
+          <span>Capacity</span>
         </label>
         <label class="radio-pill">
           <input type="radio" v-model="heatmapType" value="generation">
@@ -4316,7 +4316,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .layout-shell {
-  width: min(1200px, 100%);
+  width: min(900px, 100%);
   margin: 0 auto;
   padding: 12px;
   display: flex;
@@ -4374,7 +4374,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   background: transparent;
   border: none;
   color: #334155;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -4889,6 +4889,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 5px;
   width: min(860px, 92vw);
   align-self: center;
+  margin-bottom:50px;
+
 }
 
 .overlay-header {
