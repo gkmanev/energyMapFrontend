@@ -4372,7 +4372,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .layout-shell {
-  width: min(960px, 100%);
+  width: min(900px, 100%);
   margin: 0 auto;
   padding: 12px;
   display: flex;
@@ -4872,7 +4872,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .map {
   width: 100%;
-  max-width: 900px;
   aspect-ratio: 1 / 1;
   height: auto;
   min-height: 480px;
