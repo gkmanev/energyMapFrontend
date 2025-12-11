@@ -17,7 +17,7 @@ body {
    rgba(255, 255, 255, 0) 62%),
    radial-gradient(46% 39% at 100% 50%,
    rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 62%),
-   #1a1c20;
+   #1f0b39;
   background-attachment: fixed;
   color: #e5e7eb;
 }
