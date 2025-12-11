@@ -891,16 +891,41 @@ export default {
         const primarySource = useForecast ? this.generationForecastData : this.historicalGenerationData
         const fallbackSource = useForecast ? this.historicalGenerationData : null
 
+        const findNearestValue = (timeData) => {
+          if (!timeData) return undefined
+          if (timeData[timestamp] !== undefined) return timeData[timestamp]
+
+          const allTimestamps = Object.keys(timeData)
+            .map(Number)
+            .filter(Number.isFinite)
+            .sort((a, b) => a - b)
+
+          if (!allTimestamps.length) return undefined
+
+          const pastTimestamps = allTimestamps.filter(ts => ts <= timestamp)
+          if (pastTimestamps.length) {
+            const nearestPast = pastTimestamps[pastTimestamps.length - 1]
+            return timeData[nearestPast]
+          }
+
+          const nearestFuture = allTimestamps.find(ts => ts > timestamp)
+          return nearestFuture !== undefined ? timeData[nearestFuture] : undefined
+        }
+
         for (const [iso2, timeData] of Object.entries(primarySource)) {
-          if (timeData && timeData[timestamp] !== undefined) {
-            result[iso2] = timeData[timestamp]
+          const value = findNearestValue(timeData)
+          if (value !== undefined) {
+            result[iso2] = value
           }
         }
 
         if (useForecast && fallbackSource) {
           for (const [iso2, timeData] of Object.entries(fallbackSource)) {
-            if (result[iso2] === undefined && timeData && timeData[timestamp] !== undefined) {
-              result[iso2] = timeData[timestamp]
+            if (result[iso2] === undefined) {
+              const value = findNearestValue(timeData)
+              if (value !== undefined) {
+                result[iso2] = value
+              }
             }
           }
         }
