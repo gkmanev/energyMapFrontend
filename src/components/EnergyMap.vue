@@ -2971,13 +2971,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     generateLast48HoursGenerationTimestamps() {
       const timestamps = []
       const now = new Date()
-      const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
-      
+      const currentHourUTC = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        0,
+        0,
+        0
+      )
+
       for (let i = 47; i >= 0; i--) {
-        const timestamp = new Date(currentHour.getTime() - (i * 60 * 60 * 1000))
-        timestamps.push(timestamp.getTime())
+        const timestamp = currentHourUTC - i * 60 * 60 * 1000
+        timestamps.push(timestamp)
       }
-      
+
       return timestamps
     },
     
