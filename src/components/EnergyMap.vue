@@ -645,6 +645,7 @@ export default {
       // Generation time-series data for heatmap (48 hours)
       availableGenerationTimestamps: [],
       historicalGenerationData: {},
+      generationForecastData: {},
       
       // Capacity data (ISO-2 keyed)
       countryCapacityByISO2: {},
@@ -884,13 +885,26 @@ export default {
       if (this.heatmapType === 'generation') {
         const result = {}
         const timestamp = Number(this.currentTimestamp)
-        
-        for (const [iso2, timeData] of Object.entries(this.historicalGenerationData)) {
+
+        const useForecast = this.currentTimeIndex === this.maxTimeIndex && Object.keys(this.generationForecastData).length > 0
+
+        const primarySource = useForecast ? this.generationForecastData : this.historicalGenerationData
+        const fallbackSource = useForecast ? this.historicalGenerationData : null
+
+        for (const [iso2, timeData] of Object.entries(primarySource)) {
           if (timeData && timeData[timestamp] !== undefined) {
             result[iso2] = timeData[timestamp]
           }
         }
-        
+
+        if (useForecast && fallbackSource) {
+          for (const [iso2, timeData] of Object.entries(fallbackSource)) {
+            if (result[iso2] === undefined && timeData && timeData[timestamp] !== undefined) {
+              result[iso2] = timeData[timestamp]
+            }
+          }
+        }
+
         return result
       }
       
@@ -985,9 +999,15 @@ export default {
           this.refreshAllHistoricalPrices()
         } else if (newType === 'capacity' && Object.keys(this.countryCapacityByISO2).length === 0) {
           this.currentTimeIndex = this.maxTimeIndex
-          this.refreshAllCapacities()  
-        } else if (newType === 'generation' && this.availableGenerationTimestamps.length === 0) {
-          this.refreshAllHistoricalGeneration()
+          this.refreshAllCapacities()
+        } else if (newType === 'generation') {
+          if (this.availableGenerationTimestamps.length === 0) {
+            this.refreshAllHistoricalGeneration()
+          }
+
+          if (Object.keys(this.generationForecastData).length === 0) {
+            this.refreshAllGenerationForecasts()
+          }
         }
         else{
           this.showChangeTooltips = false;
@@ -3162,6 +3182,57 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
 
+    async fetchBulkGenerationForecast(countries) {
+      if (countries.length === 0) return {}
+
+      try {
+        const start = new Date()
+        start.setHours(0, 0, 0, 0)
+        const end = new Date(start)
+        end.setDate(end.getDate() + 1)
+
+        const url = `https://api.visualize.energy/api/generation-forecast/bulk-range/` +
+                    `?countries=${countries.join(',')}` +
+                    `&start=${start.toISOString()}` +
+                    `&end=${end.toISOString()}`
+
+        const { data } = await axios.get(url, {
+          timeout: 15000,
+          signal: this.currentAbortController?.signal
+        })
+
+        const aggregatedByCountry = {}
+        const HOUR_MS = 60 * 60 * 1000
+
+        if (data?.data && typeof data.data === 'object') {
+          for (const [iso2, countryData] of Object.entries(data.data)) {
+            const byTs = Object.create(null)
+
+            if (Array.isArray(countryData.items)) {
+              for (const item of countryData.items) {
+                const t = Date.parse(item.datetime_utc)
+                if (!Number.isFinite(t)) continue
+                const v = Number(item.forecast_mw ?? item.generation_mw ?? item.total_generation_mw ?? item.value)
+                if (!Number.isFinite(v)) continue
+
+                const hourTs = Math.floor(t / HOUR_MS) * HOUR_MS
+                byTs[hourTs] = (byTs[hourTs] || 0) + v
+              }
+            }
+
+            if (Object.keys(byTs).length > 0) {
+              aggregatedByCountry[iso2] = byTs
+            }
+          }
+        }
+
+        return aggregatedByCountry
+      } catch (error) {
+        console.error(`Bulk generation forecast request failed for ${countries.length} countries:`, error)
+        throw error
+      }
+    },
+
     async refreshAllHistoricalGeneration() {
       if (!this.countriesGeoJson) return
 
@@ -3201,6 +3272,42 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       this.historicalGenerationData = merged
+      this.updateColorScheme()
+    },
+
+    async refreshAllGenerationForecasts() {
+      if (!this.countriesGeoJson) return
+
+      const supported = []
+      for (const f of this.countriesGeoJson.features) {
+        const iso2 = this.getCountryISO2(f)
+        if (iso2 && this.generationSupported(iso2)) supported.push(iso2)
+      }
+
+      const chunkSize = 20
+      const chunks = []
+      for (let i = 0; i < supported.length; i += chunkSize) {
+        chunks.push(supported.slice(i, i + chunkSize))
+      }
+
+      const merged = {}
+      const chunkPromises = chunks.map(async (chunk, idx) => {
+        try {
+          const chunkData = await this.fetchBulkGenerationForecast(chunk)
+          return { ok: true, data: chunkData, idx }
+        } catch (err) {
+          return { ok: false, err, idx }
+        }
+      })
+
+      const results = await Promise.allSettled(chunkPromises)
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value.ok) {
+          Object.assign(merged, r.value.data)
+        }
+      }
+
+      this.generationForecastData = merged
       this.updateColorScheme()
     },
 
@@ -3361,7 +3468,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         } else if (this.heatmapType === 'capacity') {
           await this.refreshAllCapacities()
         } else if (this.heatmapType === 'generation') {
-          await this.refreshAllHistoricalGeneration()
+          await Promise.all([
+            this.refreshAllHistoricalGeneration(),
+            this.refreshAllGenerationForecasts()
+          ])
         }
       } catch (error) {
         if (error.name !== 'AbortError') {
