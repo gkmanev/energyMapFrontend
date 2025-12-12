@@ -41,7 +41,7 @@
       ></div>
 
        <!-- Separate Modal Windows for Charts -->
-      <transition-group v-if="!isMobileViewport" name="modal-fade">
+      <transition-group v-if="separateModals.length" name="modal-fade">
         <div
           v-for="modal in separateModals"
           :key="modal.id"
@@ -3677,13 +3677,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             try {
               vm.closeAllSeparateModals();
 
-              if (vm.isMobileViewport) {
-                if (iso2) {
-                  vm.openMobilePricePanel(name, iso2)
-                }
-                return
-              }
-
               // First, open the original modal
               vm.openModal({ name, value: getVal(), properties: feature.properties })
               await new Promise(r => setTimeout(r, 220))
@@ -4154,11 +4147,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     updateMobileState() {
       const previous = this.isMobileViewport
       this.isMobileViewport = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
-
-      if (this.isMobileViewport) {
-        this.closeAllSeparateModals()
-        this.isModalOpen = false
-      }
 
       if (previous && !this.isMobileViewport) {
         this.closeMobilePanel()
