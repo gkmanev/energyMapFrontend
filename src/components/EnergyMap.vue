@@ -5659,6 +5659,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 .chart-container {
   width: 100%;
+  max-width: 100%;
   height: 100%;
   position: relative;
   min-height: 150px;
@@ -5689,10 +5690,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .chart-container canvas {
   position: relative;
   z-index: 1;
+  display: block;
   width: 100% !important;
   height: 100% !important;
   background: transparent;
   border-radius: 12px;
+}
+.separate-modal .chart-container,
+.netflow-modal .chart-container {
+  align-self: stretch;
 }
 .generation-modal {
   display: flex;
