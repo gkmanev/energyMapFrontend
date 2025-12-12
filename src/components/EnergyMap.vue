@@ -4353,6 +4353,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   margin: 0;
   padding: 0;
   height: 100vh;
+  width: 100%;
+  max-width: 100vw;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4361,6 +4363,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .layout-shell {
   width: min(900px, 100%);
+  max-width: 100%;
   margin: 0 auto;
   padding: 12px;
   display: flex;
@@ -5350,6 +5353,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .tick-label-below {
     font-size: 9px;
+  }
+
+  .map-row {
+    flex-direction: column;
+    width: 100%;
   }
   
   .chart-box--sm {
