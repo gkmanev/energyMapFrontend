@@ -4494,7 +4494,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .panel-scrim {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.08);
+  /* background: rgba(0,0,0,0.08); */
   z-index: 1000;
 }
 
