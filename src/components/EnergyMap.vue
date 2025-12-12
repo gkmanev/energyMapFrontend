@@ -260,7 +260,12 @@
   </div>
 
     <!-- Separate Modal Windows for Charts -->
-    <transition-group v-if="separateModals.length" name="modal-fade">
+    <transition-group
+      v-if="separateModals.length"
+      name="modal-fade"
+      tag="div"
+      class="separate-modal-stack"
+    >
       <div
         v-for="modal in separateModals"
         :key="modal.id"
@@ -1315,7 +1320,8 @@ export default {
           top: 'auto',
           maxWidth: '100%',
           maxHeight: 'none',
-          marginTop: '12px'
+          marginTop: '12px',
+          zIndex: 'auto'
         }
       }
 
@@ -1874,10 +1880,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const modalWidth = modalSize.width
       const modalHeight = modalSize.height
 
-      // Determine 2×2 grid slot
+      // Determine 2×2 grid slot (desktop only)
       const visibleModals = this.separateModals.filter(m => m.visible)
       const slotIndex = visibleModals.length
-      const { x, y } = this._gridPosition(slotIndex, modalWidth, modalHeight)
+      const { x, y } = this.isMobileViewport
+        ? { x: 0, y: 0 }
+        : this._gridPosition(slotIndex, modalWidth, modalHeight)
 
       const modal = {
         id: modalId,
@@ -1899,9 +1907,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       const desktopLayout = this.getDesktopLayoutPosition(modal, modal.size)
-      if (desktopLayout) {
+      if (!this.isMobileViewport && desktopLayout) {
         modal.position = desktopLayout.position
         modal.size = desktopLayout.size
+      }
+
+      if (this.isMobileViewport) {
+        modal.thumbnail = false
+        modal.size = { ...expandedSize }
       }
 
       this.separateModals.push(modal)
@@ -4174,6 +4187,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const previous = this.isMobileViewport
       this.isMobileViewport = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
 
+      if (this.isMobileViewport) {
+        this.stackModalsForMobile()
+      }
+
       if (previous && !this.isMobileViewport) {
         this.closeMobilePanel()
       }
@@ -4206,6 +4223,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       } finally {
         this.mobilePanelLoading = false
       }
+    },
+
+    stackModalsForMobile() {
+      if (!this.isMobileViewport) return
+
+      this.separateModals.forEach(modal => {
+        modal.thumbnail = false
+        modal.userModified = false
+        modal.position = { x: 0, y: 0 }
+        modal.size = { ...this.getResponsiveModalDefaults(modal.type) }
+      })
     },
 
     renderMobilePriceChart(points) {
@@ -4580,6 +4608,18 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   color: #0f172a;
 }
 
+.separate-modal-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto 60px;
+  padding: 0 6px;
+}
+
 .separate-modal--mobile {
   position: relative;
   width: 100%;
@@ -4587,7 +4627,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   left: auto;
   top: auto;
   transform: none;
-  box-shadow: none;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.35);
   margin-top: 10px;
 }
 
