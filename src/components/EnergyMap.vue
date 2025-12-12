@@ -473,7 +473,11 @@
           </div>
 
           <!-- Other chart modals (capacity, prices…) -->
-          <div v-else class="chart-container">
+          <div
+            v-else
+            class="chart-container"
+            :class="{ 'price-chart': modal.type === 'prices' }"
+          >
             <canvas :id="'separate-chart-' + modal.id"></canvas>
           </div>
         </div>
@@ -4685,6 +4689,18 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .separate-modal--mobile .separate-modal-content {
   max-height: none;
   padding: 16px;
+}
+
+.separate-modal--mobile .price-chart,
+.separate-modal--mobile .netflow-modal .chart-container {
+  width: calc(100% + 32px);
+  margin-left: -16px;
+  margin-right: -16px;
+}
+
+.separate-modal--mobile .price-chart canvas,
+.separate-modal--mobile .netflow-modal .chart-container canvas {
+  width: 100% !important;
 }
 
 .separate-modal--mobile .separate-modal-header {
