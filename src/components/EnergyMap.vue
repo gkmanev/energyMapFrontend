@@ -40,232 +40,6 @@
         aria-hidden="true"
       ></div>
 
-       <!-- Separate Modal Windows for Charts -->
-      <transition-group v-if="separateModals.length" name="modal-fade">
-        <div
-          v-for="modal in separateModals"
-          :key="modal.id"
-          :class="['separate-modal', { 'separate-modal--thumbnail': modal.thumbnail }]"
-          :style="getSeparateModalStyle(modal.id)"
-          v-show="modal.visible"
-        >
-          <!-- Draggable header -->
-          <div
-            class="separate-modal-header"
-            @pointerdown.stop="startSeparateModalDrag($event, modal.id)"
-            @dblclick="toggleSeparateModalView(modal.id)"
-            @click.stop="handleThumbnailTap(modal.id, $event)"
-            style="cursor: move;"
-          >
-            <h4>{{ modal.country }} - {{ modal.title }}</h4>
-            <button
-              @click="closeSeparateModal(modal.id)"
-              class="separate-modal-close"
-            >
-              ×
-            </button>
-          </div>
-
-          <div
-            v-if="modal.thumbnail"
-            class="separate-modal-thumbnail-preview"
-            @click.stop="handleThumbnailTap(modal.id, $event)"
-          >
-            <div class="thumbnail-icon-badge">
-              <span class="thumbnail-icon-glyph">{{ getModalIconSymbol(modal.type) }}</span>
-              <span class="thumbnail-icon-label">{{ getModalIconLabel(modal.type) }}</span>
-            </div>
-            <div class="thumbnail-icon-row">
-              <span
-                v-for="icon in getModalSparkIcons(modal.type)"
-                :key="icon"
-                class="thumbnail-spark-icon"
-              >
-                {{ icon }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Modal content -->
-          <div class="separate-modal-content">
-            <div v-if="modal.loading" class="separate-modal-loading">
-              <div class="loading-spinner-small"></div>
-              <p>Loading {{ modal.type }} data...</p>
-            </div>
-
-            <div v-else-if="modal.error" class="separate-modal-error">
-              <p>Error: {{ modal.error }}</p>
-              <button @click="retrySeparateModalData(modal.id)">Retry</button>
-            </div>
-
-            <!-- FLOWS MODAL: uses /api/flows/latest/?country=XX internally -->
-            <div v-else-if="modal.type === 'powerflow'" class="powerflow-modal-body">
-              <PowerFlow
-                :country-iso="getCountryISO2ByName(modal.country) || 'BG'"
-              />
-            </div>
-
-            <!-- Net flows modal -->
-            <div v-else-if="modal.type === 'netflows'" class="netflow-modal">
-              <div class="chart-container netflow-chart">
-                <canvas :id="'separate-chart-' + modal.id"></canvas>
-              </div>
-              <div v-if="modal.meta" class="netflow-summary">
-                <div class="netflow-summary-item">
-                  <span class="netflow-summary-label">Latest net flow</span>
-                  <span class="netflow-summary-value" :class="{ 'is-import': (modal.meta.latestNet || 0) < 0 }">
-                    {{ formatMegawatts(Math.abs(modal.meta.latestNet || 0)) }} MW
-                    <small>{{ (modal.meta.latestNet || 0) >= 0 ? 'export' : 'import' }}</small>
-                  </span>
-                </div>
-                <div class="netflow-summary-item">
-                  <span class="netflow-summary-label">Peak export</span>
-                  <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakExport || 0) }} MW</span>
-                </div>
-                <div class="netflow-summary-item">
-                  <span class="netflow-summary-label">Peak import</span>
-                  <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakImport || 0) }} MW</span>
-                </div>
-              </div>
-              <div v-if="modal.meta?.latestTimestamp" class="netflow-updated">
-                Updated: {{ modal.meta.latestTimestamp }}
-              </div>
-            </div>
-
-            <!-- Generation modal: custom layout for small viewports -->
-              <div v-else-if="modal.type === 'generation'" class="generation-modal">
-                <div v-if="modal.meta" class="generation-summary">
-                  <div class="generation-total">
-                    <span class="generation-total-label">Total output</span>
-                    <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
-                  </div>
-                  <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
-                </div>
-                <div class="chart-container generation-chart">
-                  <canvas :id="'separate-chart-' + modal.id"></canvas>
-                </div>
-                <div
-                  v-if="
-                    modal.meta &&
-                    modal.meta.todayForecastTotal !== undefined &&
-                    modal.meta.todayForecastTotal !== null
-                  "
-                  class="generation-forecast"
-                >
-                  <div class="generation-forecast-header">
-                    <span class="generation-forecast-label">Today's forecast</span>
-                    <span class="generation-forecast-value">{{ formatMegawatts(modal.meta.todayForecastTotal) }} MW</span>
-                  </div>
-                  <div
-                    v-if="modal.meta.todayForecastLabel"
-                    class="generation-forecast-subtext"
-                  >
-                    {{ modal.meta.todayForecastLabel }}
-                  </div>
-                </div>
-                <div
-                  v-if="modal.meta && modal.meta.topTechnologies.length"
-                  class="generation-top-techs"
-                >
-                <div
-                  v-for="tech in modal.meta.topTechnologies"
-                  :key="tech.name"
-                  class="generation-tech-pill"
-                >
-                  <span class="generation-tech-color" :style="{ backgroundColor: tech.color }"></span>
-                  <span class="generation-tech-name">{{ tech.name }}</span>
-                  <span class="generation-tech-value">{{ formatMegawatts(tech.value) }} MW</span>
-                  <span class="generation-tech-share">({{ formatPercent(tech.share) }})</span>
-                </div>
-              </div>
-              <div v-if="modal.meta && modal.meta.legendItems.length" class="generation-legend">
-                <div class="generation-legend-grid">
-                  <div
-                    v-for="item in modal.meta.legendItems"
-                    :key="item.name"
-                    class="generation-legend-item"
-                  >
-                    <span class="generation-legend-swatch" :style="{ backgroundColor: item.color }"></span>
-                    <span class="generation-legend-name">{{ item.name }}</span>
-                    <span class="generation-legend-value">{{ formatMegawatts(item.value) }} MW</span>
-                    <span class="generation-legend-share">{{ formatPercent(item.share) }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Capacity modal: enriched layout with summary + breakdown -->
-            <div v-else-if="modal.type === 'capacity'" class="capacity-modal">
-              <div class="chart-container capacity-chart">
-                <canvas :id="'separate-chart-' + modal.id"></canvas>
-              </div>
-
-              <div v-if="modal.meta" class="capacity-summary">
-                <div class="capacity-metrics">
-                  <div class="capacity-metric">
-                    <span class="capacity-metric-label">Installed capacity</span>
-                    <span class="capacity-metric-value">{{ formatMegawatts(modal.meta.totalCapacity) }} MW</span>
-                  </div>
-                  <div class="capacity-metric">
-                    <span class="capacity-metric-label">Current generation</span>
-                    <span class="capacity-metric-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
-                  </div>
-                  <div class="capacity-metric">
-                    <span class="capacity-metric-label">Utilisation</span>
-                    <span class="capacity-metric-value">{{ formatPercent(modal.meta.utilization) }}</span>
-                  </div>
-                </div>
-                <div v-if="modal.meta.updatedLabel" class="capacity-updated">{{ modal.meta.updatedLabel }}</div>
-              </div>
-
-              <div
-                v-if="modal.meta && modal.meta.topTechnologies.length"
-                class="capacity-top-techs"
-              >
-                <div
-                  v-for="tech in modal.meta.topTechnologies"
-                  :key="tech.name"
-                  class="capacity-tech-card"
-                >
-                  <span class="capacity-tech-color" :style="{ backgroundColor: tech.color }"></span>
-                  <div class="capacity-tech-content">
-                    <div class="capacity-tech-header">
-                      <span class="capacity-tech-name">{{ tech.name }}</span>
-                      <span class="capacity-tech-share">{{ formatPercent(tech.capacityShare) }} of capacity</span>
-                    </div>
-                    <div class="capacity-tech-values">
-                      <span class="capacity-tech-capacity">{{ formatMegawatts(tech.capacity) }} MW installed</span>
-                      <span class="capacity-tech-generation">{{ formatMegawatts(tech.generation) }} MW now</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            <!-- Other chart modals (capacity, prices…) -->
-            <div v-else class="chart-container">
-              <canvas :id="'separate-chart-' + modal.id"></canvas>
-            </div>
-          </div>
-
-          <!-- Resize handles -->
-          <div
-            class="separate-modal-resize-handle separate-modal-resize-right"
-            @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'right')"
-          ></div>
-          <div
-            class="separate-modal-resize-handle separate-modal-resize-bottom"
-            @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'bottom')"
-          ></div>
-          <div
-            class="separate-modal-resize-handle separate-modal-resize-corner"
-            @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'corner')"
-          ></div>
-        </div>
-      </transition-group>
-
-
       <!-- Map column -->
       <div class="map-col">
         <LMap
@@ -480,10 +254,241 @@
         </div>
       </div>
 
-      <div v-if="!hasTimeData" class="no-data-message">
-        Capacity data is currently static; refresh to sync with the latest snapshot.
-      </div>
+    <div v-if="!hasTimeData" class="no-data-message">
+      Capacity data is currently static; refresh to sync with the latest snapshot.
     </div>
+  </div>
+
+    <!-- Separate Modal Windows for Charts -->
+    <transition-group v-if="separateModals.length" name="modal-fade">
+      <div
+        v-for="modal in separateModals"
+        :key="modal.id"
+        :class="[
+          'separate-modal',
+          { 'separate-modal--thumbnail': modal.thumbnail, 'separate-modal--mobile': isMobileViewport }
+        ]"
+        :style="getSeparateModalStyle(modal.id)"
+        v-show="modal.visible"
+      >
+        <!-- Draggable header -->
+        <div
+          class="separate-modal-header"
+          @pointerdown.stop="startSeparateModalDrag($event, modal.id)"
+          @dblclick="toggleSeparateModalView(modal.id)"
+          @click.stop="handleThumbnailTap(modal.id, $event)"
+          :style="{ cursor: isMobileViewport ? 'default' : 'move' }"
+        >
+          <h4>{{ modal.country }} - {{ modal.title }}</h4>
+          <button
+            @click="closeSeparateModal(modal.id)"
+            class="separate-modal-close"
+          >
+            ×
+          </button>
+        </div>
+
+        <div
+          v-if="modal.thumbnail"
+          class="separate-modal-thumbnail-preview"
+          @click.stop="handleThumbnailTap(modal.id, $event)"
+        >
+          <div class="thumbnail-icon-badge">
+            <span class="thumbnail-icon-glyph">{{ getModalIconSymbol(modal.type) }}</span>
+            <span class="thumbnail-icon-label">{{ getModalIconLabel(modal.type) }}</span>
+          </div>
+          <div class="thumbnail-icon-row">
+            <span
+              v-for="icon in getModalSparkIcons(modal.type)"
+              :key="icon"
+              class="thumbnail-spark-icon"
+            >
+              {{ icon }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Modal content -->
+        <div class="separate-modal-content">
+          <div v-if="modal.loading" class="separate-modal-loading">
+            <div class="loading-spinner-small"></div>
+            <p>Loading {{ modal.type }} data...</p>
+          </div>
+
+          <div v-else-if="modal.error" class="separate-modal-error">
+            <p>Error: {{ modal.error }}</p>
+            <button @click="retrySeparateModalData(modal.id)">Retry</button>
+          </div>
+
+          <!-- FLOWS MODAL: uses /api/flows/latest/?country=XX internally -->
+          <div v-else-if="modal.type === 'powerflow'" class="powerflow-modal-body">
+            <PowerFlow
+              :country-iso="getCountryISO2ByName(modal.country) || 'BG'"
+            />
+          </div>
+
+          <!-- Net flows modal -->
+          <div v-else-if="modal.type === 'netflows'" class="netflow-modal">
+            <div class="chart-container netflow-chart">
+              <canvas :id="'separate-chart-' + modal.id"></canvas>
+            </div>
+            <div v-if="modal.meta" class="netflow-summary">
+              <div class="netflow-summary-item">
+                <span class="netflow-summary-label">Latest net flow</span>
+                <span class="netflow-summary-value" :class="{ 'is-import': (modal.meta.latestNet || 0) < 0 }">
+                  {{ formatMegawatts(Math.abs(modal.meta.latestNet || 0)) }} MW
+                  <small>{{ (modal.meta.latestNet || 0) >= 0 ? 'export' : 'import' }}</small>
+                </span>
+              </div>
+              <div class="netflow-summary-item">
+                <span class="netflow-summary-label">Peak export</span>
+                <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakExport || 0) }} MW</span>
+              </div>
+              <div class="netflow-summary-item">
+                <span class="netflow-summary-label">Peak import</span>
+                <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakImport || 0) }} MW</span>
+              </div>
+            </div>
+            <div v-if="modal.meta?.latestTimestamp" class="netflow-updated">
+              Updated: {{ modal.meta.latestTimestamp }}
+            </div>
+          </div>
+
+          <!-- Generation modal: custom layout for small viewports -->
+            <div v-else-if="modal.type === 'generation'" class="generation-modal">
+              <div v-if="modal.meta" class="generation-summary">
+                <div class="generation-total">
+                  <span class="generation-total-label">Total output</span>
+                  <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
+                </div>
+                <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
+              </div>
+              <div class="chart-container generation-chart">
+                <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
+              <div
+                v-if="
+                  modal.meta &&
+                  modal.meta.todayForecastTotal !== undefined &&
+                  modal.meta.todayForecastTotal !== null
+                "
+                class="generation-forecast"
+              >
+                <div class="generation-forecast-header">
+                  <span class="generation-forecast-label">Today's forecast</span>
+                  <span class="generation-forecast-value">{{ formatMegawatts(modal.meta.todayForecastTotal) }} MW</span>
+                </div>
+                <div
+                  v-if="modal.meta.todayForecastLabel"
+                  class="generation-forecast-subtext"
+                >
+                  {{ modal.meta.todayForecastLabel }}
+                </div>
+              </div>
+              <div
+                v-if="modal.meta && modal.meta.topTechnologies.length"
+                class="generation-top-techs"
+              >
+              <div
+                v-for="tech in modal.meta.topTechnologies"
+                :key="tech.name"
+                class="generation-tech-pill"
+              >
+                <span class="generation-tech-color" :style="{ backgroundColor: tech.color }"></span>
+                <span class="generation-tech-name">{{ tech.name }}</span>
+                <span class="generation-tech-value">{{ formatMegawatts(tech.value) }} MW</span>
+                <span class="generation-tech-share">({{ formatPercent(tech.share) }})</span>
+              </div>
+            </div>
+            <div v-if="modal.meta && modal.meta.legendItems.length" class="generation-legend">
+              <div class="generation-legend-grid">
+                <div
+                  v-for="item in modal.meta.legendItems"
+                  :key="item.name"
+                  class="generation-legend-item"
+                >
+                  <span class="generation-legend-swatch" :style="{ backgroundColor: item.color }"></span>
+                  <span class="generation-legend-name">{{ item.name }}</span>
+                  <span class="generation-legend-value">{{ formatMegawatts(item.value) }} MW</span>
+                  <span class="generation-legend-share">{{ formatPercent(item.share) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Capacity modal: enriched layout with summary + breakdown -->
+          <div v-else-if="modal.type === 'capacity'" class="capacity-modal">
+            <div class="chart-container capacity-chart">
+              <canvas :id="'separate-chart-' + modal.id"></canvas>
+            </div>
+
+            <div v-if="modal.meta" class="capacity-summary">
+              <div class="capacity-metrics">
+                <div class="capacity-metric">
+                  <span class="capacity-metric-label">Installed capacity</span>
+                  <span class="capacity-metric-value">{{ formatMegawatts(modal.meta.totalCapacity) }} MW</span>
+                </div>
+                  <div class="capacity-metric">
+                    <span class="capacity-metric-label">Current generation</span>
+                    <span class="capacity-metric-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
+                  </div>
+                <div class="capacity-metric">
+                  <span class="capacity-metric-label">Utilisation</span>
+                  <span class="capacity-metric-value">{{ formatPercent(modal.meta.utilization) }}</span>
+                </div>
+              </div>
+              <div v-if="modal.meta.updatedLabel" class="capacity-updated">{{ modal.meta.updatedLabel }}</div>
+            </div>
+
+            <div
+              v-if="modal.meta && modal.meta.topTechnologies.length"
+              class="capacity-top-techs"
+            >
+              <div
+                v-for="tech in modal.meta.topTechnologies"
+                :key="tech.name"
+                class="capacity-tech-card"
+              >
+                <span class="capacity-tech-color" :style="{ backgroundColor: tech.color }"></span>
+                <div class="capacity-tech-content">
+                  <div class="capacity-tech-header">
+                    <span class="capacity-tech-name">{{ tech.name }}</span>
+                    <span class="capacity-tech-share">{{ formatPercent(tech.capacityShare) }} of capacity</span>
+                  </div>
+                  <div class="capacity-tech-values">
+                    <span class="capacity-tech-capacity">{{ formatMegawatts(tech.capacity) }} MW installed</span>
+                    <span class="capacity-tech-generation">{{ formatMegawatts(tech.generation) }} MW now</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Other chart modals (capacity, prices…) -->
+          <div v-else class="chart-container">
+            <canvas :id="'separate-chart-' + modal.id"></canvas>
+          </div>
+        </div>
+
+        <!-- Resize handles -->
+        <div
+          v-if="!isMobileViewport"
+          class="separate-modal-resize-handle separate-modal-resize-right"
+          @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'right')"
+        ></div>
+        <div
+          v-if="!isMobileViewport"
+          class="separate-modal-resize-handle separate-modal-resize-bottom"
+          @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'bottom')"
+        ></div>
+        <div
+          v-if="!isMobileViewport"
+          class="separate-modal-resize-handle separate-modal-resize-corner"
+          @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'corner')"
+        ></div>
+      </div>
+    </transition-group>
 
     <!-- NEW: Actual footer positioned below the slider -->
     <footer class="app-footer">
@@ -1292,12 +1297,27 @@ export default {
       const viewportWidth = window.innerWidth || 0
       const viewportHeight = window.innerHeight || 0
 
+      if (this.isMobileViewport) return false
+
       return viewportWidth <= 1366 || viewportHeight <= 900
     },
 
     getSeparateModalStyle(modalId) {
       const modal = this.separateModals.find(m => m.id === modalId)
       if (!modal) return {}
+
+      if (this.isMobileViewport) {
+        return {
+          position: 'relative',
+          width: '100%',
+          height: 'auto',
+          left: 'auto',
+          top: 'auto',
+          maxWidth: '100%',
+          maxHeight: 'none',
+          marginTop: '12px'
+        }
+      }
 
       return {
         position: 'fixed',
@@ -1908,6 +1928,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     repositionSeparateModals() {
+      if (this.isMobileViewport) return
+
       // Keep the 2×2 grid when auto-arranging (e.g. on resize),
       // but don't move modals the user already dragged/resized.
       const visible = this.separateModals.filter(m => m.visible)
@@ -1984,6 +2006,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     // Start dragging separate modal
     startSeparateModalDrag(event, modalId) {
+      if (this.isMobileViewport) return
+
       if (event.target.closest('.separate-modal-close') ||
           event.target.closest('.separate-modal-resize-handle')) {
         return
@@ -2063,6 +2087,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
     // Start resizing separate modal
     startSeparateModalResize(event, modalId, direction) {
+      if (this.isMobileViewport) return
+
       const resizeState = this.separateModalResizeState[modalId]
       const modal = this.separateModals.find(m => m.id === modalId)
       
@@ -4554,6 +4580,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   color: #0f172a;
 }
 
+.separate-modal--mobile {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  left: auto;
+  top: auto;
+  transform: none;
+  box-shadow: none;
+  margin-top: 10px;
+}
+
 .separate-modal::before,
 .separate-modal::after {
   content: "";
@@ -4590,6 +4627,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   padding: 6px 8px 12px;
   min-width: 238px;
   max-width: 320px;
+}
+
+.separate-modal--mobile .separate-modal-content {
+  max-height: none;
+  padding: 16px;
+}
+
+.separate-modal--mobile .separate-modal-header {
+  cursor: default;
 }
 
 .separate-modal-thumbnail-preview {
