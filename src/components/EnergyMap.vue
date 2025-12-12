@@ -8,274 +8,276 @@
       </div>
     </div>
     <div class="layout-shell">
-    <div class="header">
-      <div class="header-top">
-        <!-- <h1>EnApp by Entra</h1> -->
-        <div class="header-clock"><LocalClock /></div>
-      </div>
-      <div class="controls">
-        <!-- Add toggle for heatmap type -->
-        <label class="radio-pill">
-          <input type="radio" v-model="heatmapType" value="prices">
-          <span>Price</span>
-        </label>
-        <label class="radio-pill">
-          <input type="radio" v-model="heatmapType" value="capacity">
-          <span>Capacity</span>
-        </label>
-        <label class="radio-pill">
-          <input type="radio" v-model="heatmapType" value="generation">
-          <span>Generation</span>
-        </label>
-      </div>
-    </div>
-
-    <!-- FLEX ROW: sidebar + map -->
-    <div class="map-row">
-     
-      <div
-        v-if="!isMobileViewport && isModalOpen"
-        class="panel-scrim"
-        @click="closePanel"
-        aria-hidden="true"
-      ></div>
-
-      <!-- Map column -->
-      <div class="map-col">
-        <LMap
-          :zoom="zoom"
-          :center="center"
-          :options="mapOptions"
-          :use-global-leaflet="true"
-          class="map"
-          @ready="onMapReady"
-          ref="leafletMap"
-        >
-          <LTileLayer
-            :url="tileUrl"            
-            :options="{ noWrap: true, bounds: [[-90, -180], [90, 180]] }"
-          />
-          <!-- Use v-if instead of :key to prevent unnecessary remounting -->
-          <LGeoJson
-            v-if="countriesGeoJson && !isMapUpdating"
-            :geojson="countriesGeoJson"
-            :options="geoJsonOptions"
-            :options-style="optionsStyle"
-            ref="geoJsonLayer"
-          />
-        </LMap>
-      </div>
-    </div>
-
-    <div v-if="isMobileViewport && mobilePanelVisible" class="mobile-bottom-panel">
-      <div class="mobile-panel-header">
-        <div class="mobile-panel-titles">
-          <p class="mobile-panel-label">Energy Prices (48h)</p>
-          <h4 class="mobile-panel-country">{{ mobilePanelCountry }}</h4>
-        </div>
-        <button class="mobile-panel-close" @click="closeMobilePanel">Hide</button>
-      </div>
-
-      <div class="mobile-panel-body">
-        <div v-if="mobilePanelLoading" class="mobile-panel-loading">
-          <div class="loading-spinner-small"></div>
-          <p>Loading price data...</p>
-        </div>
-        <div v-else-if="mobilePanelError" class="mobile-panel-error">
-          <p>{{ mobilePanelError }}</p>
-          <button @click="retryMobilePanel">Retry</button>
-        </div>
-        <div v-else class="mobile-panel-chart">
-          <canvas id="mobile-price-chart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Price Slider -->
-    <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
-      <div class="overlay-header">
-        <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
-        <div class="slider-info">
-          <span class="time-display">{{ currentTimeDisplay }}</span>
-          <span class="price-display">{{ averagePriceDisplay }}</span>
-        </div>
-      </div>
-
-      <div class="slider-row">
-        <div class="play-controls">
-          <button
-            @click="togglePlay"
-            :disabled="!hasTimeData || isRefreshing"
-            class="play-button"
-          >
-            {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
-          </button>
-          <label class="show-pct-toggle">
-            <input type="checkbox" v-model="showPctInTooltip" @change="onPctToggle" />
-            Show %
-          </label>
+      <div class="content-shell">
+        <div class="header">
+          <div class="header-top">
+            <!-- <h1>EnApp by Entra</h1> -->
+            <div class="header-clock"><LocalClock /></div>
+          </div>
+          <div class="controls">
+            <!-- Add toggle for heatmap type -->
+            <label class="radio-pill">
+              <input type="radio" v-model="heatmapType" value="prices">
+              <span>Price</span>
+            </label>
+            <label class="radio-pill">
+              <input type="radio" v-model="heatmapType" value="capacity">
+              <span>Capacity</span>
+            </label>
+            <label class="radio-pill">
+              <input type="radio" v-model="heatmapType" value="generation">
+              <span>Generation</span>
+            </label>
+          </div>
         </div>
 
-        <!-- Enhanced smooth draggable slider -->
-        <div class="slider-wrapper">
-          <div class="custom-slider">
-            <!-- Native range input for smooth dragging -->
-            <input
-              v-model="currentTimeIndex"
-              type="range"
-              :min="0"
-              :max="maxTimeIndex"
-              :disabled="!hasTimeData || isRefreshing"
-              class="smooth-range-slider"
-              @input="onSliderChange"
-              @change="onSliderChange"
-              @pointerdown="onSliderPointerDown"
-              @pointerup="onSliderPointerUp"
-            />
+        <!-- FLEX ROW: sidebar + map -->
+        <div class="map-row">
 
-            <!-- Custom visual track and progress -->
-            <div class="slider-track"></div>
-            <div class="slider-progress" :style="progressStyle"></div>
+          <div
+            v-if="!isMobileViewport && isModalOpen"
+            class="panel-scrim"
+            @click="closePanel"
+            aria-hidden="true"
+          ></div>
+
+          <!-- Map column -->
+          <div class="map-col">
+            <LMap
+              :zoom="zoom"
+              :center="center"
+              :options="mapOptions"
+              :use-global-leaflet="true"
+              class="map"
+              @ready="onMapReady"
+              ref="leafletMap"
+            >
+              <LTileLayer
+                :url="tileUrl"
+                :options="{ noWrap: true, bounds: [[-90, -180], [90, 180]] }"
+              />
+              <!-- Use v-if instead of :key to prevent unnecessary remounting -->
+              <LGeoJson
+                v-if="countriesGeoJson && !isMapUpdating"
+                :geojson="countriesGeoJson"
+                :options="geoJsonOptions"
+                :options-style="optionsStyle"
+                ref="geoJsonLayer"
+              />
+            </LMap>
+          </div>
+        </div>
+
+        <div v-if="isMobileViewport && mobilePanelVisible" class="mobile-bottom-panel">
+          <div class="mobile-panel-header">
+            <div class="mobile-panel-titles">
+              <p class="mobile-panel-label">Energy Prices (48h)</p>
+              <h4 class="mobile-panel-country">{{ mobilePanelCountry }}</h4>
+            </div>
+            <button class="mobile-panel-close" @click="closeMobilePanel">Hide</button>
           </div>
 
-          <!-- Time tick marks BELOW the slider -->
-          <div v-if="hasTimeData" class="time-ticks-below">
-            <div
-              v-for="(tick, index) in timeTicks"
-              :key="index"
-              class="time-tick-below"
-              :style="{ left: tick.position }"
-              @click="jumpToTick(tick.index)"
-            >
-              <div class="tick-mark-below"></div>
-              <div class="tick-label-below">{{ tick.label }}</div>
+          <div class="mobile-panel-body">
+            <div v-if="mobilePanelLoading" class="mobile-panel-loading">
+              <div class="loading-spinner-small"></div>
+              <p>Loading price data...</p>
+            </div>
+            <div v-else-if="mobilePanelError" class="mobile-panel-error">
+              <p>{{ mobilePanelError }}</p>
+              <button @click="retryMobilePanel">Retry</button>
+            </div>
+            <div v-else class="mobile-panel-chart">
+              <canvas id="mobile-price-chart"></canvas>
             </div>
           </div>
         </div>
-      </div>
-      
-      <div v-if="!hasTimeData && heatmapType === 'prices'" class="no-data-message">
-        Click "Refresh Data" to load historical price data
-      </div>
-    </div>
 
-    <!-- Generation Slider -->
-    <div v-if="heatmapType === 'generation'" class="time-slider-overlay">
-      <div class="overlay-header">
-        <h3>Generation Data - Last 48 Hours</h3>
-        <div class="slider-info">
-          <span class="time-display">{{ currentTimeDisplay }}</span>
-          <span class="generation-display">{{ totalGenerationDisplay }}</span>
-        </div>
-      </div>
-
-      <div class="slider-row slider-row--full">
-        <!-- Enhanced smooth draggable slider -->
-        <div class="slider-wrapper">
-          <div class="custom-slider">
-            <!-- Native range input for smooth dragging -->
-            <input
-              v-model="currentTimeIndex"
-              type="range"
-              :min="0"
-              :max="maxTimeIndex"
-              :disabled="!hasTimeData || isRefreshing"
-              class="smooth-range-slider"
-              @input="onSliderChange"
-              @change="onSliderChange"
-            />
-
-            <!-- Custom visual track and progress -->
-            <div class="slider-track"></div>
-            <div class="slider-progress" :style="progressStyle"></div>
-          </div>
-
-          <!-- Time tick marks BELOW the slider -->
-          <div v-if="hasTimeData" class="time-ticks-below">
-            <div
-              v-for="(tick, index) in generationTimeTicks"
-              :key="index"
-              class="time-tick-below"
-              :style="{ left: tick.position }"
-              @click="jumpToTick(tick.index)"
-            >
-              <div class="tick-mark-below"></div>
-              <div class="tick-label-below">{{ tick.label }}</div>
+        <!-- Price Slider -->
+        <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
+          <div class="overlay-header">
+            <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
+            <div class="slider-info">
+              <span class="time-display">{{ currentTimeDisplay }}</span>
+              <span class="price-display">{{ averagePriceDisplay }}</span>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div v-if="!hasTimeData && heatmapType === 'generation'" class="no-data-message">
-        Click "Refresh Data" to load generation data
-      </div>
-    </div>
+          <div class="slider-row">
+            <div class="play-controls">
+              <button
+                @click="togglePlay"
+                :disabled="!hasTimeData || isRefreshing"
+                class="play-button"
+              >
+                {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+              </button>
+              <label class="show-pct-toggle">
+                <input type="checkbox" v-model="showPctInTooltip" @change="onPctToggle" />
+                Show %
+              </label>
+            </div>
 
-    <!-- Capacity Slider (keeps layout consistent even with static data) -->
-    <div v-if="heatmapType === 'capacity'" class="time-slider-overlay">
-      <div class="overlay-header">
-        <h3>Installed Capacity Snapshot</h3>
-        <div class="slider-info">
-          <span class="time-display">{{ currentTimeDisplay }}</span>
-          <span class="generation-display">{{ totalCapacityDisplay }}</span>
-        </div>
-      </div>
+            <!-- Enhanced smooth draggable slider -->
+            <div class="slider-wrapper">
+              <div class="custom-slider">
+                <!-- Native range input for smooth dragging -->
+                <input
+                  v-model="currentTimeIndex"
+                  type="range"
+                  :min="0"
+                  :max="maxTimeIndex"
+                  :disabled="!hasTimeData || isRefreshing"
+                  class="smooth-range-slider"
+                  @input="onSliderChange"
+                  @change="onSliderChange"
+                  @pointerdown="onSliderPointerDown"
+                  @pointerup="onSliderPointerUp"
+                />
 
-      <div class="slider-row slider-row--full">
-        <div class="slider-wrapper">
-          <div class="custom-slider">
-            <input
-              v-model="currentTimeIndex"
-              type="range"
-              :min="0"
-              :max="maxTimeIndex"
-              :disabled="!hasTimeData || isRefreshing"
-              class="smooth-range-slider"
-              @input="onSliderChange"
-              @change="onSliderChange"
-            />
+                <!-- Custom visual track and progress -->
+                <div class="slider-track"></div>
+                <div class="slider-progress" :style="progressStyle"></div>
+              </div>
 
-            <div class="slider-track"></div>
-            <div class="slider-progress" :style="progressStyle"></div>
-          </div>
-
-          <div v-if="hasTimeData" class="time-ticks-below">
-            <div
-              v-for="(tick, index) in timeTicks"
-              :key="index"
-              class="time-tick-below"
-              :style="{ left: tick.position }"
-              @click="jumpToTick(tick.index)"
-            >
-              <div class="tick-mark-below"></div>
-              <div class="tick-label-below">{{ tick.label }}</div>
+              <!-- Time tick marks BELOW the slider -->
+              <div v-if="hasTimeData" class="time-ticks-below">
+                <div
+                  v-for="(tick, index) in timeTicks"
+                  :key="index"
+                  class="time-tick-below"
+                  :style="{ left: tick.position }"
+                  @click="jumpToTick(tick.index)"
+                >
+                  <div class="tick-mark-below"></div>
+                  <div class="tick-label-below">{{ tick.label }}</div>
+                </div>
+              </div>
             </div>
           </div>
+
+          <div v-if="!hasTimeData && heatmapType === 'prices'" class="no-data-message">
+            Click "Refresh Data" to load historical price data
+          </div>
+        </div>
+
+        <!-- Generation Slider -->
+        <div v-if="heatmapType === 'generation'" class="time-slider-overlay">
+          <div class="overlay-header">
+            <h3>Generation Data - Last 48 Hours</h3>
+            <div class="slider-info">
+              <span class="time-display">{{ currentTimeDisplay }}</span>
+              <span class="generation-display">{{ totalGenerationDisplay }}</span>
+            </div>
+          </div>
+
+          <div class="slider-row slider-row--full">
+            <!-- Enhanced smooth draggable slider -->
+            <div class="slider-wrapper">
+              <div class="custom-slider">
+                <!-- Native range input for smooth dragging -->
+                <input
+                  v-model="currentTimeIndex"
+                  type="range"
+                  :min="0"
+                  :max="maxTimeIndex"
+                  :disabled="!hasTimeData || isRefreshing"
+                  class="smooth-range-slider"
+                  @input="onSliderChange"
+                  @change="onSliderChange"
+                />
+
+                <!-- Custom visual track and progress -->
+                <div class="slider-track"></div>
+                <div class="slider-progress" :style="progressStyle"></div>
+              </div>
+
+              <!-- Time tick marks BELOW the slider -->
+              <div v-if="hasTimeData" class="time-ticks-below">
+                <div
+                  v-for="(tick, index) in generationTimeTicks"
+                  :key="index"
+                  class="time-tick-below"
+                  :style="{ left: tick.position }"
+                  @click="jumpToTick(tick.index)"
+                >
+                  <div class="tick-mark-below"></div>
+                  <div class="tick-label-below">{{ tick.label }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="!hasTimeData && heatmapType === 'generation'" class="no-data-message">
+            Click "Refresh Data" to load generation data
+          </div>
+        </div>
+
+        <!-- Capacity Slider (keeps layout consistent even with static data) -->
+        <div v-if="heatmapType === 'capacity'" class="time-slider-overlay">
+          <div class="overlay-header">
+            <h3>Installed Capacity Snapshot</h3>
+            <div class="slider-info">
+              <span class="time-display">{{ currentTimeDisplay }}</span>
+              <span class="generation-display">{{ totalCapacityDisplay }}</span>
+            </div>
+          </div>
+
+          <div class="slider-row slider-row--full">
+            <div class="slider-wrapper">
+              <div class="custom-slider">
+                <input
+                  v-model="currentTimeIndex"
+                  type="range"
+                  :min="0"
+                  :max="maxTimeIndex"
+                  :disabled="!hasTimeData || isRefreshing"
+                  class="smooth-range-slider"
+                  @input="onSliderChange"
+                  @change="onSliderChange"
+                />
+
+                <div class="slider-track"></div>
+                <div class="slider-progress" :style="progressStyle"></div>
+              </div>
+
+              <div v-if="hasTimeData" class="time-ticks-below">
+                <div
+                  v-for="(tick, index) in timeTicks"
+                  :key="index"
+                  class="time-tick-below"
+                  :style="{ left: tick.position }"
+                  @click="jumpToTick(tick.index)"
+                >
+                  <div class="tick-mark-below"></div>
+                  <div class="tick-label-below">{{ tick.label }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="!hasTimeData" class="no-data-message">
+            Capacity data is currently static; refresh to sync with the latest snapshot.
+          </div>
         </div>
       </div>
 
-    <div v-if="!hasTimeData" class="no-data-message">
-      Capacity data is currently static; refresh to sync with the latest snapshot.
-    </div>
-  </div>
-
-    <!-- Separate Modal Windows for Charts -->
-    <transition-group
-      v-if="separateModals.length"
-      name="modal-fade"
-      tag="div"
-      class="separate-modal-stack"
-    >
-      <div
-        v-for="modal in separateModals"
-        :key="modal.id"
-        :class="[
-          'separate-modal',
-          { 'separate-modal--thumbnail': modal.thumbnail, 'separate-modal--mobile': isMobileViewport }
-        ]"
-        :style="getSeparateModalStyle(modal.id)"
-        v-show="modal.visible"
+      <!-- Separate Modal Windows for Charts -->
+      <transition-group
+        v-if="separateModals.length"
+        name="modal-fade"
+        tag="div"
+        class="separate-modal-stack"
       >
+        <div
+          v-for="modal in separateModals"
+          :key="modal.id"
+          :class="[
+            'separate-modal',
+            { 'separate-modal--thumbnail': modal.thumbnail, 'separate-modal--mobile': isMobileViewport }
+          ]"
+          :style="getSeparateModalStyle(modal.id)"
+          v-show="modal.visible"
+        >
         <!-- Draggable header -->
         <div
           class="separate-modal-header"
@@ -4426,6 +4428,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 10px;
   flex: 1;
   min-height: 0;
+}
+
+.content-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
 }
 
 /* Compact header */
