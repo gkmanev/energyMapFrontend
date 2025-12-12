@@ -4366,6 +4366,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   max-width: 100%;
   margin: 0 auto;
   padding: 12px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 10px;
