@@ -3031,17 +3031,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         return
       }
 
-      // Calculate available space
-      const headerHeight = 40  // Modal header height
-      const padding = 24       // Modal content padding (12px * 2)
-      const availableWidth = Math.max(0, modal.size.width - (padding * 2))
-      const availableHeight = Math.max(0, modal.size.height - headerHeight - (padding * 2))
-
       // Update canvas container size
       const container = canvas.parentElement
       if (container) {
-        container.style.width = availableWidth + 'px'
-        container.style.height = availableHeight + 'px'
+        container.style.width = '100%'
+        container.style.height = '100%'
       }
 
       // Trigger Chart.js resize
