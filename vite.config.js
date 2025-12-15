@@ -10,6 +10,7 @@ export default defineConfig({
     vueDevTools(), // DevTools still available, but overlay hidden
   ],
   server: {
+    host: '0.0.0.0',
     hmr: {
       overlay: false // This hides the error overlay ✓
     }
