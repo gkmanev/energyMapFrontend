@@ -363,15 +363,13 @@
 
           <!-- Generation modal: custom layout for small viewports -->
             <div v-else-if="modal.type === 'generation'" class="generation-modal">
-              <div v-if="modal.meta" class="generation-summary">
-                <div class="generation-total">
-                  <span class="generation-total-label">Total output</span>
-                  <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
-                </div>
-                <div v-if="modal.meta.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
-              </div>
+              <div v-if="modal.meta?.updatedLabel" class="generation-updated">{{ modal.meta.updatedLabel }}</div>
               <div class="chart-container generation-chart">
                 <canvas :id="'separate-chart-' + modal.id"></canvas>
+              </div>
+              <div v-if="modal.meta" class="generation-total">
+                <span class="generation-total-label">Total output</span>
+                <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
               </div>
               <div
                 v-if="
@@ -5756,13 +5754,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 10px;
   flex: 1;
   min-height: 0;
-}
-.generation-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 12px;
-  color: #cbd5f5;
 }
 .generation-total {
   display: flex;
