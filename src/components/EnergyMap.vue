@@ -780,7 +780,6 @@ export default {
         return isMobileViewport ? mobileZoom : defaultZoom
       })(),
       center: [54, 20],
-      showTooltips: true,
       selectedColorScheme: 'ylOrRd',
       tileUrl: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',     
       mapOptions: {
@@ -3701,46 +3700,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               if (lyr && lyr.setStyle) {
                 lyr.setStyle({ weight: 3, color: '#666', dashArray: '', fillOpacity: 1 })
               }
-              if (vm.showTooltips) {
-                const v = getVal()
-                const unit = vm.heatmapType === 'prices' ? '' : vm.legendUnit
-                const decimals = vm.heatmapType === 'prices' ? 2 : 0
-                const valueText = Number.isFinite(v) ? v.toFixed(decimals) : null
-                let text = valueText !== null
-                  ? `${name}: ${valueText}${unit ? ` ${unit}` : ''}` 
-                  : `${name}: no data`
-                
-                if (vm.hasTimeData) {
-                  const timeLabel = vm.heatmapType === 'prices'
-                    ? new Date(vm.currentTimestamp).toLocaleString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    : vm.currentTimeDisplay
-                  text += `\n${timeLabel}`
-                }
-                // // ✨ NEW: show Δ change for price heatmap
-
-                // if (vm.heatmapType === 'prices' && iso2) {
-                //   const ch = vm.priceChangeFor(iso2);
-                //   if (ch) {
-                //     if (Number.isFinite(ch.delta)) {
-                //       const arrow = ch.delta > 0 ? '↑' : (ch.delta < 0 ? '↓' : '→');
-                //       const sign  = ch.delta > 0 ? '+' : '';
-                //       const pctStr = Number.isFinite(ch.pct) ? ` (${sign}${ch.pct.toFixed(1)}%)` : '';
-                //       text += `\nΔ ${arrow} ${sign}${ch.delta.toFixed(2)} ${unit}${pctStr} vs prev hour`;
-                //     } else {
-                //       text += `\nΔ n/a`;
-                //     }
-                //   }
-                // }
-                
-                if (lyr && lyr.bindTooltip) {
-                  lyr.bindTooltip(text, { permanent: false, direction: 'center', className: 'custom-tooltip' }).openTooltip()
-                }
-              }
             } catch (error) {
               console.warn('Error in mouseover handler:', error)
             }
@@ -5406,15 +5365,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     transform: rotate(360deg) translate3d(0, 0, 0);
     opacity: 0.45;
   }
-}
-
-/* Leaflet fixes */
-:global(.custom-tooltip) {
-  background: rgba(0,0,0,0.8) !important;
-  border: none !important;
-  border-radius: 4px !important;
-  color: white !important;
-  white-space: pre-line !important;
 }
 
 :global(.leaflet-interactive),
