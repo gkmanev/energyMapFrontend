@@ -1310,7 +1310,7 @@ export default {
 
       if (this.isMobileViewport) return false
 
-      return viewportWidth <= 1366 || viewportHeight <= 900
+      return viewportWidth <= 1200 && viewportHeight <= 800
     },
 
     getSeparateModalStyle(modalId) {
