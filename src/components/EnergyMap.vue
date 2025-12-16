@@ -723,7 +723,7 @@ export default {
       // Existing data properties
       europeBounds: [[34, -25], [72, 45]],
       isModalOpen: false,
-      isMobileViewport: typeof window !== 'undefined' ? window.innerWidth <= MODAL_MOBILE_BREAKPOINT : false,
+      isMobileViewport: typeof window !== 'undefined' ? window.innerWidth < MODAL_MOBILE_BREAKPOINT : false,
       mobilePanelVisible: false,
       mobilePanelLoading: false,
       mobilePanelError: null,
@@ -775,7 +775,7 @@ export default {
       mobileZoomOffset: 1,
       zoom: (() => {
         const isClient = typeof window !== 'undefined'
-        const isMobileViewport = isClient && window.innerWidth <= MODAL_MOBILE_BREAKPOINT
+        const isMobileViewport = isClient && window.innerWidth < MODAL_MOBILE_BREAKPOINT
         const defaultZoom = 5
         const mobileZoomOffset = 1
         const mobileZoom = Math.max(2, defaultZoom - mobileZoomOffset)
@@ -1257,7 +1257,7 @@ export default {
 
       const viewportWidth = window.innerWidth || 0
       const viewportHeight = window.innerHeight || 0
-      if (viewportWidth <= MODAL_MOBILE_BREAKPOINT) return false
+      if (viewportWidth < MODAL_MOBILE_BREAKPOINT) return false
 
       const midWidthLayout = viewportWidth <= 1440 && viewportHeight >= 620
       const mediumDesktop = viewportWidth <= 1440 && viewportHeight >= 700
@@ -1273,7 +1273,7 @@ export default {
 
       const viewportHeight = window.innerHeight || 0
       const viewportWidth = window.innerWidth || 0
-      const isMediumDesktop = viewportWidth > MODAL_MOBILE_BREAKPOINT && viewportWidth <= 1440
+      const isMediumDesktop = viewportWidth >= MODAL_MOBILE_BREAKPOINT && viewportWidth <= 1440
       const marginFromEdge = isMediumDesktop ? 16 : 20
       const compactVertical = viewportHeight > 0 && viewportHeight < 900
       const gap = isMediumDesktop ? 14 : (compactVertical ? 12 : 16)
@@ -1345,7 +1345,7 @@ export default {
 
       if (this.isMobileViewport) return false
 
-      return viewportWidth <= MODAL_MOBILE_BREAKPOINT && viewportHeight <= 800
+      return viewportWidth < MODAL_MOBILE_BREAKPOINT && viewportHeight <= 800
     },
 
     getSeparateModalStyle(modalId) {
@@ -1826,7 +1826,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     updateResponsiveZoom() {
       if (typeof window === 'undefined') return
 
-      const isMobileViewport = window.innerWidth <= MODAL_MOBILE_BREAKPOINT
+      const isMobileViewport = window.innerWidth < MODAL_MOBILE_BREAKPOINT
       const minZoom = this.mapOptions?.minZoom ?? 0
       const mobileZoom = Math.max(minZoom, this.defaultZoom - this.mobileZoomOffset)
       const targetZoom = isMobileViewport ? mobileZoom : this.defaultZoom
@@ -4221,7 +4221,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     updateMobileState() {
       const previous = this.isMobileViewport
       this.isMobileViewport = typeof window !== 'undefined'
-        ? window.innerWidth <= MODAL_MOBILE_BREAKPOINT
+        ? window.innerWidth < MODAL_MOBILE_BREAKPOINT
         : false
 
       if (this.isMobileViewport) {
