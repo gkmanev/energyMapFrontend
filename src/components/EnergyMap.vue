@@ -549,8 +549,8 @@ const calculateResponsiveModalSize = () => {
 
   const widthFactor = isNarrowDesktop ? 0.2 : 0.22
   const heightFactor = isNarrowDesktop ? 0.26 : 0.28
-  const compactWidth = Math.max(220, Math.round(viewportWidth * widthFactor))
-  const compactHeight = Math.max(180, Math.round(viewportHeight * heightFactor))
+  const compactWidth = Math.max(280, Math.round(viewportWidth * widthFactor))
+  const compactHeight = Math.max(220, Math.round(viewportHeight * heightFactor))
 
   return {
     width: Math.min(DEFAULT_MODAL_WIDTH, compactWidth),
@@ -1259,12 +1259,11 @@ export default {
       const viewportHeight = window.innerHeight || 0
       if (viewportWidth < MODAL_MOBILE_BREAKPOINT) return false
 
-      const midWidthLayout = viewportWidth <= 1440 && viewportHeight >= 620
-      const mediumDesktop = viewportWidth <= 1440 && viewportHeight >= 700
-      const tallDesktop = viewportHeight >= 800
-      const compactDesktop = viewportWidth >= 1280 && viewportHeight >= MIN_DESKTOP_HEIGHT
+      const comfortableHeight = viewportHeight >= 760
+      const laptopHeight = viewportHeight >= 620
+      const compactButDesktop = viewportHeight >= 560
 
-      return tallDesktop || compactDesktop || mediumDesktop || midWidthLayout
+      return comfortableHeight || laptopHeight || compactButDesktop
     },
 
     getDesktopLayoutPosition(modal, baseSize) {
@@ -1274,6 +1273,10 @@ export default {
       const viewportHeight = window.innerHeight || 0
       const viewportWidth = window.innerWidth || 0
       const isMediumDesktop = viewportWidth >= MODAL_MOBILE_BREAKPOINT && viewportWidth <= 1440
+      const normalizedSize = {
+        width: Math.max(baseSize.width, 320),
+        height: Math.max(baseSize.height, 240)
+      }
       const marginFromEdge = isMediumDesktop ? 16 : 20
       const compactVertical = viewportHeight > 0 && viewportHeight < 900
       const gap = isMediumDesktop ? 14 : (compactVertical ? 12 : 16)
@@ -1281,17 +1284,17 @@ export default {
 
       if (modal.type === 'capacity') {
         const maxHeightBudget = Math.max(
-          baseSize.height,
-          (window.innerHeight || baseSize.height) - startY - marginFromEdge
+          normalizedSize.height,
+          (window.innerHeight || normalizedSize.height) - startY - marginFromEdge
         )
         const cappedHeight = isMediumDesktop
-          ? Math.min(maxHeightBudget, Math.floor((viewportHeight || baseSize.height) * 0.9))
+          ? Math.min(maxHeightBudget, Math.floor((viewportHeight || normalizedSize.height) * 0.9))
           : maxHeightBudget
-        const fullHeight = Math.max(baseSize.height, cappedHeight)
+        const fullHeight = Math.max(normalizedSize.height, cappedHeight)
 
         return {
           position: { x: marginFromEdge, y: startY },
-          size: { width: baseSize.width, height: fullHeight }
+          size: { width: normalizedSize.width, height: fullHeight }
         }
       }
 
@@ -1300,22 +1303,22 @@ export default {
       if (slotIndex === -1) return null
 
       const columns = 2
-      const totalWidth = (baseSize.width * columns) + gap
+      const totalWidth = (normalizedSize.width * columns) + gap
       const xStart = Math.max(marginFromEdge, (window.innerWidth || 0) - totalWidth - marginFromEdge)
       const column = slotIndex % columns
       const row = Math.floor(slotIndex / columns)
 
-      const x = xStart + column * (baseSize.width + gap)
-      const availableHeight = Math.max(baseSize.height, (viewportHeight || baseSize.height) - startY - marginFromEdge)
+      const x = xStart + column * (normalizedSize.width + gap)
+      const availableHeight = Math.max(normalizedSize.height, (viewportHeight || normalizedSize.height) - startY - marginFromEdge)
       const baseHeight = compactVertical
-        ? Math.min(baseSize.height, Math.max(200, Math.floor((availableHeight - gap) / Math.max(row + 1, 1))))
-        : baseSize.height
+        ? Math.min(normalizedSize.height, Math.max(200, Math.floor((availableHeight - gap) / Math.max(row + 1, 1))))
+        : normalizedSize.height
 
       const y = startY + row * (baseHeight + gap)
 
       return {
         position: { x, y },
-        size: { ...baseSize, height: baseHeight }
+        size: { ...normalizedSize, height: baseHeight }
       }
     },
 
