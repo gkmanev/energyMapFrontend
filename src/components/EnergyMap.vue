@@ -3850,7 +3850,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         const badgeHtml = `
           <div class="price-badge">
-            <div class="price-badge__value"><span style="color:fffff";>${value.toFixed(0)}</div>
+            <div class="price-badge__value" style="font-weight:bold; color: white;">${value.toFixed(0)}</div>
           </div>
         `
 
@@ -5033,9 +5033,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   );
 }
 
-.price-badge-icon {
-    color: white;
-    font-weight: bold;
+.price-badge,
+.price-badge__value {
+    color: inherit; /* inherit from parent */
 }
 
 /* .price-badge {
