@@ -1235,12 +1235,19 @@ export default {
     // edge so multiple modals align in a single column.
     _gridPosition(slotIndex, modalWidth = 400, modalHeight = 300) {
       const marginFromEdge = 20   // left/top margin to the viewport
-      const gapY = 16             // vertical gap between rows
-      const startY = 100          // initial top offset
+      const viewportHeight = typeof window !== 'undefined' ? (window.innerHeight || 0) : 0
+      const compactVertical = viewportHeight > 0 && viewportHeight < 900
+      const gapX = 16
+      const gapY = compactVertical ? 12 : 16 // vertical gap between rows
+      const startY = compactVertical ? 72 : 100 // initial top offset
 
-      const row = slotIndex
+      const availableHeight = Math.max(0, viewportHeight - startY - marginFromEdge)
+      const rowsPerColumn = Math.max(1, Math.floor((availableHeight + gapY) / (modalHeight + gapY)) || 1)
 
-      const x = marginFromEdge
+      const column = Math.floor(slotIndex / rowsPerColumn)
+      const row = slotIndex % rowsPerColumn
+
+      const x = marginFromEdge + column * (modalWidth + gapX)
       const y = startY + row * (modalHeight + gapY)
       return { x, y }
     },
