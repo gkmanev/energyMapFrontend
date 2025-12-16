@@ -530,6 +530,7 @@ const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
 
 const DEFAULT_MODAL_WIDTH = 350
 const DEFAULT_MODAL_HEIGHT = 280
+const MODAL_MOBILE_BREAKPOINT = 1200
 
 const calculateResponsiveModalSize = () => {
   if (typeof window === 'undefined') {
@@ -718,7 +719,7 @@ export default {
       // Existing data properties
       europeBounds: [[34, -25], [72, 45]],
       isModalOpen: false,
-      isMobileViewport: typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+      isMobileViewport: typeof window !== 'undefined' ? window.innerWidth < MODAL_MOBILE_BREAKPOINT : false,
       mobilePanelVisible: false,
       mobilePanelLoading: false,
       mobilePanelError: null,
@@ -770,7 +771,7 @@ export default {
       mobileZoomOffset: 1,
       zoom: (() => {
         const isClient = typeof window !== 'undefined'
-        const isMobileViewport = isClient && window.innerWidth <= 768
+        const isMobileViewport = isClient && window.innerWidth < MODAL_MOBILE_BREAKPOINT
         const defaultZoom = 5
         const mobileZoomOffset = 1
         const mobileZoom = Math.max(2, defaultZoom - mobileZoomOffset)
@@ -1791,7 +1792,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     updateResponsiveZoom() {
       if (typeof window === 'undefined') return
 
-      const isMobileViewport = window.innerWidth <= 768
+      const isMobileViewport = window.innerWidth < MODAL_MOBILE_BREAKPOINT
       const minZoom = this.mapOptions?.minZoom ?? 0
       const mobileZoom = Math.max(minZoom, this.defaultZoom - this.mobileZoomOffset)
       const targetZoom = isMobileViewport ? mobileZoom : this.defaultZoom
@@ -4185,7 +4186,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     updateMobileState() {
       const previous = this.isMobileViewport
-      this.isMobileViewport = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+      this.isMobileViewport = typeof window !== 'undefined'
+        ? window.innerWidth < MODAL_MOBILE_BREAKPOINT
+        : false
 
       if (this.isMobileViewport) {
         this.stackModalsForMobile()
