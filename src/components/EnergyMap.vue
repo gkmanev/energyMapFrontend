@@ -3851,7 +3851,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const badgeHtml = `
           <div class="price-badge">
             <div class="price-badge__value">${value.toFixed(0)}</div>
-            <div class="price-badge__unit">€/MWh</div>
           </div>
         `
 
@@ -5034,13 +5033,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   );
 }
 
-.price-badge-icon {
+:deep(.price-badge-icon) {
   background: transparent;
   border: none;
   pointer-events: none !important;
 }
 
-.price-badge {
+:deep(.price-badge) {
   background: rgba(15, 23, 42, 0.88);
   color: #e2e8f0;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -5056,23 +5055,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 0;
   pointer-events: none;
 }
 
-.price-badge__value {
-  font-weight: 700;
+:deep(.price-badge__value) {
+  font-weight: 800;
   font-size: 17px;
-  color: #fef3c7;
+  color: #ffffff;
   letter-spacing: 0.3px;
-}
-
-.price-badge__unit {
-  font-size: 10px;
-  color: #cbd5e1;
-  margin-top: 0;
-  text-align: center;
-  display: block;
 }
 
 .chart-box {
