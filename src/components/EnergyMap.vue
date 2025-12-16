@@ -18,15 +18,15 @@
             <!-- Add toggle for heatmap type -->
             <label class="radio-pill">
               <input type="radio" v-model="heatmapType" value="prices">
-              <span>Price</span>
+              <span>Price <span style="font-style: italic; font-weight: lighter;">(eur/MWh)</span></span>
             </label>
             <label class="radio-pill">
               <input type="radio" v-model="heatmapType" value="capacity">
-              <span>Capacity</span>
+              <span>Capacity <span style="font-style: italic; font-weight: lighter;">(MW)</span></span>
             </label>
             <label class="radio-pill">
               <input type="radio" v-model="heatmapType" value="generation">
-              <span>Generation</span>
+              <span>Generation <span style="padding-right: 10px; font-style: italic; font-weight: lighter;">(MW/h)</span></span>
             </label>
           </div>
         </div>
@@ -3850,16 +3850,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         const badgeHtml = `
           <div class="price-badge">
-            <div class="price-badge__value">${value.toFixed(0)}</div>
+            <div class="price-badge__value"><span style="color:fffff";>${value.toFixed(0)}</div>
           </div>
         `
 
         const marker = L.marker(center, {
           icon: L.divIcon({
-            className: 'price-badge-icon',
+           className: 'price-badge-icon',
             html: badgeHtml,
-            iconSize: [72, 48],
-            iconAnchor: [36, 24]
+          //   iconSize: [72, 48],
+          //   iconAnchor: [36, 24]
           }),
           interactive: false,
           keyboard: false,
@@ -5034,12 +5034,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .price-badge-icon {
-  background: transparent;
-  border: none;
-  pointer-events: none !important;
+    color: white;
+    font-weight: bold;
 }
 
-.price-badge {
+/* .price-badge {
   background: rgba(15, 23, 42, 0.88);
   color: #e2e8f0;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -5057,14 +5056,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   justify-content: center;
   gap: 0;
   pointer-events: none;
-}
+} */
 
-.price-badge__value {
+/* .price-badge__value {
   font-weight: 800;
   font-size: 17px;
   color: #ffffff;
-  letter-spacing: 0.3px;
-}
+  letter-spacing: 103px;
+} */
 
 .chart-box {
   height: 520px;
