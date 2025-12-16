@@ -3703,14 +3703,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               }
               if (vm.showTooltips) {
                 const v = getVal()
-                const unit = vm.legendUnit
+                const unit = vm.heatmapType === 'prices' ? '' : vm.legendUnit
                 const decimals = vm.heatmapType === 'prices' ? 2 : 0
-                let text = Number.isFinite(v) 
-                  ? `${name}: ${v.toFixed(decimals)} ${unit}` 
+                const valueText = Number.isFinite(v) ? v.toFixed(decimals) : null
+                let text = valueText !== null
+                  ? `${name}: ${valueText}${unit ? ` ${unit}` : ''}` 
                   : `${name}: no data`
                 
                 if (vm.hasTimeData) {
-                  text += `\n${vm.currentTimeDisplay}`
+                  const timeLabel = vm.heatmapType === 'prices'
+                    ? new Date(vm.currentTimestamp).toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    : vm.currentTimeDisplay
+                  text += `\n${timeLabel}`
                 }
                 // // ✨ NEW: show Δ change for price heatmap
 
