@@ -1259,11 +1259,12 @@ export default {
       const viewportHeight = window.innerHeight || 0
       if (viewportWidth <= MODAL_MOBILE_BREAKPOINT) return false
 
+      const midWidthLayout = viewportWidth <= 1440 && viewportHeight >= 620
       const mediumDesktop = viewportWidth <= 1440 && viewportHeight >= 700
       const tallDesktop = viewportHeight >= 800
       const compactDesktop = viewportWidth >= 1280 && viewportHeight >= MIN_DESKTOP_HEIGHT
 
-      return tallDesktop || compactDesktop || mediumDesktop
+      return tallDesktop || compactDesktop || mediumDesktop || midWidthLayout
     },
 
     getDesktopLayoutPosition(modal, baseSize) {
