@@ -1259,10 +1259,11 @@ export default {
       const viewportHeight = window.innerHeight || 0
       if (viewportWidth <= MODAL_MOBILE_BREAKPOINT) return false
 
+      const mediumDesktop = viewportWidth <= 1440 && viewportHeight >= 700
       const tallDesktop = viewportHeight >= 800
       const compactDesktop = viewportWidth >= 1280 && viewportHeight >= MIN_DESKTOP_HEIGHT
 
-      return tallDesktop || compactDesktop
+      return tallDesktop || compactDesktop || mediumDesktop
     },
 
     getDesktopLayoutPosition(modal, baseSize) {
@@ -1270,16 +1271,22 @@ export default {
       if (modal?.thumbnail) return null
 
       const viewportHeight = window.innerHeight || 0
-      const marginFromEdge = 20
+      const viewportWidth = window.innerWidth || 0
+      const isMediumDesktop = viewportWidth > MODAL_MOBILE_BREAKPOINT && viewportWidth <= 1440
+      const marginFromEdge = isMediumDesktop ? 16 : 20
       const compactVertical = viewportHeight > 0 && viewportHeight < 900
-      const gap = compactVertical ? 12 : 16
-      const startY = compactVertical ? 56 : 80
+      const gap = isMediumDesktop ? 14 : (compactVertical ? 12 : 16)
+      const startY = isMediumDesktop ? 48 : (compactVertical ? 56 : 80)
 
       if (modal.type === 'capacity') {
-        const fullHeight = Math.max(
+        const maxHeightBudget = Math.max(
           baseSize.height,
           (window.innerHeight || baseSize.height) - startY - marginFromEdge
         )
+        const cappedHeight = isMediumDesktop
+          ? Math.min(maxHeightBudget, Math.floor((viewportHeight || baseSize.height) * 0.9))
+          : maxHeightBudget
+        const fullHeight = Math.max(baseSize.height, cappedHeight)
 
         return {
           position: { x: marginFromEdge, y: startY },
