@@ -1,6 +1,6 @@
 <template>
   <div class="flex items-center text-sm font-medium text-gray-200">
-    <span class="mr-1">🕒 </span>
+    <span class="mr-1">CET </span>
     <span>{{ timeString }}</span>
   </div>
 </template>
