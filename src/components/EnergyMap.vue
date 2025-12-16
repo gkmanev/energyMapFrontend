@@ -719,7 +719,7 @@ export default {
       // Existing data properties
       europeBounds: [[34, -25], [72, 45]],
       isModalOpen: false,
-      isMobileViewport: typeof window !== 'undefined' ? window.innerWidth < MODAL_MOBILE_BREAKPOINT : false,
+      isMobileViewport: typeof window !== 'undefined' ? window.innerWidth <= MODAL_MOBILE_BREAKPOINT : false,
       mobilePanelVisible: false,
       mobilePanelLoading: false,
       mobilePanelError: null,
@@ -771,7 +771,7 @@ export default {
       mobileZoomOffset: 1,
       zoom: (() => {
         const isClient = typeof window !== 'undefined'
-        const isMobileViewport = isClient && window.innerWidth < MODAL_MOBILE_BREAKPOINT
+        const isMobileViewport = isClient && window.innerWidth <= MODAL_MOBILE_BREAKPOINT
         const defaultZoom = 5
         const mobileZoomOffset = 1
         const mobileZoom = Math.max(2, defaultZoom - mobileZoomOffset)
@@ -1243,7 +1243,7 @@ export default {
 
     isLargeScreenLayout() {
       if (typeof window === 'undefined') return false
-      return window.innerWidth >= 1200 && window.innerHeight >= 800
+      return window.innerWidth > MODAL_MOBILE_BREAKPOINT && window.innerHeight >= 800
     },
 
     getDesktopLayoutPosition(modal, baseSize) {
@@ -1311,7 +1311,7 @@ export default {
 
       if (this.isMobileViewport) return false
 
-      return viewportWidth <= 1200 && viewportHeight <= 800
+      return viewportWidth <= MODAL_MOBILE_BREAKPOINT && viewportHeight <= 800
     },
 
     getSeparateModalStyle(modalId) {
@@ -1792,7 +1792,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     updateResponsiveZoom() {
       if (typeof window === 'undefined') return
 
-      const isMobileViewport = window.innerWidth < MODAL_MOBILE_BREAKPOINT
+      const isMobileViewport = window.innerWidth <= MODAL_MOBILE_BREAKPOINT
       const minZoom = this.mapOptions?.minZoom ?? 0
       const mobileZoom = Math.max(minZoom, this.defaultZoom - this.mobileZoomOffset)
       const targetZoom = isMobileViewport ? mobileZoom : this.defaultZoom
@@ -4187,7 +4187,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     updateMobileState() {
       const previous = this.isMobileViewport
       this.isMobileViewport = typeof window !== 'undefined'
-        ? window.innerWidth < MODAL_MOBILE_BREAKPOINT
+        ? window.innerWidth <= MODAL_MOBILE_BREAKPOINT
         : false
 
       if (this.isMobileViewport) {
