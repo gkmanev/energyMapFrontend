@@ -531,6 +531,7 @@ const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
 const DEFAULT_MODAL_WIDTH = 350
 const DEFAULT_MODAL_HEIGHT = 280
 const MODAL_MOBILE_BREAKPOINT = 1200
+const MIN_DESKTOP_HEIGHT = 680
 
 const calculateResponsiveModalSize = () => {
   if (typeof window === 'undefined') {
@@ -539,14 +540,17 @@ const calculateResponsiveModalSize = () => {
 
   const viewportWidth = window.innerWidth || DEFAULT_MODAL_WIDTH
   const viewportHeight = window.innerHeight || DEFAULT_MODAL_HEIGHT
-  const isCompactViewport = viewportWidth <= 1440 || viewportHeight <= 900
+  const isNarrowDesktop = viewportWidth > MODAL_MOBILE_BREAKPOINT && viewportWidth <= 1440
+  const isCompactViewport = isNarrowDesktop || viewportWidth <= 1440 || viewportHeight <= 900
 
   if (!isCompactViewport) {
     return { width: DEFAULT_MODAL_WIDTH, height: DEFAULT_MODAL_HEIGHT }
   }
 
-  const compactWidth = Math.max(220, Math.round(viewportWidth * 0.22))
-  const compactHeight = Math.max(180, Math.round(viewportHeight * 0.28))
+  const widthFactor = isNarrowDesktop ? 0.2 : 0.22
+  const heightFactor = isNarrowDesktop ? 0.26 : 0.28
+  const compactWidth = Math.max(220, Math.round(viewportWidth * widthFactor))
+  const compactHeight = Math.max(180, Math.round(viewportHeight * heightFactor))
 
   return {
     width: Math.min(DEFAULT_MODAL_WIDTH, compactWidth),
@@ -1243,16 +1247,26 @@ export default {
 
     isLargeScreenLayout() {
       if (typeof window === 'undefined') return false
-      return window.innerWidth > MODAL_MOBILE_BREAKPOINT && window.innerHeight >= 800
+
+      const viewportWidth = window.innerWidth || 0
+      const viewportHeight = window.innerHeight || 0
+      if (viewportWidth <= MODAL_MOBILE_BREAKPOINT) return false
+
+      const tallDesktop = viewportHeight >= 800
+      const compactDesktop = viewportWidth >= 1280 && viewportHeight >= MIN_DESKTOP_HEIGHT
+
+      return tallDesktop || compactDesktop
     },
 
     getDesktopLayoutPosition(modal, baseSize) {
       if (!this.isLargeScreenLayout()) return null
       if (modal?.thumbnail) return null
 
+      const viewportHeight = window.innerHeight || 0
       const marginFromEdge = 20
-      const gap = 16
-      const startY = 80
+      const compactVertical = viewportHeight > 0 && viewportHeight < 900
+      const gap = compactVertical ? 12 : 16
+      const startY = compactVertical ? 56 : 80
 
       if (modal.type === 'capacity') {
         const fullHeight = Math.max(
@@ -1277,11 +1291,16 @@ export default {
       const row = Math.floor(slotIndex / columns)
 
       const x = xStart + column * (baseSize.width + gap)
-      const y = startY + row * (baseSize.height + gap)
+      const availableHeight = Math.max(baseSize.height, (viewportHeight || baseSize.height) - startY - marginFromEdge)
+      const baseHeight = compactVertical
+        ? Math.min(baseSize.height, Math.max(200, Math.floor((availableHeight - gap) / Math.max(row + 1, 1))))
+        : baseSize.height
+
+      const y = startY + row * (baseHeight + gap)
 
       return {
         position: { x, y },
-        size: { ...baseSize }
+        size: { ...baseSize, height: baseHeight }
       }
     },
 
