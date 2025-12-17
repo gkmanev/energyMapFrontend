@@ -6109,10 +6109,34 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
+  border-radius: 16px;
+  background: linear-gradient(150deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.54));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.6),
+    0 18px 40px rgba(8, 15, 32, 0.48);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
 }
 
 .powerflow-modal-body > * {
   flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.powerflow-modal-body::before {
+  content: "";
+  position: absolute;
+  inset: -40% -55% 45% -55%;
+  background: radial-gradient(circle at 30% 28%, rgba(148, 163, 184, 0.18), transparent 60%),
+    radial-gradient(circle at 80% 65%, rgba(59, 130, 246, 0.18), transparent 62%),
+    conic-gradient(from 220deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0));
+  opacity: 0.5;
+  transform-origin: center;
+  pointer-events: none;
 }
 
 </style>
