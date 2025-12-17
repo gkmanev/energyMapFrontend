@@ -405,20 +405,6 @@
                 <span class="generation-tech-share">({{ formatPercent(tech.share) }})</span>
               </div>
             </div>
-            <div v-if="modal.meta && modal.meta.legendItems.length" class="generation-legend">
-              <div class="generation-legend-grid">
-                <div
-                  v-for="item in modal.meta.legendItems"
-                  :key="item.name"
-                  class="generation-legend-item"
-                >
-                  <span class="generation-legend-swatch" :style="{ backgroundColor: item.color }"></span>
-                  <span class="generation-legend-name">{{ item.name }}</span>
-                  <span class="generation-legend-value">{{ formatMegawatts(item.value) }} MW</span>
-                  <span class="generation-legend-share">{{ formatPercent(item.share) }}</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           <!-- Capacity modal: enriched layout with summary + breakdown -->
@@ -5789,56 +5775,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1;
   min-height: 160px;
   min-width: 0;
-}
-.generation-legend {
-  max-height: 150px;
-  overflow-y: auto;
-  padding: 6px 4px;
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.65);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.2);
-}
-.generation-legend-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 6px;
-}
-.generation-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(2, 6, 23, 0.8);
-  font-size: 11px;
-  color: #e2e8f0;
-  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-}
-.generation-legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-.generation-legend-name {
-  font-weight: 500;
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.generation-legend-value {
-  margin-left: auto;
-  font-weight: 600;
-  color: #f8fafc;
-}
-.generation-legend-share {
-  margin-left: 6px;
-  color: rgba(226, 232, 240, 0.7);
-  font-size: 10px;
 }
 
 .capacity-modal {
