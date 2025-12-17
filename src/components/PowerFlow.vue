@@ -438,12 +438,28 @@ export default {
 
 <style scoped>
 .pf-card {
-  background: transparent;
+  position: relative;
   border-radius: 16px;
   padding: 10px 12px 8px;
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.9);
+  background: linear-gradient(150deg, #0f172a, #0b1223);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.6),
+    0 18px 40px rgba(8, 15, 32, 0.48);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  overflow: hidden;
   color: #e5e7eb;
+}
+
+.pf-card::before {
+  content: "";
+  position: absolute;
+  inset: -40% -55% 45% -55%;
+  background: radial-gradient(circle at 30% 28%, rgba(148, 163, 184, 0.18), transparent 60%),
+    radial-gradient(circle at 80% 65%, rgba(59, 130, 246, 0.18), transparent 62%),
+    conic-gradient(from 220deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0));
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 /* header */
