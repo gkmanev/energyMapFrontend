@@ -271,6 +271,7 @@
         <div
           v-for="modal in separateModals"
           :key="modal.id"
+          :id="'separate-modal-' + modal.id"
           :class="[
             'separate-modal',
             { 'separate-modal--thumbnail': modal.thumbnail, 'separate-modal--mobile': isMobileViewport }
@@ -1965,6 +1966,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       this.loadSeparateModalData(modalId, country, type)
       return modalId
+    },
+
+    scrollToModal(modalId) {
+      if (!this.isMobileViewport || typeof window === 'undefined') return
+
+      this.$nextTick(() => {
+        const modalEl = document.getElementById(`separate-modal-${modalId}`)
+        if (!modalEl) return
+
+        const rect = modalEl.getBoundingClientRect()
+        const scrollTarget = window.scrollY + rect.top - 18
+
+        window.scrollTo({
+          top: Math.max(scrollTarget, 0),
+          behavior: 'smooth'
+        })
+      })
     },
 
     repositionSeparateModals() {
@@ -3716,11 +3734,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 if (vm.generationChartInstance?.update) vm.generationChartInstance.update()
 
                 // UPDATED: Create BOTH capacity and generation modals for each click
+                const generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
                 vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
-                vm.createSeparateModal(name, 'generation', 'Energy Generation')
                 vm.createSeparateModal(name, 'prices', 'Energy Prices (48h)')
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
                 vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
+
+                if (vm.isMobileViewport && generationModalId !== undefined) {
+                  vm.scrollToModal(generationModalId)
+                }
               } else {
                 vm.capacityError = 'Missing ISO-2 code for this feature'
                 vm.generationError = 'Missing ISO-2 code for this feature'
