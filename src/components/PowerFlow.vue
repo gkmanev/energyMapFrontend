@@ -441,14 +441,12 @@ export default {
   position: relative;
   border-radius: 16px;
   padding: 10px 12px 8px;
-  background: linear-gradient(150deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.54));
+  background: linear-gradient(150deg, #0f172a, #0b1223);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 0 -1px 0 rgba(15, 23, 42, 0.6),
     0 18px 40px rgba(8, 15, 32, 0.48);
   border: 1px solid rgba(148, 163, 184, 0.22);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
   overflow: hidden;
   color: #e5e7eb;
 }
