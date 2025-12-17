@@ -3734,14 +3734,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 if (vm.generationChartInstance?.update) vm.generationChartInstance.update()
 
                 // UPDATED: Create BOTH capacity and generation modals for each click
-                const generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
-                vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
+                const capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
+                vm.createSeparateModal(name, 'generation', 'Energy Generation')
                 vm.createSeparateModal(name, 'prices', 'Energy Prices (48h)')
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
                 vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
 
-                if (vm.isMobileViewport && generationModalId !== undefined) {
-                  vm.scrollToModal(generationModalId)
+                if (vm.isMobileViewport && capacityModalId !== undefined) {
+                  vm.scrollToModal(capacityModalId)
                 }
               } else {
                 vm.capacityError = 'Missing ISO-2 code for this feature'
