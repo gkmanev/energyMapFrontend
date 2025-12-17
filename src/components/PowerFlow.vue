@@ -454,7 +454,7 @@ export default {
 .pf-card::before {
   content: "";
   position: absolute;
-  inset: -40% -55% 45% -55%;
+  /* inset: -40% -55% 45% -55%; */
   background: radial-gradient(circle at 30% 28%, rgba(148, 163, 184, 0.18), transparent 60%),
     radial-gradient(circle at 80% 65%, rgba(59, 130, 246, 0.18), transparent 62%),
     conic-gradient(from 220deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0));

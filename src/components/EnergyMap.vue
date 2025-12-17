@@ -4551,7 +4551,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .panel-scrim {
   position: absolute;
-  inset: 0;
+  /* inset: 0; */
   /* background: rgba(0,0,0,0.08); */
   z-index: 1000;
 }
@@ -4642,12 +4642,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .separate-modal::before {
-  inset: 10% 12% 28% 14%;
-  background:
+  inset: 10% 12% 28% 14%; 
+   background:
     radial-gradient(circle at 18% 18%, rgba(56, 189, 248, 0.28), transparent 42%),
     radial-gradient(circle at 80% 10%, rgba(129, 140, 248, 0.24), transparent 40%),
-    radial-gradient(circle at 58% 74%, rgba(236, 72, 153, 0.22), transparent 48%);
-  filter: blur(30px);
+    radial-gradient(circle at 58% 74%, rgba(236, 72, 153, 0.22), transparent 48%); 
+   filter: blur(30px);
   opacity: 0.8;
 }
 
@@ -4657,7 +4657,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   mix-blend-mode: screen;
 }
 
-.separate-modal--thumbnail {
+/* .separate-modal--thumbnail {
   border-radius: 18px;
   box-shadow:
     0 18px 48px rgba(8, 15, 32, 0.45),
@@ -4669,7 +4669,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   padding: 6px 8px 12px;
   min-width: 238px;
   max-width: 320px;
-}
+} */
 
 .separate-modal--mobile .separate-modal-content {
   max-height: none;
@@ -5662,7 +5662,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .chart-container::before {
   content: "";
   position: absolute;
-  inset: -40% -55% 45% -55%;
+  /* inset: -40% -55% 45% -55%; */
   background: radial-gradient(circle at 30% 28%, rgba(148, 163, 184, 0.18), transparent 60%),
     radial-gradient(circle at 80% 65%, rgba(59, 130, 246, 0.18), transparent 62%),
     conic-gradient(from 220deg, rgba(148, 163, 184, 0.12), rgba(15, 23, 42, 0));
