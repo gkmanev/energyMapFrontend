@@ -4678,14 +4678,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .separate-modal--mobile .price-chart,
 .separate-modal--mobile .netflow-modal .chart-container {
-  width: calc(100% + 32px);
-  margin-left: -16px;
-  margin-right: -16px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
 }
 
 .separate-modal--mobile .price-chart canvas,
 .separate-modal--mobile .netflow-modal .chart-container canvas {
   width: 100% !important;
+  max-width: 540px;
+  margin: 0 auto;
 }
 
 .separate-modal--mobile .separate-modal-header {
