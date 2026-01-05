@@ -25,8 +25,12 @@
               <span>Generation</span>
             </label>
           </div>
+          <div class="header-logo" aria-label="visualize.energy">
+            <span class="logo-primary">visualize</span>
+            <span class="logo-dot">.</span>
+            <span class="logo-highlight">energy</span>
+          </div>
           <div class="header-top">
-            <!-- <h1>EnApp by Entra</h1> -->
             <div class="header-clock"><LocalClock /></div>
           </div>
         </div>
@@ -4413,9 +4417,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap');
+
 /* App container */
 .energy-map-app {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Manrope', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: #2c3e50;
   margin: 0;
   padding: 0;
@@ -4452,15 +4458,39 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 /* Compact header */
 .header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 4px;
+  padding: 10px 12px;
   color: #0f172a;
   flex-shrink: 0;
-  gap: 16px;
+  gap: 12px;
   border-radius: 11px;
   border: 1px solid #fff;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.header-logo {
+  justify-self: center;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.logo-primary {
+  color: #f3f3f3;
+}
+
+.logo-dot {
+  color: #b280e9;
+  padding: 0 2px;
+}
+
+.logo-highlight {
+  color: #b280e9;
 }
 
 .header-top {
@@ -5478,8 +5508,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 @media (max-width: 768px) {
   .header {
-    padding: 6px 12px;
-    
+    grid-template-columns: 1fr;
+    padding: 8px 12px;
+    row-gap: 6px;
+  }
+
+  .header-logo {
+    justify-self: center;
+    font-size: 22px;
   }
 
   .header h1 {
@@ -5488,7 +5524,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .controls {
     gap: 8px;
+    justify-content: center;
     margin-top: 6px;
+  }
+
+  .header-top {
+    justify-content: center;
+    margin-left: 0;
   }
 
   .slider-wrapper {
