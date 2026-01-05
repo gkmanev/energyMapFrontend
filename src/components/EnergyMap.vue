@@ -4512,6 +4512,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-size: 15px;
   padding: 0 6px;
   color: #ffffff;
+  width:160px;
 }
 
 .controls {
