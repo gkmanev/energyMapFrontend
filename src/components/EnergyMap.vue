@@ -10,24 +10,24 @@
     <div class="layout-shell">
       <div class="content-shell">
         <div class="header">
-          <div class="header-top">
-            <!-- <h1>EnApp by Entra</h1> -->
-            <div class="header-clock"><LocalClock /></div>
-          </div>
           <div class="controls">
             <!-- Add toggle for heatmap type -->
             <label class="radio-pill">
               <input type="radio" v-model="heatmapType" value="prices">
-              <span>Price <span style="font-style: italic; font-weight: lighter;">(eur/MWh)</span></span>
+              <span>Price</span>
             </label>
             <label class="radio-pill">
               <input type="radio" v-model="heatmapType" value="capacity">
-              <span>Capacity <span style="font-style: italic; font-weight: lighter;">(MW)</span></span>
+              <span>Capacity</span>
             </label>
             <label class="radio-pill">
               <input type="radio" v-model="heatmapType" value="generation">
-              <span>Generation <span style="padding-right: 10px; font-style: italic; font-weight: lighter;">(MW/h)</span></span>
+              <span>Generation</span>
             </label>
+          </div>
+          <div class="header-top">
+            <!-- <h1>EnApp by Entra</h1> -->
+            <div class="header-clock"><LocalClock /></div>
           </div>
         </div>
 
@@ -4467,7 +4467,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1;
+  margin-left: auto;
+  justify-content: flex-end;
 }
 .header h1 {
   margin: 0;
