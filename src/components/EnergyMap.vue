@@ -4489,7 +4489,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  margin: 0;
+  margin: 0 0 0 12px;
 }
 
 .radio-pill {
