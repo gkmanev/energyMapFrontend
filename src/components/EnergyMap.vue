@@ -97,7 +97,10 @@
         </div>
 
         <!-- Price Slider -->
-        <div v-if="heatmapType === 'prices'" class="time-slider-overlay">
+        <div
+          v-if="heatmapType === 'prices'"
+          :class="['time-slider-overlay', { 'time-slider-overlay--floating': isMobileViewport }]"
+        >
           <div class="overlay-header">
             <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
             <div class="slider-info">
@@ -165,7 +168,10 @@
         </div>
 
         <!-- Generation Slider -->
-        <div v-if="heatmapType === 'generation'" class="time-slider-overlay">
+        <div
+          v-if="heatmapType === 'generation'"
+          :class="['time-slider-overlay', { 'time-slider-overlay--floating': isMobileViewport }]"
+        >
           <div class="overlay-header">
             <h3>Generation Data - Last 48 Hours</h3>
             <div class="slider-info">
@@ -217,7 +223,10 @@
         </div>
 
         <!-- Capacity Slider (keeps layout consistent even with static data) -->
-        <div v-if="heatmapType === 'capacity'" class="time-slider-overlay">
+        <div
+          v-if="heatmapType === 'capacity'"
+          :class="['time-slider-overlay', { 'time-slider-overlay--floating': isMobileViewport }]"
+        >
           <div class="overlay-header">
             <h3>Installed Capacity Snapshot</h3>
             <div class="slider-info">
@@ -5110,7 +5119,24 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   align-self: center;
   margin-top: 18px;
   margin-bottom: 50px;
+}
 
+.time-slider-overlay--floating {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(22px + 14px);
+  width: min(900px, calc(100% - 24px));
+  max-width: min(900px, calc(100% - 24px));
+  margin: 0;
+  align-self: center;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 12px 30px rgba(15, 23, 42, 0.16),
+    0 4px 12px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  padding: 8px 12px 10px;
+  z-index: 1100;
 }
 
 .overlay-header {
@@ -5494,7 +5520,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .time-slider-overlay {
     width: min(760px, 90vw);
   }
-  
+
   .slider-info {
     flex-direction: column;
     align-items: stretch;
@@ -5562,6 +5588,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     margin-left: 0;
   }
 
+  .content-shell {
+    padding-bottom: 140px;
+  }
+
   .slider-wrapper {
     height: 23px;
   }
@@ -5587,6 +5617,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .map-row {
     padding-bottom: 0px;
+  }
+
+  .time-slider-overlay--floating {
+    width: min(880px, calc(100% - 20px));
+    max-width: min(880px, calc(100% - 20px));
+    bottom: calc(22px + 10px);
+  }
+
+  .separate-modal-stack {
+    padding-bottom: 170px;
   }
 
   .app-footer {
@@ -5662,6 +5702,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .slider-info {
     font-size: 11px;
   }
+
+  .time-slider-overlay--floating {
+    width: min(820px, calc(100% - 16px));
+    max-width: min(820px, calc(100% - 16px));
+    bottom: calc(22px + 6px);
+  }
 }
 
 /* Dark mode support */
@@ -5669,6 +5715,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .time-slider-overlay {
     background: rgba(26, 32, 44, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .time-slider-overlay--floating {
+    background: rgba(26, 32, 44, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 12px 30px rgba(0, 0, 0, 0.3),
+      0 4px 12px rgba(0, 0, 0, 0.2);
   }
   
   .time-slider-overlay h3 {
