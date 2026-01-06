@@ -5119,6 +5119,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  display: none;
 }
 
 .time-slider-overlay h3 {
