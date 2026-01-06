@@ -5123,13 +5123,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .time-slider-overlay--floating {
   position: fixed;
-  left: 14px;
-  right: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: calc(22px + 14px);
-  width: auto;
-  max-width: none;
+  width: min(900px, calc(100% - 24px));
+  max-width: min(900px, calc(100% - 24px));
   margin: 0;
-  align-self: stretch;
+  align-self: center;
   background: rgba(255, 255, 255, 0.92);
   box-shadow:
     0 12px 30px rgba(15, 23, 42, 0.16),
@@ -5521,11 +5521,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     width: min(760px, 90vw);
   }
 
-  .time-slider-overlay--floating {
-    left: 12px;
-    right: 12px;
-  }
-  
   .slider-info {
     flex-direction: column;
     align-items: stretch;
@@ -5625,6 +5620,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .time-slider-overlay--floating {
+    width: min(880px, calc(100% - 20px));
+    max-width: min(880px, calc(100% - 20px));
     bottom: calc(22px + 10px);
   }
 
@@ -5707,8 +5704,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .time-slider-overlay--floating {
-    left: 8px;
-    right: 8px;
+    width: min(820px, calc(100% - 16px));
+    max-width: min(820px, calc(100% - 16px));
     bottom: calc(22px + 6px);
   }
 }
