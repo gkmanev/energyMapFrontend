@@ -758,7 +758,7 @@ export default {
       priceByISO2: {},
       pricePollingMs: 5 * 60 * 1000,
       priceTimer: null,
-      priceBadgeLayer: null,
+      mapBadgeLayer: null,
 
       defaultZoom: 5,
       mobileZoomOffset: 1,
@@ -1104,7 +1104,7 @@ export default {
           this.hideAllDeltaTooltips();
         }
         this.updateColorScheme()
-        this.$nextTick(() => this.updatePriceBadges())
+        this.$nextTick(() => this.updateMapBadges())
 
       },
       immediate: false
@@ -1115,7 +1115,7 @@ export default {
         this.updateColorScheme()
         this.updateGenerationCursorLines()
         if (this.showChangeTooltips) this.updateDeltaTooltips();
-        this.updatePriceBadges()
+        this.updateMapBadges()
       },
     },
 
@@ -3247,7 +3247,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.historicalPriceData = newHistoricalData
       this.updateColorScheme()
       if (this.showChangeTooltips) this.$nextTick(() => this.updateDeltaTooltips());
-      this.$nextTick(() => this.updatePriceBadges())
+      this.$nextTick(() => this.updateMapBadges())
 
     },
 
@@ -3623,6 +3623,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       await Promise.allSettled(tasks)
       this.countryCapacityByISO2 = { ...this.countryCapacityByISO2, ...updates }
       this.updateColorScheme()
+      this.updateMapBadges()
     },
 
     async refreshHeatmapData() {
@@ -3790,28 +3791,33 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       this.updateResponsiveZoom()
-      this.updatePriceBadges()
+      this.updateMapBadges()
 
     },
 
-    ensurePriceBadgeLayer() {
+    ensureMapBadgeLayer() {
       if (!this.map) return null
 
-      if (!this.priceBadgeLayer) {
-        this.priceBadgeLayer = L.layerGroup()
-        this.priceBadgeLayer.addTo(this.map)
+      if (!this.mapBadgeLayer) {
+        this.mapBadgeLayer = L.layerGroup()
+        this.mapBadgeLayer.addTo(this.map)
       }
 
-      return this.priceBadgeLayer
+      return this.mapBadgeLayer
     },
 
-    updatePriceBadges() {
-      const badgeLayer = this.ensurePriceBadgeLayer()
+    updateMapBadges() {
+      const badgeLayer = this.ensureMapBadgeLayer()
       if (!badgeLayer) return
 
       badgeLayer.clearLayers()
 
-      if (this.heatmapType !== 'prices') return
+      const shouldShowBadges = this.heatmapType === 'prices' || this.heatmapType === 'capacity'
+      if (!shouldShowBadges) return
+
+      const formatValue = this.heatmapType === 'prices'
+        ? (val) => val.toFixed(0)
+        : (val) => this.formatMegawatts(val)
 
       Object.entries(this.currentDataByISO2).forEach(([iso2, value]) => {
         if (!Number.isFinite(value)) return
@@ -3820,8 +3826,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         if (!center) return
 
         const badgeHtml = `
-          <div class="price-badge">
-            <div class="price-badge__value" style="font-weight:bold; color: white;">${value.toFixed(0)}</div>
+          <div class="price-badge price-badge--${this.heatmapType}">
+            <div class="price-badge__value" style="font-weight:bold; color: white;">${formatValue(value)}</div>
           </div>
         `
 
@@ -4402,9 +4408,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.mobilePanelChart = null
     }
 
-    if (this.priceBadgeLayer && this.map) {
-      this.priceBadgeLayer.remove()
-      this.priceBadgeLayer = null
+    if (this.mapBadgeLayer && this.map) {
+      this.mapBadgeLayer.remove()
+      this.mapBadgeLayer = null
     }
 
     // Clean up drag/resize listeners
