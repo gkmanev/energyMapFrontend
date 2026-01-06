@@ -5489,6 +5489,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .left-panel {
     min-width: 350px;
   }
+
+  .time-slider-overlay {
+    width: min(760px, 90vw);
+  }
   
   .slider-info {
     flex-direction: column;
@@ -5498,9 +5502,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .slider-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .slider-wrapper {
+    min-width: 180px;
   }
 
   .play-controls {
@@ -5608,6 +5616,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .controls label, .controls button {
     font-size: 13px;
   }
+
+  .time-slider-overlay {
+    width: min(520px, 88vw);
+  }
   
   .chart-box {
     height: 350px;
@@ -5633,6 +5645,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .time-slider-overlay {
     margin-top: 12px;
+    width: min(480px, 92vw);
+  }
+
+  .slider-wrapper {
+    min-width: 140px;
+  }
+
+  .slider-row {
+    gap: 6px;
   }
 
   .slider-info {
