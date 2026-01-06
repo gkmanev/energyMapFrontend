@@ -1087,9 +1087,11 @@ export default {
       handler(newType) {
         if (newType === 'prices' && !this.hasTimeData) {
           this.refreshAllHistoricalPrices()
-        } else if (newType === 'capacity' && Object.keys(this.countryCapacityByISO2).length === 0) {
+        } else if (newType === 'capacity') {
           this.currentTimeIndex = this.maxTimeIndex
-          this.refreshAllCapacities()
+          if (!this.hasCompleteCapacityCoverage()) {
+            this.refreshAllCapacities()
+          }
         } else if (newType === 'generation') {
           if (this.availableGenerationTimestamps.length === 0) {
             this.refreshAllHistoricalGeneration()
@@ -3527,6 +3529,19 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     capacitySupported(iso2) {
       return SUPPORTED_CAPACITY_ISO2.has(iso2)
+    },
+
+    hasCompleteCapacityCoverage() {
+      const entries = this.countryCapacityByISO2 || {}
+      if (!Object.keys(entries).length) return false
+
+      for (const iso2 of SUPPORTED_CAPACITY_ISO2) {
+        if (!Number.isFinite(entries[iso2])) {
+          return false
+        }
+      }
+
+      return true
     },
     
     generationSupported(iso2) {
