@@ -2586,8 +2586,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               },
               tooltip: {
                 padding: 12,
-                mode: 'nearest',
-                intersect: true,
+                mode: 'index',
+                intersect: false,
                 backgroundColor: 'rgba(15, 23, 42, 0.92)',
                 titleColor: '#f8fafc',
                 bodyColor: '#e2e8f0',
@@ -2596,27 +2596,20 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 callbacks: {
                   label: context => {
                     const index = context.dataIndex
-                    if (context.datasetIndex === 0) {
-                      const value = context.parsed.x || 0
-                      const utilisation = utilizationRates[index] || 0
-                      return `Generation: ${formatMwValue(value)} MW (${formatPercentValue(utilisation)})`
-                    }
-                    const spare = context.parsed.x || 0
-                    const capacity = capacityValues[index] || 0
-                    const idleShare = capacity > 0 ? (spare / capacity) * 100 : 0
-                    return `Capacity: ${formatMwValue(spare)} MW (${formatPercentValue(idleShare)})`
-                  },
-                  footer: tooltipItems => {
-                    if (!tooltipItems.length) return ''
-                    const index = tooltipItems[0].dataIndex
                     const installed = capacityValues[index] || 0
-                    const share = capacityShares[index] || 0
-                    return `Installed: ${formatMwValue(installed)} MW (${formatPercentValue(share)})`
+                    const generationValue = generationMapped[index] || 0
+                    const utilisation = installed > 0 ? (generationValue / installed) * 100 : 0
+
+                    if (context.datasetIndex === 0) {
+                      return `Generation: ${formatMwValue(generationValue)} MW`
+                    }
+
+                    return `Capacity: ${formatMwValue(installed)} MW (${formatPercentValue(utilisation)})`
                   }
                 }
               }
             },
-            interaction: { mode: 'nearest', axis: 'y', intersect: true }
+            interaction: { mode: 'index', axis: 'y', intersect: false }
           }
         }))
 
@@ -3923,27 +3916,27 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               display: true
             },
             tooltip: {
+              mode: 'index',
+              intersect: false,
               callbacks: {
                 label: function(context) {
-                  const datasetIndex = context.datasetIndex
-                  if (datasetIndex === 0) {
-                    const value = context.parsed.y
-                    const capacity = capacityValues[context.dataIndex]
-                    const percentage = capacity > 0 ? ((value / capacity) * 100).toFixed(1) : 0
-                    return `Current Generation: ${value.toFixed(0)} MW (${percentage}%)`
-                  } else {
-                    return `Available Capacity: ${context.parsed.y.toFixed(0)} MW`
+                  const index = context.dataIndex
+                  const installed = Number(capacityValues[index]) || 0
+                  const generationValue = Number(generationMapped[index]) || 0
+                  const utilisation = installed > 0 ? (generationValue / installed) * 100 : 0
+
+                  if (context.datasetIndex === 0) {
+                    return `Generation: ${generationValue.toFixed(0)} MW`
                   }
-                },
-                footer: function(tooltipItems) {
-                  if (tooltipItems.length > 0) {
-                    const index = tooltipItems[0].dataIndex
-                    const total = capacityValues[index]
-                    return `Total Installed: ${total.toFixed(0)} MW`
-                  }
+
+                  return `Capacity: ${installed.toFixed(0)} MW (${utilisation.toFixed(1)}%)`
                 }
               }
             }
+          },
+          interaction: {
+            mode: 'index',
+            intersect: false
           }
         }
       }))
