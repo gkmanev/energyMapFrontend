@@ -5489,10 +5489,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .left-panel {
     min-width: 350px;
   }
-
-  .time-slider-overlay {
-    width: min(760px, 90vw);
-  }
   
   .slider-info {
     flex-direction: column;
@@ -5611,10 +5607,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   
   .controls label, .controls button {
     font-size: 13px;
-  }
-
-  .time-slider-overlay {
-    width: min(520px, 88vw);
   }
   
   .chart-box {
