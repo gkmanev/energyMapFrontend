@@ -117,7 +117,7 @@
               </button>
               <label class="show-pct-toggle">
                 <input type="checkbox" v-model="showPctInTooltip" @change="onPctToggle" />
-                Show %
+                %
               </label>
             </div>
 
@@ -5169,8 +5169,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   position: relative;
   flex: 1;
   height: 30px;
-  margin: 0;
+  margin: 0 auto;
   min-width: 200px;
+  max-width: 80%;
 }
 
 .custom-slider {
@@ -5279,7 +5280,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .time-ticks-below {
   position: absolute;
-  top: 6px;
+  top: 10px;
   left: 0;
   right: 0;
   height: 18px;
@@ -5307,7 +5308,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .tick-label-below {
   font-size: 9px;
-  color: #6f61c1;
+  color: #c4cfff;
   text-align: center;
   white-space: nowrap;
   font-weight: 500;
@@ -5316,7 +5317,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .time-tick-below:hover .tick-label-below {
-  color: #667eea;
+  color: #c4cfff;
   font-weight: 600;
 }
 
@@ -5562,7 +5563,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .slider-wrapper {
-    height: 36px;
+    height: 23px;
   }
 
   .smooth-range-slider::-webkit-slider-thumb {
@@ -5650,6 +5651,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .slider-wrapper {
     min-width: 140px;
+    max-width: 300px;
+    margin-left: 20px;
   }
 
   .slider-row {
@@ -5677,15 +5680,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
   
   .tick-label-below {
-    color: #a0aec0;
+    color: #c4cfff;
   }
   
   .time-tick-below:hover .tick-label-below {
-    color: #90cdf4;
+    color: #c4cfff;
   }
   
   .no-data-message {
-    color: #a0aec0;
+    color: #c4cfff;
   }
   
   .app-footer {
