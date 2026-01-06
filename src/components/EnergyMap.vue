@@ -7,9 +7,9 @@
         <p>Loading energy data...</p>
       </div>
     </div>
-    <div class="layout-shell">
+    <div class="layout-shell" :class="{ 'layout-shell--floating-header': shouldFloatHeader }">
       <div class="content-shell">
-        <div class="header">
+        <div :class="['header', { 'header--floating': shouldFloatHeader }]">
           <div class="controls">
             <!-- Add toggle for heatmap type -->
             <label class="radio-pill">
@@ -824,6 +824,10 @@ export default {
       return {
         width: `${percentage}%`
       }
+    },
+
+    shouldFloatHeader() {
+      return this.isMobileViewport && this.sliderFloatingEnabled
     },
 
     shouldFloatTimeSlider() {
@@ -4481,6 +4485,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   min-height: 0;
 }
 
+.layout-shell--floating-header {
+  padding-top: 76px;
+}
+
 .content-shell {
   display: flex;
   flex-direction: column;
@@ -4502,6 +4510,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   border-radius: 11px;
   border: 1px solid #fff;
   background: rgba(255, 255, 255, 0.02);
+}
+
+.header--floating {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, calc(100% - 24px));
+  box-shadow:
+    0 12px 30px rgba(15, 23, 42, 0.18),
+    0 4px 10px rgba(15, 23, 42, 0.1);
+  background: rgba(14, 17, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 1250;
+  backdrop-filter: blur(10px);
 }
 
 .header-logo {
@@ -5571,6 +5594,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 @media (max-width: 768px) {
+  .layout-shell--floating-header {
+    padding-top: 110px;
+  }
+
+  .header--floating {
+    width: min(720px, calc(100% - 18px));
+    top: 10px;
+  }
+
   .header {
     grid-template-columns: 1fr;
     padding: 8px 12px;
@@ -5651,6 +5683,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 @media (max-width: 600px) {
+  .layout-shell--floating-header {
+    padding-top: 126px;
+  }
+
+  .header--floating {
+    width: min(520px, calc(100% - 14px));
+  }
+
   .header h1 {
     font-size: 1.05rem;
     margin-bottom: 4px;
