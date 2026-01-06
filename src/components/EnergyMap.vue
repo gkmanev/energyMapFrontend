@@ -99,7 +99,7 @@
         <!-- Price Slider -->
         <div
           v-if="heatmapType === 'prices'"
-          :class="['time-slider-overlay', { 'time-slider-overlay--floating': isMobileViewport }]"
+          :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
             <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
@@ -170,7 +170,7 @@
         <!-- Generation Slider -->
         <div
           v-if="heatmapType === 'generation'"
-          :class="['time-slider-overlay', { 'time-slider-overlay--floating': isMobileViewport }]"
+          :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
             <h3>Generation Data - Last 48 Hours</h3>
@@ -225,7 +225,7 @@
         <!-- Capacity Slider (keeps layout consistent even with static data) -->
         <div
           v-if="heatmapType === 'capacity'"
-          :class="['time-slider-overlay', { 'time-slider-overlay--floating': isMobileViewport }]"
+          :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
             <h3>Installed Capacity Snapshot</h3>
@@ -794,6 +794,7 @@ export default {
 
       countriesGeoJson: null,
       map: null,
+      sliderFloatingEnabled: false,
 
       colorInterpolators: {
         viridis: interpolateViridis,
@@ -823,6 +824,10 @@ export default {
       return {
         width: `${percentage}%`
       }
+    },
+
+    shouldFloatTimeSlider() {
+      return this.isMobileViewport && this.sliderFloatingEnabled
     },
     
     hasTimeData() {
@@ -3562,10 +3567,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     openModal(payload) { this.selectedFeature = payload; this.isModalOpen = true },
-    closeModal() { this.isModalOpen = false },
+    closeModal() { this.isModalOpen = false; this.sliderFloatingEnabled = false },
     openPanel(payload) { this.selectedFeature = payload; this.isModalOpen = true },
     closePanel() {
       this.isModalOpen = false
+      this.sliderFloatingEnabled = false
       this.capacityError = null
       this.capacityYear = null
       this.capacityItems = []
@@ -3745,6 +3751,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           async click() {
             try {
               vm.closeAllSeparateModals();
+              if (vm.isMobileViewport) {
+                vm.sliderFloatingEnabled = true
+              }
 
               // First, open the original modal
               vm.openModal({ name, value: getVal(), properties: feature.properties })
@@ -4233,6 +4242,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       if (previous && !this.isMobileViewport) {
         this.closeMobilePanel()
+        this.sliderFloatingEnabled = false
       }
     },
 
@@ -4365,6 +4375,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.mobilePanelError = null
       this.mobilePanelCountry = ''
       this.mobilePanelISO2 = null
+      this.sliderFloatingEnabled = false
       if (this.mobilePanelChart) {
         this.mobilePanelChart.destroy()
         this.mobilePanelChart = null
