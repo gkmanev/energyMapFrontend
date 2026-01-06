@@ -5544,6 +5544,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .tick-label-below {
     font-size: 9px;
+    color: #0b2388;
   }
 
   .map-row {
