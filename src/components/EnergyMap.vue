@@ -4513,6 +4513,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   padding: 0 6px;
   color: #ffffff;
   width:160px;
+  text-align: center;
 }
 
 .controls {
@@ -5512,6 +5513,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     grid-template-columns: 1fr;
     padding: 8px 12px;
     row-gap: 6px;
+    justify-items: center;
+    text-align: center;
   }
 
   .header-logo {
@@ -5527,6 +5530,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     gap: 8px;
     justify-content: center;
     margin-top: 6px;
+    margin-left: 0;
   }
 
   .header-top {
@@ -5579,10 +5583,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .controls {
     gap: 6px;
     flex-wrap: nowrap;
-    justify-content: flex-start;
+    justify-content: center;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: 6px;
+    margin-left: 0;
   }
   
   .controls label, .controls button {
