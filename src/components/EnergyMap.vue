@@ -2650,7 +2650,20 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           let xMax = timeline.length ? timeline[timeline.length - 1] : undefined;
 
           const latestTimestamp = timestamps[timestamps.length - 1] || null;
-          const forecastSeries = this.prepareForecastSeries(modal.forecastData);
+          let forecastSeries = this.prepareForecastSeries(modal.forecastData);
+
+          if (forecastSeries.length && Number.isFinite(latestTimestamp)) {
+            const firstIndex = forecastSeries.findIndex(point => point.x >= latestTimestamp);
+            if (firstIndex === -1) {
+              forecastSeries = [];
+            } else {
+              const trimmed = forecastSeries.slice(firstIndex);
+              if (trimmed.length && trimmed[0].x !== latestTimestamp) {
+                trimmed.unshift({ x: latestTimestamp, y: trimmed[0].y });
+              }
+              forecastSeries = trimmed;
+            }
+          }
 
           if (forecastSeries.length) {
             const firstForecast = forecastSeries[0]?.x;
