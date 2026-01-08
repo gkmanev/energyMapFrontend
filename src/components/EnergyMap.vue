@@ -1142,7 +1142,7 @@ export default {
       }
 
       this.separateModals
-        .filter(modal => modal.type === 'generation' && modal.chart)
+        .filter(modal => ['generation', 'prices'].includes(modal.type) && modal.chart)
         .forEach(modal => this.applyGenerationCursor(modal.chart, timestamp))
     },
 
@@ -2801,6 +2801,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               tension: 0.25
             }]
           },
+          plugins: [generationCursorPlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -2851,6 +2852,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 bodyColor: '#e2e8f0',
                 borderColor: 'rgba(148, 163, 184, 0.35)',
                 borderWidth: 1
+              },
+              generationCursor: {
+                timestamp: this.getGenerationCursorTimestamp(),
+                color: '#fb923c',
+                lineWidth: 1.5,
+                dash: [5, 4]
               }
             },
             interaction: { mode: 'index', intersect: false }
@@ -2858,6 +2865,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         }
 
         modal.chart = markRaw(new Chart(ctx, cfg))
+        this.updateGenerationCursorLines()
       }
       else if (modal.type === 'netflows') {
         const series = Array.isArray(modal.data) ? modal.data : []
