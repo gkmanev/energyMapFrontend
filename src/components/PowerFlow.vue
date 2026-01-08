@@ -273,11 +273,11 @@ export default {
       error: null,
       items: [],
       // square viewBox -> easier responsive layout
-      W: 400,
-      H: 400,
-      cx: 200,
-      cy: 125,
-      centerRadius: 26,
+      W: 350,
+      H: 350,
+      cx: 175,
+      cy: 140,
+      centerRadius: 20,
       neighbourRadius: 14,
     }
   },
@@ -417,7 +417,7 @@ export default {
       // keep labels hugging the neighbour nodes: export labels sit just
       // outside the circle, import labels tuck just inside
       const radialDir = kind === 'export' ? 1 : -1
-      const radialOffset = this.neighbourRadius + 17
+      const radialOffset = this.neighbourRadius + 5
       let mx = nb.x + ux * radialOffset * radialDir
       let my = nb.y + uy * radialOffset * radialDir
 
