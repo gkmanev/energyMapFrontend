@@ -2786,10 +2786,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const points = Array.isArray(modal.data) ? modal.data : []
         if (!points.length) return
 
-        const timeline = this.getAnimationTimeline()
-        const xMin = timeline.length ? timeline[0] : undefined
-        const xMax = timeline.length ? timeline[timeline.length - 1] : undefined
         const data = points.map(p => ({ x: p.ts, y: Number(p.price) || 0 }))
+        const timestamps = data.map(point => point.x).filter(Number.isFinite)
+        const xMin = timestamps.length ? Math.min(...timestamps) : undefined
+        const xMax = timestamps.length ? Math.max(...timestamps) : undefined
         const cfg = {
           type: 'line',
           data: {
