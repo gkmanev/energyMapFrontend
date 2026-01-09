@@ -8,16 +8,35 @@
 <script>
 export default {
   name: "LocalClock",
+  props: {
+    timestamp: {
+      type: Number,
+      default: null,
+    },
+  },
   data() {
-    return { timeString: this.formatTime(new Date()) }
+    return {
+      liveTimestamp: Date.now(),
+      timer: null,
+    }
+  },
+  computed: {
+    timeString() {
+      const source = Number.isFinite(this.timestamp) ? this.timestamp : this.liveTimestamp
+      return this.formatTime(new Date(source))
+    },
   },
   mounted() {
-    this.timer = setInterval(() => {
-      this.timeString = this.formatTime(new Date())
-    }, 1000)
+    if (!Number.isFinite(this.timestamp)) {
+      this.timer = setInterval(() => {
+        this.liveTimestamp = Date.now()
+      }, 1000)
+    }
   },
   beforeUnmount() {
-    clearInterval(this.timer)
+    if (this.timer) {
+      clearInterval(this.timer)
+    }
   },
   methods: {
     formatTime(date) {

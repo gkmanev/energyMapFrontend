@@ -31,7 +31,7 @@
             <span class="logo-highlight">energy</span>
           </div>
           <div class="header-top">
-            <div class="header-clock"><LocalClock /></div>
+            <div class="header-clock"><LocalClock :timestamp="currentTimestamp" /></div>
           </div>
         </div>
 
