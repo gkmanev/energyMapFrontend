@@ -31,7 +31,7 @@
             <span class="logo-highlight">energy</span>
           </div>
           <div class="header-top">
-            <div class="header-clock"><LocalClock :timestamp="currentTimestamp" /></div>
+            <div class="header-clock"><LocalClock :timestamp="headerClockTimestamp" /></div>
           </div>
         </div>
 
@@ -870,6 +870,12 @@ export default {
         return this.availableGenerationTimestamps[this.currentTimeIndex] || Date.now()
       }
       return this.availableTimestamps[this.currentTimeIndex] || Date.now()
+    },
+
+    headerClockTimestamp() {
+      if (!this.hasTimeData) return null
+      if (this.currentTimeIndex >= this.maxTimeIndex) return null
+      return this.currentTimestamp
     },
     
     currentTimeDisplay() {
