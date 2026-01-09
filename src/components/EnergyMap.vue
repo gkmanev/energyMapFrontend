@@ -1130,6 +1130,8 @@ export default {
         } else if (newType === 'generation') {
           if (this.availableGenerationTimestamps.length === 0) {
             this.refreshAllHistoricalGeneration()
+          } else {
+            this.currentTimeIndex = this.maxTimeIndex
           }
 
           if (Object.keys(this.generationForecastData).length === 0) {
@@ -3532,6 +3534,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       this.historicalGenerationData = merged
       this.updateColorScheme()
+      this.$nextTick(() => this.updateMapBadges())
     },
 
     async refreshAllGenerationForecasts() {
@@ -3568,6 +3571,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       this.generationForecastData = merged
       this.updateColorScheme()
+      this.$nextTick(() => this.updateMapBadges())
     },
 
 
