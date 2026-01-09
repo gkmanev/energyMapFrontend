@@ -2790,19 +2790,51 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const timestamps = data.map(point => point.x).filter(Number.isFinite)
         const xMin = timestamps.length ? Math.min(...timestamps) : undefined
         const xMax = timestamps.length ? Math.max(...timestamps) : undefined
+        const nowTs = Date.now()
+        const endOfDay = new Date()
+        endOfDay.setHours(23, 59, 59, 999)
+        const endOfDayTs = endOfDay.getTime()
+
+        const pastData = data.filter(point => point.x < nowTs || point.x > endOfDayTs)
+        const futureData = data.filter(point => point.x >= nowTs && point.x <= endOfDayTs)
+
+        if (futureData.length && pastData.length) {
+          const lastPastPoint = pastData[pastData.length - 1]
+          if (lastPastPoint && futureData[0]?.x !== lastPastPoint.x) {
+            futureData.unshift(lastPastPoint)
+          }
+        }
+
+        const datasets = [{
+          label: 'Price (EUR/MWh)',
+          data: pastData,
+          borderColor: 'rgba(102,126,234,1)',
+          backgroundColor: 'rgba(102,126,234,0.25)',
+          pointRadius: 0,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.25
+        }]
+
+        if (futureData.length) {
+          datasets.push({
+            label: 'Future price (today)',
+            data: futureData,
+            borderColor: '#facc15',
+            backgroundColor: 'rgba(250, 204, 21, 0.18)',
+            borderDash: [6, 3],
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: false,
+            tension: 0.25,
+            spanGaps: true
+          })
+        }
+
         const cfg = {
           type: 'line',
           data: {
-            datasets: [{
-              label: 'Price (EUR/MWh)',
-              data,
-              borderColor: 'rgba(102,126,234,1)',
-              backgroundColor: 'rgba(102,126,234,0.25)',
-              pointRadius: 0,
-              borderWidth: 2,
-              fill: true,
-              tension: 0.25
-            }]
+            datasets
           },
           plugins: [generationCursorPlugin],
           options: {
