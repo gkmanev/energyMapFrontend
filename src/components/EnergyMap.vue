@@ -3917,7 +3917,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       badgeLayer.clearLayers()
 
-      const shouldShowBadges = this.heatmapType === 'prices' || this.heatmapType === 'capacity'
+      const shouldShowBadges = ['prices', 'capacity', 'generation'].includes(this.heatmapType)
       if (!shouldShowBadges) return
 
       const formatValue = this.heatmapType === 'prices'
