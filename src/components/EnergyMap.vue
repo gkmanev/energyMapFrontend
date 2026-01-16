@@ -3334,9 +3334,26 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return timestamps
     },
 
+    generateLastNMonthsTimestamps(months) {
+      const timestamps = []
+      const now = new Date()
+      const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+      for (let i = months; i >= 0; i--) {
+        const timestamp = new Date(currentMonth)
+        timestamp.setMonth(currentMonth.getMonth() - i)
+        timestamps.push(timestamp.getTime())
+      }
+
+      return timestamps
+    },
+
     generatePriceRangeTimestamps() {
       if (this.selectedTimeRange === 'days') {
         return this.generateLastNDaysTimestamps(30)
+      }
+      if (this.selectedTimeRange === 'months') {
+        return this.generateLastNMonthsTimestamps(12)
       }
       return this.generateLast48HoursTimestamps()
     },
@@ -3347,11 +3364,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       if (this.selectedTimeRange === 'days') {
         start = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000))
+      } else if (this.selectedTimeRange === 'months') {
+        start = new Date(now.getFullYear(), now.getMonth() - 12, 1)
       } else {
         start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
       }
 
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      const end = this.selectedTimeRange === 'months'
+        ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
+        : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
 
       return { start, end }
     },
