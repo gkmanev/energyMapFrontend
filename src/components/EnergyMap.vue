@@ -1247,12 +1247,23 @@ export default {
     selectTimeRange(range) {
       if (this.selectedTimeRange === range) return
       this.selectedTimeRange = range
+      this.resetTimeRangeToNow()
       if (this.heatmapType === 'prices') {
         this.refreshAllHistoricalPrices()
-      } else {
-        this.availableTimestamps = this.generatePriceRangeTimestamps()
-        this.currentTimeIndex = this.maxTimeIndex
       }
+    },
+
+    resetTimeRangeToNow() {
+      if (this.heatmapType === 'generation') {
+        if (!this.availableGenerationTimestamps.length) {
+          this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
+        }
+        this.currentTimeIndex = this.maxTimeIndex
+        return
+      }
+
+      this.availableTimestamps = this.generatePriceRangeTimestamps()
+      this.currentTimeIndex = this.maxTimeIndex
     },
 
     formatTimeTickLabel(timestamp, index, totalTicks, latestTimestamp) {
