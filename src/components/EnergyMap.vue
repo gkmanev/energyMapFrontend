@@ -3351,11 +3351,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     generateLastNDaysTimestamps(days) {
       const timestamps = []
       const now = new Date()
-      const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
+      const currentDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
 
       for (let i = days; i >= 0; i--) {
-        const timestamp = new Date(currentHour)
-        timestamp.setDate(currentHour.getDate() - i)
+        const timestamp = new Date(currentDay)
+        timestamp.setDate(currentDay.getDate() - i)
         timestamps.push(timestamp.getTime())
       }
 
@@ -3411,6 +3411,18 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const endKey = end.toISOString().split('T')[0]
       return `${this.selectedTimeRange}_${startKey}_${endKey}`
     },
+
+    normalizePriceTimestamp(timestampMs) {
+      const date = new Date(timestampMs)
+
+      if (this.selectedTimeRange === 'months') {
+        return new Date(date.getFullYear(), date.getMonth(), 1).getTime()
+      }
+      if (this.selectedTimeRange === 'days') {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+      }
+      return Math.floor(timestampMs / (60 * 60 * 1000)) * (60 * 60 * 1000)
+    },
     
     generateLast48HoursGenerationTimestamps() {
       const timestamps = []
@@ -3450,7 +3462,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       try {
         const { start, end } = this.getPriceRangeDates()
 
-        const resolutionParam = this.selectedTimeRange === 'months' ? '&resolution=m' : ''
+        const resolutionParam = this.selectedTimeRange === 'months'
+          ? '&resolution=m'
+          : this.selectedTimeRange === 'days'
+            ? '&resolution=d'
+            : ''
         const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log("forCountry",url)
         const { data } = await axios.get(url, {
@@ -3464,8 +3480,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           for (const item of data.items) {
             const timestamp = new Date(item.datetime_utc).getTime()
             if (Number.isFinite(item.price)) {
-              const hourTimestamp = Math.floor(timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000)
-              timeData[hourTimestamp] = item.price
+              const normalizedTimestamp = this.normalizePriceTimestamp(timestamp)
+              timeData[normalizedTimestamp] = item.price
             }
           }
         }
@@ -3538,7 +3554,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         console.log("Called!")
         const { start, end } = this.getPriceRangeDates()
 
-        const resolutionParam = this.selectedTimeRange === 'months' ? '&resolution=m' : ''
+        const resolutionParam = this.selectedTimeRange === 'months'
+          ? '&resolution=m'
+          : this.selectedTimeRange === 'days'
+            ? '&resolution=d'
+            : ''
         const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log(url)
         const { data } = await axios.get(url, {
@@ -3556,8 +3576,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               for (const item of countryData.items) {
                 const timestamp = new Date(item.datetime_utc).getTime()
                 if (Number.isFinite(item.price)) {
-                  const hourTimestamp = Math.floor(timestamp / (60 * 60 * 1000)) * (60 * 60 * 1000)
-                  timeData[hourTimestamp] = item.price
+                  const normalizedTimestamp = this.normalizePriceTimestamp(timestamp)
+                  timeData[normalizedTimestamp] = item.price
                 }
               }
               
