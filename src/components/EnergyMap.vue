@@ -3421,8 +3421,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       try {
         const { start, end } = this.getPriceRangeDates()
-        
-        const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
+
+        const resolutionParam = this.selectedTimeRange === 'months' ? '&resolution=m' : ''
+        const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log("forCountry",url)
         const { data } = await axios.get(url, {
           timeout: 10000,
@@ -3508,8 +3509,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       try {
         console.log("Called!")
         const { start, end } = this.getPriceRangeDates()
-        
-        const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
+
+        const resolutionParam = this.selectedTimeRange === 'months' ? '&resolution=m' : ''
+        const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log(url)
         const { data } = await axios.get(url, {
           timeout: 15000,
