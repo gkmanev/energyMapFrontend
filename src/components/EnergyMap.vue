@@ -5431,7 +5431,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .time-range-button {
   border: none;
   background: transparent;
-  color: #4a5568;
+  color: #ffffff;
   font-size: 10px;
   font-weight: 600;
   padding: 4px 10px;
