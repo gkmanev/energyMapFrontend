@@ -102,7 +102,7 @@
           :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
-            <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
+            <h3>Historical Prices - {{ timeRangeHeading }} [EUR/MWh]</h3>
             <div class="time-range-buttons">
               <button
                 v-for="option in timeRangeOptions"
@@ -183,7 +183,7 @@
           :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
-            <h3>Installed Capacity - Last 48 Hours [MW]</h3>
+            <h3>Installed Capacity - {{ timeRangeHeading }} [MW]</h3>
             <div class="time-range-buttons">
               <button
                 v-for="option in timeRangeOptions"
@@ -944,6 +944,19 @@ export default {
 
       return date.toLocaleString('en-GB', timeRangeFormats[this.selectedTimeRange] || timeRangeFormats.days)
     },
+
+    timeRangeHeading() {
+      switch (this.selectedTimeRange) {
+        case 'days':
+          return 'Last 30 Days'
+        case 'months':
+          return 'Last 12 Months'
+        case 'years':
+          return 'Last 5 Years'
+        default:
+          return 'Last 48 Hours'
+      }
+    },
     
     timeTicks() {
       if (!this.hasTimeData || !['prices', 'capacity'].includes(this.heatmapType)) return []
@@ -1204,7 +1217,14 @@ export default {
 
   methods: {
     selectTimeRange(range) {
+      if (this.selectedTimeRange === range) return
       this.selectedTimeRange = range
+      if (this.heatmapType === 'prices') {
+        this.refreshAllHistoricalPrices()
+      } else {
+        this.availableTimestamps = this.generatePriceRangeTimestamps()
+        this.currentTimeIndex = this.maxTimeIndex
+      }
     },
 
     formatTimeTickLabel(timestamp, index, totalTicks, latestTimestamp) {
@@ -1216,6 +1236,17 @@ export default {
 
       if (this.selectedTimeRange === 'years') {
         return date.toLocaleString('en-GB', { year: 'numeric' })
+      }
+
+      if (this.selectedTimeRange === 'days') {
+        const daysAgo = Math.round((latestTimestamp - timestamp) / (24 * 60 * 60 * 1000))
+        if (index === 0) {
+          return `${daysAgo}d ago`
+        }
+        if (index === totalTicks) {
+          return 'Now'
+        }
+        return `${daysAgo}d`
       }
 
       if (index === 0) {
@@ -1549,7 +1580,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       // Use your 48h timestamps from prices; if missing, synthesize them
       const ts = (this.availableTimestamps?.length
         ? this.availableTimestamps
-        : this.generateLast48HoursTimestamps()
+        : this.generatePriceRangeTimestamps()
       ).map(Number)
 
       const out = {}
@@ -3288,6 +3319,49 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       
       return timestamps
     },
+
+    generateLastNDaysTimestamps(days) {
+      const timestamps = []
+      const now = new Date()
+      const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
+
+      for (let i = days; i >= 0; i--) {
+        const timestamp = new Date(currentHour)
+        timestamp.setDate(currentHour.getDate() - i)
+        timestamps.push(timestamp.getTime())
+      }
+
+      return timestamps
+    },
+
+    generatePriceRangeTimestamps() {
+      if (this.selectedTimeRange === 'days') {
+        return this.generateLastNDaysTimestamps(30)
+      }
+      return this.generateLast48HoursTimestamps()
+    },
+
+    getPriceRangeDates() {
+      const now = new Date()
+      let start
+
+      if (this.selectedTimeRange === 'days') {
+        start = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000))
+      } else {
+        start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+      }
+
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+
+      return { start, end }
+    },
+
+    getPriceRangeKey() {
+      const { start, end } = this.getPriceRangeDates()
+      const startKey = start.toISOString().split('T')[0]
+      const endKey = end.toISOString().split('T')[0]
+      return `${this.selectedTimeRange}_${startKey}_${endKey}`
+    },
     
     generateLast48HoursGenerationTimestamps() {
       const timestamps = []
@@ -3315,7 +3389,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async fetchHistoricalPricesForCountry(iso2) {
       if (!this.priceSupported(iso2)) return null
 
-      const cacheKey = `${iso2}_${this.getCurrentDateKey()}`
+      const cacheKey = `${iso2}_${this.getPriceRangeKey()}`
       const now = Date.now()
       
       if (this.priceCache.has(cacheKey) && 
@@ -3325,9 +3399,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       try {
-        const now = new Date()
-        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
-        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+        const { start, end } = this.getPriceRangeDates()
         
         const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
         console.log("forCountry",url)
@@ -3365,7 +3437,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async refreshAllHistoricalPrices() {
       if (!this.countriesGeoJson) return
       
-      this.availableTimestamps = this.generateLast48HoursTimestamps()
+      this.availableTimestamps = this.generatePriceRangeTimestamps()
       this.currentTimeIndex = this.maxTimeIndex
       
       const supportedCountries = []
@@ -3414,9 +3486,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       
       try {
         console.log("Called!")
-        const now = new Date()
-        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
-        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+        const { start, end } = this.getPriceRangeDates()
         
         const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}`
         console.log(url)
