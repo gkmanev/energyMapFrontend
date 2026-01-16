@@ -65,7 +65,6 @@ const timeRange = computed(() => {
       for (let i = days; i >= 0; i--) {
         const time = new Date(now)
         time.setDate(now.getDate() - i)
-        time.setHours(0, 0, 0, 0)
         range.push(time)
       }
       break
