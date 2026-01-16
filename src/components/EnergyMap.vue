@@ -1244,13 +1244,19 @@ export default {
   },
 
   methods: {
-    selectTimeRange(range) {
+    async selectTimeRange(range) {
       if (this.selectedTimeRange === range) return
+      this.pauseAnimation()
       this.selectedTimeRange = range
       this.resetTimeRangeToNow()
       if (this.heatmapType === 'prices') {
-        this.refreshAllHistoricalPrices()
+        await this.refreshAllHistoricalPrices()
+        this.currentTimeIndex = this.maxTimeIndex
+        return
       }
+
+      this.availableTimestamps = this.generatePriceRangeTimestamps()
+      this.currentTimeIndex = this.maxTimeIndex
     },
 
     resetTimeRangeToNow() {
@@ -3387,12 +3393,29 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return timestamps
     },
 
+    generateLastNYearsTimestamps(years) {
+      const timestamps = []
+      const now = new Date()
+      const currentYear = new Date(now.getFullYear(), 0, 1)
+
+      for (let i = years; i >= 0; i--) {
+        const timestamp = new Date(currentYear)
+        timestamp.setFullYear(currentYear.getFullYear() - i)
+        timestamps.push(timestamp.getTime())
+      }
+
+      return timestamps
+    },
+
     generatePriceRangeTimestamps() {
       if (this.selectedTimeRange === 'days') {
         return this.generateLastNDaysTimestamps(30)
       }
       if (this.selectedTimeRange === 'months') {
         return this.generateLastNMonthsTimestamps(12)
+      }
+      if (this.selectedTimeRange === 'years') {
+        return this.generateLastNYearsTimestamps(5)
       }
       return this.generateLast48HoursTimestamps()
     },
@@ -3405,13 +3428,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         start = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000))
       } else if (this.selectedTimeRange === 'months') {
         start = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+      } else if (this.selectedTimeRange === 'years') {
+        start = new Date(now.getFullYear() - 5, 0, 1)
       } else {
         start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
       }
 
       const end = this.selectedTimeRange === 'months'
         ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
-        : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+        : this.selectedTimeRange === 'years'
+          ? new Date(now.getFullYear() + 1, 0, 1)
+          : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
 
       return { start, end }
     },
@@ -3428,6 +3455,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       if (this.selectedTimeRange === 'months') {
         return new Date(date.getFullYear(), date.getMonth(), 1).getTime()
+      }
+      if (this.selectedTimeRange === 'years') {
+        return new Date(date.getFullYear(), 0, 1).getTime()
       }
       if (this.selectedTimeRange === 'days') {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
@@ -3477,7 +3507,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           ? '&resolution=m'
           : this.selectedTimeRange === 'days'
             ? '&resolution=d'
-            : ''
+            : this.selectedTimeRange === 'years'
+              ? '&resolution=y'
+              : ''
         const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log("forCountry",url)
         const { data } = await axios.get(url, {
@@ -3569,7 +3601,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           ? '&resolution=m'
           : this.selectedTimeRange === 'days'
             ? '&resolution=d'
-            : ''
+            : this.selectedTimeRange === 'years'
+              ? '&resolution=y'
+              : ''
         const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log(url)
         const { data } = await axios.get(url, {
