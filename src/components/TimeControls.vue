@@ -50,38 +50,65 @@ const timeIndex = ref(0)
 
 const timePeriods = [
   { label: 'Live', value: 'live' },
-  { label: '24h', value: '24h' },
-  { label: '72h', value: '72h' },
-  { label: '7d', value: '7d' }
+  { label: 'Days', value: 'days' },
+  { label: 'Months', value: 'months' },
+  { label: 'Years', value: 'years' }
 ]
 
 const timeRange = computed(() => {
   const now = new Date()
   const range = []
-  let hours = 1
-  
+
   switch (selectedPeriod.value) {
-    case '24h': hours = 24; break
-    case '72h': hours = 72; break
-    case '7d': hours = 24 * 7; break
+    case 'days': {
+      const days = 30
+      for (let i = days; i >= 0; i--) {
+        const time = new Date(now)
+        time.setDate(now.getDate() - i)
+        time.setHours(0, 0, 0, 0)
+        range.push(time)
+      }
+      break
+    }
+    case 'months': {
+      const months = 12
+      for (let i = months; i >= 0; i--) {
+        const time = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        range.push(time)
+      }
+      break
+    }
+    case 'years': {
+      const years = 5
+      for (let i = years; i >= 0; i--) {
+        const time = new Date(now.getFullYear() - i, 0, 1)
+        range.push(time)
+      }
+      break
+    }
+    default: {
+      range.push(now)
+      break
+    }
   }
-  
-  for (let i = hours; i >= 0; i--) {
-    const time = new Date(now.getTime() - i * 60 * 60 * 1000)
-    range.push(time)
-  }
-  
+
   return range
+})
+
+const timeDisplayOptions = computed(() => {
+  switch (selectedPeriod.value) {
+    case 'months':
+      return { month: 'short', year: 'numeric' }
+    case 'years':
+      return { year: 'numeric' }
+    default:
+      return { month: 'short', day: 'numeric', year: 'numeric' }
+  }
 })
 
 const currentTimeDisplay = computed(() => {
   if (timeRange.value.length === 0) return ''
-  return timeRange.value[timeIndex.value].toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return timeRange.value[timeIndex.value].toLocaleString('en-US', timeDisplayOptions.value)
 })
 
 const selectPeriod = (period: string) => {
