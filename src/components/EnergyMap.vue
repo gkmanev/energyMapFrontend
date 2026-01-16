@@ -750,8 +750,9 @@ export default {
       playInterval: null,
       playSpeed: 500,
       showPctInTooltip: true,
-      selectedTimeRange: 'days',
+      selectedTimeRange: 'hours',
       timeRangeOptions: [
+        { label: 'Hours', value: 'hours' },
         { label: 'Days', value: 'days' },
         { label: 'Months', value: 'months' },
         { label: 'Years', value: 'years' }
@@ -919,6 +920,12 @@ export default {
       const date = new Date(this.currentTimestamp)
       
       const timeRangeFormats = {
+        hours: {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        },
         days: {
           weekday: 'short',
           day: '2-digit',
