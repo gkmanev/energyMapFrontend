@@ -1252,7 +1252,11 @@ export default {
       if (this.heatmapType === 'prices') {
         await this.refreshAllHistoricalPrices()
         this.currentTimeIndex = this.maxTimeIndex
+        return
       }
+
+      this.availableTimestamps = this.generatePriceRangeTimestamps()
+      this.currentTimeIndex = this.maxTimeIndex
     },
 
     resetTimeRangeToNow() {
