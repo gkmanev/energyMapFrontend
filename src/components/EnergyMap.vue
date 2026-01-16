@@ -1090,9 +1090,37 @@ export default {
       
       const result = {}
       const timestamp = Number(this.currentTimestamp)
+      const useNearestValue = this.selectedTimeRange === 'months'
+
+      const findNearestValue = (timeData) => {
+        if (!timeData) return undefined
+        if (timeData[timestamp] !== undefined) return timeData[timestamp]
+
+        const allTimestamps = Object.keys(timeData)
+          .map(Number)
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b)
+
+        if (!allTimestamps.length) return undefined
+
+        const pastTimestamps = allTimestamps.filter(ts => ts <= timestamp)
+        if (pastTimestamps.length) {
+          const nearestPast = pastTimestamps[pastTimestamps.length - 1]
+          return timeData[nearestPast]
+        }
+
+        const nearestFuture = allTimestamps.find(ts => ts > timestamp)
+        return nearestFuture !== undefined ? timeData[nearestFuture] : undefined
+      }
       
       for (const [iso2, timeData] of Object.entries(this.historicalPriceData)) {
-        if (timeData && timeData[timestamp] !== undefined) {
+        if (!timeData) continue
+        if (useNearestValue) {
+          const value = findNearestValue(timeData)
+          if (value !== undefined) {
+            result[iso2] = value
+          }
+        } else if (timeData[timestamp] !== undefined) {
           result[iso2] = timeData[timestamp]
         }
       }
