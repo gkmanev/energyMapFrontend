@@ -103,6 +103,16 @@
         >
           <div class="overlay-header">
             <h3>Historical Prices - Last 48 Hours [EUR/MWh]</h3>
+            <div class="time-range-buttons">
+              <button
+                v-for="option in timeRangeOptions"
+                :key="option.value"
+                :class="['time-range-button', { active: selectedTimeRange === option.value }]"
+                @click="selectTimeRange(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
             <div class="slider-info">
               <span class="time-display">{{ currentTimeDisplay }}</span>
               <span class="price-display">{{ averagePriceDisplay }}</span>
@@ -174,6 +184,16 @@
         >
           <div class="overlay-header">
             <h3>Installed Capacity - Last 48 Hours [MW]</h3>
+            <div class="time-range-buttons">
+              <button
+                v-for="option in timeRangeOptions"
+                :key="option.value"
+                :class="['time-range-button', { active: selectedTimeRange === option.value }]"
+                @click="selectTimeRange(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
             <div class="slider-info">
               <span class="time-display">{{ currentTimeDisplay }}</span>
               <span class="capacity-display">{{ totalCapacityDisplay }}</span>
@@ -241,6 +261,16 @@
         >
           <div class="overlay-header">
             <h3>Generation Data - Last 48 Hours</h3>
+            <div class="time-range-buttons">
+              <button
+                v-for="option in timeRangeOptions"
+                :key="option.value"
+                :class="['time-range-button', { active: selectedTimeRange === option.value }]"
+                @click="selectTimeRange(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
             <div class="slider-info">
               <span class="time-display">{{ currentTimeDisplay }}</span>
               <span class="generation-display">{{ totalGenerationDisplay }}</span>
@@ -720,6 +750,12 @@ export default {
       playInterval: null,
       playSpeed: 500,
       showPctInTooltip: true,
+      selectedTimeRange: 'days',
+      timeRangeOptions: [
+        { label: 'Days', value: 'days' },
+        { label: 'Months', value: 'months' },
+        { label: 'Years', value: 'years' }
+      ],
       
       // Time slider data for prices
       currentTimeIndex: 0,
@@ -882,13 +918,24 @@ export default {
       if (!this.hasTimeData) return 'No data'
       const date = new Date(this.currentTimestamp)
       
-      return date.toLocaleString('en-GB', {
-        weekday: 'short',
-        day: '2-digit',
-        month: '2-digit', 
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+      const timeRangeFormats = {
+        days: {
+          weekday: 'short',
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        },
+        months: {
+          month: 'short',
+          year: 'numeric'
+        },
+        years: {
+          year: 'numeric'
+        }
+      }
+
+      return date.toLocaleString('en-GB', timeRangeFormats[this.selectedTimeRange] || timeRangeFormats.days)
     },
     
     timeTicks() {
@@ -900,19 +947,10 @@ export default {
       for (let i = 0; i <= totalTicks; i++) {
         const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
         const timestamp = this.availableTimestamps[tickIndex]
-        const date = new Date(timestamp)
         
         const position = `${(tickIndex / this.maxTimeIndex) * 100}%`
         
-        let label
-        if (i === 0) {
-          label = '48h ago'
-        } else if (i === totalTicks) {
-          label = 'Now'
-        } else {
-          const hoursAgo = Math.round((this.availableTimestamps[this.maxTimeIndex] - timestamp) / (60 * 60 * 1000))
-          label = `${hoursAgo}h`
-        }
+        const label = this.formatTimeTickLabel(timestamp, i, totalTicks, this.availableTimestamps[this.maxTimeIndex])
         
         ticks.push({
           position,
@@ -934,19 +972,10 @@ export default {
       for (let i = 0; i <= totalTicks; i++) {
         const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
         const timestamp = this.availableGenerationTimestamps[tickIndex]
-        const date = new Date(timestamp)
         
         const position = `${(tickIndex / this.maxTimeIndex) * 100}%`
         
-        let label
-        if (i === 0) {
-          label = '48h ago'
-        } else if (i === totalTicks) {
-          label = 'Now'
-        } else {
-          const hoursAgo = Math.round((this.availableGenerationTimestamps[this.maxTimeIndex] - timestamp) / (60 * 60 * 1000))
-          label = `${hoursAgo}h`
-        }
+        const label = this.formatTimeTickLabel(timestamp, i, totalTicks, this.availableGenerationTimestamps[this.maxTimeIndex])
         
         ticks.push({
           position,
@@ -1167,6 +1196,32 @@ export default {
   },
 
   methods: {
+    selectTimeRange(range) {
+      this.selectedTimeRange = range
+    },
+
+    formatTimeTickLabel(timestamp, index, totalTicks, latestTimestamp) {
+      const date = new Date(timestamp)
+
+      if (this.selectedTimeRange === 'months') {
+        return date.toLocaleString('en-GB', { month: 'short', year: 'numeric' })
+      }
+
+      if (this.selectedTimeRange === 'years') {
+        return date.toLocaleString('en-GB', { year: 'numeric' })
+      }
+
+      if (index === 0) {
+        return '48h ago'
+      }
+
+      if (index === totalTicks) {
+        return 'Now'
+      }
+
+      const hoursAgo = Math.round((latestTimestamp - timestamp) / (60 * 60 * 1000))
+      return `${hoursAgo}h`
+    },
 
     formatMegawatts(value) {
       if (value == null || Number.isNaN(value)) return '0';
@@ -5264,7 +5319,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  display: none;
 }
 
 .time-slider-overlay h3 {
@@ -5286,6 +5340,38 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .slider-info span {
   line-height: 1.1;
+}
+
+.time-range-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.time-range-button {
+  border: none;
+  background: transparent;
+  color: #4a5568;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.time-range-button.active {
+  background: #3182ce;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(49, 130, 206, 0.2);
+}
+
+.time-range-button:hover:not(.active) {
+  background: rgba(49, 130, 206, 0.15);
+  color: #2b6cb0;
 }
 
 .slider-row {
