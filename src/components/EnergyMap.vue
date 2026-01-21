@@ -3566,7 +3566,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         }
       }
       
-      const chunkSize = 20
+      const chunkSize = this.getBulkPriceChunkSize()
       const newHistoricalData = {}
       
       const chunks = []
@@ -3576,7 +3576,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       console.log(chunks)
       const chunkPromises = chunks.map(async (chunk, index) => {
         try {
-          const chunkData = await this.fetchBulkHistoricalPrices(chunk)
+          const chunkData = await this.fetchBulkHistoricalPricesWithRetry(chunk)
           return { success: true, data: chunkData, chunkIndex: index }
         } catch (error) {
           console.error(`Bulk call ${index + 1} failed:`, error)
@@ -3599,6 +3599,53 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     },
 
+    getBulkPriceChunkSize() {
+      if (this.selectedTimeRange === 'hours') return 10
+      if (this.selectedTimeRange === 'days') return 14
+      return 20
+    },
+
+    getBulkPriceTimeoutMs() {
+      if (this.selectedTimeRange === 'hours') return 30000
+      if (this.selectedTimeRange === 'days') return 30000
+      return 20000
+    },
+
+    async fetchBulkHistoricalPricesWithRetry(countries) {
+      try {
+        return await this.fetchBulkHistoricalPrices(countries)
+      } catch (error) {
+        const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')
+        if (!isTimeout || countries.length <= 1 || this.currentAbortController?.signal?.aborted) {
+          throw error
+        }
+
+        const splitIndex = Math.ceil(countries.length / 2)
+        const firstHalf = countries.slice(0, splitIndex)
+        const secondHalf = countries.slice(splitIndex)
+
+        const results = await Promise.allSettled([
+          this.fetchBulkHistoricalPricesWithRetry(firstHalf),
+          this.fetchBulkHistoricalPricesWithRetry(secondHalf)
+        ])
+
+        const merged = {}
+        let hasData = false
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            Object.assign(merged, result.value)
+            hasData = true
+          }
+        }
+
+        if (hasData) {
+          return merged
+        }
+
+        throw error
+      }
+    },
+
     async fetchBulkHistoricalPrices(countries) {
       if (countries.length === 0) return {}
       
@@ -3610,7 +3657,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log(url)
         const { data } = await axios.get(url, {
-          timeout: 15000,
+          timeout: this.getBulkPriceTimeoutMs(),
           signal: this.currentAbortController?.signal
         })
         
