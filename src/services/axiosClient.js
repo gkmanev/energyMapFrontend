@@ -1,22 +1,36 @@
 import axios from 'axios'
 
+const getServerElapsedMs = (response) => {
+  if (!response) {
+    return null
+  }
+
+  return (
+    response.data?.server_elapsed_ms ??
+    response.data?.server_elapsed_time ??
+    response.headers?.server_elapsed_ms ??
+    response.headers?.server_elapsed_time ??
+    response.headers?.['server_elapsed_ms'] ??
+    response.headers?.['server_elapsed_time'] ??
+    null
+  )
+}
+
+const logServerElapsedMs = (response) => {
+  const serverElapsedMs = getServerElapsedMs(response)
+
+  if (serverElapsedMs !== null) {
+    console.log('server_elapsed_ms:', serverElapsedMs)
+  }
+}
+
 axios.interceptors.response.use(
   (response) => {
-    const serverElapsedMs = response?.data?.server_elapsed_ms
-
-    if (serverElapsedMs !== undefined) {
-      console.log('server_elapsed_ms:', serverElapsedMs)
-    }
-
+    logServerElapsedMs(response)
     return response
   },
   (error) => {
-    const serverElapsedMs = error?.response?.data?.server_elapsed_ms
-
-    if (serverElapsedMs !== undefined) {
-      console.log('server_elapsed_ms:', serverElapsedMs)
-    }
-
+    logServerElapsedMs(error?.response)
     return Promise.reject(error)
   }
 )
