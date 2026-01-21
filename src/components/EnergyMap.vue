@@ -3660,6 +3660,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           timeout: this.getBulkPriceTimeoutMs(),
           signal: this.currentAbortController?.signal
         })
+
+        const serverElapsedMs = data?.request_info?.server_elapsed_ms
+        if (Number.isFinite(serverElapsedMs)) {
+          console.info(`Bulk price request server elapsed: ${serverElapsedMs}ms`, {
+            countries,
+            url
+          })
+        }
         
         const historicalData = {}
         
