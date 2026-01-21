@@ -3464,6 +3464,19 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
       return Math.floor(timestampMs / (60 * 60 * 1000)) * (60 * 60 * 1000)
     },
+
+    getPriceResolutionParam() {
+      if (this.selectedTimeRange === 'months' || this.selectedTimeRange === 'month') {
+        return '&resolution=m'
+      }
+      if (this.selectedTimeRange === 'days') {
+        return '&resolution=d'
+      }
+      if (this.selectedTimeRange === 'years') {
+        return '&resolution=y'
+      }
+      return ''
+    },
     
     generateLast48HoursGenerationTimestamps() {
       const timestamps = []
@@ -3503,13 +3516,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       try {
         const { start, end } = this.getPriceRangeDates()
 
-        const resolutionParam = this.selectedTimeRange === 'months'
-          ? '&resolution=m'
-          : this.selectedTimeRange === 'days'
-            ? '&resolution=d'
-            : this.selectedTimeRange === 'years'
-              ? '&resolution=y'
-              : ''
+        const resolutionParam = this.getPriceResolutionParam()
         const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log("forCountry",url)
         const { data } = await axios.get(url, {
@@ -3597,13 +3604,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         console.log("Called!")
         const { start, end } = this.getPriceRangeDates()
 
-        const resolutionParam = this.selectedTimeRange === 'months'
-          ? '&resolution=m'
-          : this.selectedTimeRange === 'days'
-            ? '&resolution=d'
-            : this.selectedTimeRange === 'years'
-              ? '&resolution=y'
-              : ''
+        const resolutionParam = this.getPriceResolutionParam()
         const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
         console.log(url)
         const { data } = await axios.get(url, {
