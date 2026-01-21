@@ -1245,9 +1245,11 @@ export default {
 
   methods: {
     async selectTimeRange(range) {
-      if (this.selectedTimeRange === range) return
+      const isSameRange = this.selectedTimeRange === range
       this.pauseAnimation()
-      this.selectedTimeRange = range
+      if (!isSameRange) {
+        this.selectedTimeRange = range
+      }
       this.resetTimeRangeToNow()
       if (this.heatmapType === 'prices') {
         await this.refreshAllHistoricalPrices()
