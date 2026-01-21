@@ -1,5 +1,5 @@
 // services/energyDataService.js
-import axios from 'axios'
+import axios from '@/services/axiosClient'
 
 class EnergyDataService {
   constructor() {

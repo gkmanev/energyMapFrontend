@@ -616,7 +616,7 @@ import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import Chart from 'chart.js/auto'
 import { Tooltip } from 'chart.js'
 import 'chartjs-adapter-date-fns'
-import axios from 'axios'
+import axios from '@/services/axiosClient'
 import { scaleSequential } from 'd3-scale'
 import {
   interpolateViridis,
