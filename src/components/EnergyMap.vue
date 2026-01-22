@@ -3451,9 +3451,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     getPriceRangeKey() {
       const { start, end } = this.getPriceRangeDates()
-      const startKey = start.toISOString().split('T')[0]
-      const endKey = end.toISOString().split('T')[0]
+      const startKey = this.formatPriceApiDate(start)
+      const endKey = this.formatPriceApiDate(end)
       return `${this.selectedTimeRange}_${startKey}_${endKey}`
+    },
+
+    formatPriceApiDate(date) {
+      return date.toISOString().split('T')[0]
     },
 
     normalizePriceTimestamp(timestampMs) {
@@ -3571,7 +3575,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { start, end } = this.getPriceRangeDates()
 
         const resolutionParam = this.getPriceResolutionParam()
-        const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
+        const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${this.formatPriceApiDate(start)}&end=${this.formatPriceApiDate(end)}${resolutionParam}`
         console.log("forCountry",url)
         const { data } = await axios.get(url, {
           timeout: 10000,
@@ -3706,7 +3710,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { start, end } = this.getPriceRangeDates()
 
         const resolutionParam = this.getPriceResolutionParam()
-        const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
+        const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${this.formatPriceApiDate(start)}&end=${this.formatPriceApiDate(end)}${resolutionParam}`
         console.log(url)
         const { data } = await axios.get(url, {
           timeout: this.getBulkPriceTimeoutMs(),
