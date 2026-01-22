@@ -4097,7 +4097,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       this.updateResponsiveZoom()
       this.updateMapBadges()
+      this.map.on('zoomend moveend', this.handleMapViewportChange)
 
+    },
+
+    handleMapViewportChange() {
+      this.updateMapBadges()
     },
 
     ensureMapBadgeLayer() {
@@ -4718,6 +4723,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     if (this.mapBadgeLayer && this.map) {
       this.mapBadgeLayer.remove()
       this.mapBadgeLayer = null
+    }
+    if (this.map) {
+      this.map.off('zoomend moveend', this.handleMapViewportChange)
     }
 
     // Clean up drag/resize listeners
