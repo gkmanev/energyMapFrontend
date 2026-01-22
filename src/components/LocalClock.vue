@@ -2,6 +2,8 @@
   <div class="flex items-center text-sm font-medium text-gray-200">
     <span class="mr-1">CET </span>
     <span>{{ timeString }}</span>
+    <span v-if="showDate" class="mx-2">•</span>
+    <span v-if="showDate">{{ dateString }}</span>
   </div>
 </template>
 
@@ -13,6 +15,10 @@ export default {
       type: Number,
       default: null,
     },
+    showDate: {
+      type: Boolean,
+      default: false,
+    },
   },
   data() {
     return {
@@ -21,9 +27,15 @@ export default {
     }
   },
   computed: {
-    timeString() {
+    sourceDate() {
       const source = Number.isFinite(this.timestamp) ? this.timestamp : this.liveTimestamp
-      return this.formatTime(new Date(source))
+      return new Date(source)
+    },
+    timeString() {
+      return this.formatTime(this.sourceDate)
+    },
+    dateString() {
+      return this.formatDate(this.sourceDate)
     },
   },
   mounted() {
@@ -41,6 +53,9 @@ export default {
   methods: {
     formatTime(date) {
       return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    },
+    formatDate(date) {
+      return date.toLocaleDateString('en-GB', { weekday: "short", day: "2-digit", month: "2-digit" })
     },
   },
 }
