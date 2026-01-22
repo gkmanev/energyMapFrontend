@@ -5432,6 +5432,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .price-badge-icon {
   width: 72px;
   height: 48px;
+  transform: translate(6px, 6px);
 }
 
 .price-badge {
