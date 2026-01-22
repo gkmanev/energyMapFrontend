@@ -3469,6 +3469,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.selectedTimeRange === 'days') {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
       }
+      if (this.selectedTimeRange === 'hours' && this.currentTimeIndex === this.maxTimeIndex) {
+        const quarterMs = 15 * 60 * 1000
+        return Math.floor(timestampMs / quarterMs) * quarterMs
+      }
       return Math.floor(timestampMs / (60 * 60 * 1000)) * (60 * 60 * 1000)
     },
 
