@@ -5965,41 +5965,47 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 @media (max-width: 768px) {
   .layout-shell--floating-header {
-    padding-top: 110px;
+    padding-top: 92px;
   }
 
   .header--floating {
     width: min(720px, calc(100% - 18px));
-    top: 10px;
+    top: 8px;
   }
 
   .header {
     grid-template-columns: 1fr;
-    padding: 8px 12px;
-    row-gap: 6px;
+    padding: 6px 10px;
+    row-gap: 4px;
     justify-items: center;
     text-align: center;
   }
 
   .header-logo {
     justify-self: center;
-    font-size: 22px;
+    font-size: 18px;
   }
 
   .header h1 {
-    font-size: 1.2rem;
+    font-size: 1.05rem;
   }
 
   .controls {
-    gap: 8px;
+    gap: 6px;
     justify-content: center;
-    margin-top: 6px;
+    margin-top: 4px;
     margin-left: 0;
   }
 
   .header-top {
     justify-content: center;
+    gap: 8px;
     margin-left: 0;
+  }
+
+  .header-clock {
+    font-size: 13px;
+    width: auto;
   }
 
   .content-shell {
@@ -6054,7 +6060,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 @media (max-width: 600px) {
   .layout-shell--floating-header {
-    padding-top: 126px;
+    padding-top: 86px;
   }
 
   .header--floating {
@@ -6062,7 +6068,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .header h1 {
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     margin-bottom: 4px;
   }
 
@@ -6077,7 +6083,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
   
   .controls label, .controls button {
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .time-slider-overlay {
