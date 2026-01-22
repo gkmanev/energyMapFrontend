@@ -128,10 +128,6 @@
               >
                 {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
               </button>
-              <label class="show-pct-toggle">
-                <input type="checkbox" v-model="showPctInTooltip" @change="onPctToggle" />
-                %
-              </label>
             </div>
 
             <!-- Enhanced smooth draggable slider -->
@@ -147,8 +143,6 @@
                   class="smooth-range-slider"
                   @input="onSliderChange"
                   @change="onSliderChange"
-                  @pointerdown="onSliderPointerDown"
-                  @pointerup="onSliderPointerUp"
                 />
 
                 <!-- Custom visual track and progress -->
@@ -730,10 +724,6 @@ export default {
       modalChartResizeRafs: {},
       layerByISO2: {},               // iso2 -> Leaflet layer
       countryMainCenterByISO2: {},    // cache of main polygon centers per country
-      showChangeTooltips: false,      // enable/disable delta bubbles
-      deltaHideTimer: null,
-      isUserScrubbing: false,
-
       dragStartX: 0,
       dragStartY: 0,
       resizeStartX: 0,
@@ -749,7 +739,6 @@ export default {
       isPlaying: false,
       playInterval: null,
       playSpeed: 500,
-      showPctInTooltip: true,
       selectedTimeRange: 'hours',
       timeRangeOptions: [
         { label: 'Hours', value: 'hours' },
@@ -1226,10 +1215,6 @@ export default {
             this.refreshAllGenerationForecasts()
           }
         }
-        else{
-          this.showChangeTooltips = false;
-          this.hideAllDeltaTooltips();
-        }
         this.updateColorScheme()
         this.$nextTick(() => this.updateMapBadges())
 
@@ -1241,7 +1226,6 @@ export default {
       handler() {
         this.updateColorScheme()
         this.updateGenerationCursorLines()
-        if (this.showChangeTooltips) this.updateDeltaTooltips();
         this.updateMapBadges()
       },
     },
@@ -1893,109 +1877,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
 
-    onSliderPointerDown() {
-      this.isUserScrubbing = true;
-      this.beginMotion();
-    },
-    onSliderPointerUp() {
-      this.isUserScrubbing = false;
-      this.endMotionSoon();  // hide a moment after user stops
-    },
     onSliderChange() {
-        this.beginMotion();        // show labels while scrubbing/playing
-        this.updateDeltaTooltips();
-        this.endMotionSoon(400);   // hide shortly after idle
       // const slider = this.$el.querySelector('.enhanced-time-slider');
       // if (slider) {
       //   slider.classList.add('transitioning');
       //   setTimeout(() => slider.classList.remove('transitioning'), 200);
       // }
-      // this.beginMotion();       // keep visible while scrubbing
-      // this.updateDeltaTooltips();
-      // this.endMotionSoon(400);  // refresh the idle timer on each tick
-    },
-    onPctToggle() {
-      // If change-tooltips are currently visible, refresh their content right away
-      if (this.showChangeTooltips) {
-        this.updateDeltaTooltips();
-      }
-    },
-
-    updateDeltaTooltips() {
-      if (this.heatmapType !== 'prices' || !this.showChangeTooltips || this.currentTimeIndex <= 0) {
-        this.hideAllDeltaTooltips();
-        return;
-      }
-
-      const unit = ''; // keep as-is if you don't want units in the bubble
-      for (const iso2 in this.layerByISO2) {
-        const lyr = this.layerByISO2[iso2];
-        if (!lyr) continue;
-        const ch = this.getPriceDelta(iso2);
-        if (!ch || !Number.isFinite(ch.delta)) {
-          if (lyr.closeTooltip) lyr.closeTooltip();
-          continue;
-        }
-
-        const d = ch.delta;
-        const arrow = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
-        const sign = d > 0 ? '+' : '';
-
-        // 👇 ONLY add % when the checkbox is checked
-        const pctStr = (this.showPctInTooltip && Number.isFinite(ch.pct))
-          ? ` (${sign}${ch.pct.toFixed(1)}%)`
-          : '';
-
-        const text = `${arrow} ${sign}${d.toFixed(2)} ${unit}${pctStr}`;
-
-        if (lyr.getTooltip && lyr.getTooltip()) {
-          lyr.getTooltip().setContent(text);
-        } else if (lyr.bindTooltip) {
-          lyr.bindTooltip(text, { permanent: true, direction: 'center', className: 'delta-tooltip' }).openTooltip();
-        }
-      }
-    },
-
-    hideAllDeltaTooltips() {
-      for (const iso2 in this.layerByISO2) {
-        const lyr = this.layerByISO2[iso2];
-        if (lyr?.closeTooltip) lyr.closeTooltip();
-      }
-    },
-    beginMotion() {
-      this.showChangeTooltips = true;
-      if (this.deltaHideTimer) { clearTimeout(this.deltaHideTimer); this.deltaHideTimer = null; }
-      this.updateDeltaTooltips();
-    },
-    endMotionSoon(delayMs = 500) {
-      if (this.deltaHideTimer) clearTimeout(this.deltaHideTimer);
-      this.deltaHideTimer = setTimeout(() => {
-        if (!this.isPlaying && !this.isUserScrubbing) {
-          this.showChangeTooltips = false;
-          this.hideAllDeltaTooltips();
-        }
-      }, delayMs);
-    },
-
-
-    getPriceDelta(iso2) {
-      if (this.heatmapType !== 'prices' || !this.hasTimeData) return null;
-
-      const t = this.currentTimeIndex;
-      if (t <= 0) return null;
-
-      const tsCur  = Number(this.availableTimestamps[t]);
-      const tsPrev = Number(this.availableTimestamps[t - 1]);
-
-      const cur  = this.historicalPriceData?.[iso2]?.[tsCur];
-      const prev = this.historicalPriceData?.[iso2]?.[tsPrev];
-
-      if (!Number.isFinite(cur) || !Number.isFinite(prev)) return null;
-
-      const delta = cur - prev;
-      const pct = prev !== 0 ? (delta / prev) * 100 : null;
-
-      return { delta, pct };
     },
 
     updateModalDefaultsFromViewport() {
@@ -3338,20 +3225,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     startAnimation() {
       this.currentTimeIndex = 0;
       this.isPlaying = true;
-      this.beginMotion();  // show labels while playing
       this.playInterval = setInterval(() => {
         if (this.currentTimeIndex >= this.maxTimeIndex) {
           this.pauseAnimation();
         } else {
           this.currentTimeIndex++;
-          this.updateDeltaTooltips();
         }
       }, this.playSpeed);
     },
     pauseAnimation() {
       this.isPlaying = false;
       if (this.playInterval) { clearInterval(this.playInterval); this.playInterval = null; }
-      this.endMotionSoon(); // hide shortly after pause
     },
 
     jumpToTick(tickIndex) {
@@ -3603,7 +3487,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       this.historicalPriceData = newHistoricalData
       this.updateColorScheme()
-      if (this.showChangeTooltips) this.$nextTick(() => this.updateDeltaTooltips());
       this.$nextTick(() => this.updateMapBadges())
 
     },
@@ -6709,29 +6592,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .mobile-bottom-panel {
     display: none;
   }
-}
-
-:global(.delta-tooltip) {
-  background: rgba(0,0,0,0.75) !important;
-  color: #fff !important;
-  border: none !important;
-  border-radius: 6px !important;
-  padding: 4px 6px !important;
-  font-size: 12px !important;
-  line-height: 1.2 !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
-  white-space: nowrap !important;
-}
-.show-pct-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 0;
-  font-size: 11px;
-  color: rgba(226, 232, 240, 0.75);
-}
-.play-button + .show-pct-toggle input[type="checkbox"] {
-  cursor: pointer;
 }
 
 /* Smooth fade / scale when opening/closing separate modals */
