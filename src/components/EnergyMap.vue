@@ -4138,10 +4138,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         const marker = L.marker(center, {
           icon: L.divIcon({
-           className: 'price-badge-icon',
+            className: 'price-badge-icon',
             html: badgeHtml,
-          //   iconSize: [72, 48],
-          //   iconAnchor: [36, 24]
+            iconSize: [72, 48],
+            iconAnchor: [36, 24]
           }),
           interactive: false,
           keyboard: false,
@@ -5373,7 +5373,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     color: inherit; /* inherit from parent */
 }
 
-/* .price-badge {
+.price-badge-icon {
+  width: 72px;
+  height: 48px;
+}
+
+.price-badge {
   background: rgba(15, 23, 42, 0.88);
   color: #e2e8f0;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -5391,14 +5396,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   justify-content: center;
   gap: 0;
   pointer-events: none;
-} */
+}
 
-/* .price-badge__value {
+.price-badge__value {
   font-weight: 800;
   font-size: 17px;
   color: #ffffff;
-  letter-spacing: 103px;
-} */
+  letter-spacing: 0.2px;
+}
 
 .chart-box {
   height: 520px;
