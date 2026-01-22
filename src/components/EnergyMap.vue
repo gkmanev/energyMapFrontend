@@ -903,6 +903,9 @@ export default {
     },
     
     currentTimestamp() {
+      if (this.selectedTimeRange === 'hours' && this.currentTimeIndex === this.maxTimeIndex) {
+        return Date.now()
+      }
       if (this.heatmapType === 'generation') {
         return this.availableGenerationTimestamps[this.currentTimeIndex] || Date.now()
       }
@@ -1091,6 +1094,7 @@ export default {
       const result = {}
       const timestamp = Number(this.currentTimestamp)
       const useNearestValue = this.selectedTimeRange === 'months'
+        || (this.selectedTimeRange === 'hours' && this.currentTimeIndex === this.maxTimeIndex)
 
       const findNearestValue = (timeData) => {
         if (!timeData) return undefined
