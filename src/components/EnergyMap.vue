@@ -5974,16 +5974,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .header {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "logo logo"
+      "controls clock";
     padding: 6px 10px;
-    row-gap: 4px;
-    justify-items: center;
-    text-align: center;
+    column-gap: 8px;
+    row-gap: 6px;
+    align-items: center;
   }
 
   .header-logo {
+    grid-area: logo;
     justify-self: center;
-    font-size: 18px;
+    font-size: 17px;
   }
 
   .header h1 {
@@ -5991,21 +5996,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .controls {
+    grid-area: controls;
     gap: 6px;
-    justify-content: center;
-    margin-top: 4px;
+    justify-content: flex-start;
     margin-left: 0;
   }
 
   .header-top {
-    justify-content: center;
-    gap: 8px;
+    grid-area: clock;
+    justify-content: flex-end;
+    gap: 6px;
     margin-left: 0;
   }
 
   .header-clock {
-    font-size: 13px;
+    font-size: 12px;
     width: auto;
+    padding: 0 4px;
   }
 
   .content-shell {
@@ -6065,6 +6072,19 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .header--floating {
     width: min(520px, calc(100% - 14px));
+  }
+
+  .header {
+    padding: 6px 8px;
+    column-gap: 6px;
+  }
+
+  .header-logo {
+    font-size: 15px;
+  }
+
+  .logo-highlight {
+    font-size: 0.92em;
   }
 
   .header h1 {
