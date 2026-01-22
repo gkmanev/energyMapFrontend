@@ -1760,6 +1760,40 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return null
     },
 
+    pointInRing(point, ring = []) {
+      if (!point || !Array.isArray(ring) || ring.length < 3) return false
+
+      const { lat, lng } = point
+      let inside = false
+
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i].lng
+        const yi = ring[i].lat
+        const xj = ring[j].lng
+        const yj = ring[j].lat
+
+        const intersects = ((yi > lat) !== (yj > lat)) &&
+          (lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi)
+        if (intersects) inside = !inside
+      }
+
+      return inside
+    },
+
+    pointInPolygon(point, rings = []) {
+      if (!point || !rings.length) return false
+
+      const [outer, ...holes] = rings
+      if (!this.pointInRing(point, outer)) return false
+
+      return !holes.some(hole => this.pointInRing(point, hole))
+    },
+
+    pointInPolygons(point, polygons = []) {
+      if (!point || !polygons.length) return false
+      return polygons.some(rings => this.pointInPolygon(point, rings))
+    },
+
     // Get a country’s visual center, preferring provided label coordinates
     getCountryCenter(iso2) {
       if (!iso2) return null
@@ -1776,26 +1810,40 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       let center = null
 
-      if (Number.isFinite(labelLat) && Number.isFinite(labelLng)) {
-        center = [labelLat, labelLng]
+      const latlngs = layer?.getLatLngs ? layer.getLatLngs() : null
+      const polygons = latlngs ? this.normalizeLayerPolygons(latlngs) : []
+
+      const parsedLabelLat = Number(labelLat)
+      const parsedLabelLng = Number(labelLng)
+      const labelPoint = Number.isFinite(parsedLabelLat) && Number.isFinite(parsedLabelLng)
+        ? { lat: parsedLabelLat, lng: parsedLabelLng }
+        : null
+
+      let best = null
+
+      polygons.forEach((rings) => {
+        const outerRing = rings?.[0]
+        const stats = this.computeRingAreaAndCentroid(outerRing)
+        if (!stats?.centroid) return
+        if (!best || (stats.area ?? 0) > (best.area ?? 0)) {
+          best = stats
+        }
+      })
+
+      const centroidPoint = best?.centroid
+        ? { lat: best.centroid[0], lng: best.centroid[1] }
+        : null
+
+      if (centroidPoint && this.pointInPolygons(centroidPoint, polygons)) {
+        center = [centroidPoint.lat, centroidPoint.lng]
       }
 
-      if (!center) {
-        const latlngs = layer?.getLatLngs ? layer.getLatLngs() : null
-        const polygons = latlngs ? this.normalizeLayerPolygons(latlngs) : []
+      if (!center && labelPoint && this.pointInPolygons(labelPoint, polygons)) {
+        center = [labelPoint.lat, labelPoint.lng]
+      }
 
-        let best = null
-
-        polygons.forEach((rings) => {
-          const outerRing = rings?.[0]
-          const stats = this.computeRingAreaAndCentroid(outerRing)
-          if (!stats?.centroid) return
-          if (!best || (stats.area ?? 0) > (best.area ?? 0)) {
-            best = stats
-          }
-        })
-
-        center = best?.centroid || null
+      if (!center && labelPoint) {
+        center = [labelPoint.lat, labelPoint.lng]
       }
 
       if (!center && layer?.getCenter) {
