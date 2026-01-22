@@ -1085,7 +1085,6 @@ export default {
       const timestamp = Number(this.currentTimestamp)
       const useNearestValue = this.selectedTimeRange === 'months'
         || (this.selectedTimeRange === 'hours' && this.currentTimeIndex === this.maxTimeIndex)
-      const useDailyAverage = this.selectedTimeRange === 'days'
 
       const findNearestValue = (timeData) => {
         if (!timeData) return undefined
@@ -1107,38 +1106,10 @@ export default {
         const nearestFuture = allTimestamps.find(ts => ts > timestamp)
         return nearestFuture !== undefined ? timeData[nearestFuture] : undefined
       }
-
-      const getDailyAverage = (timeData) => {
-        if (!timeData) return undefined
-        const dayStart = new Date(timestamp)
-        dayStart.setHours(0, 0, 0, 0)
-        const dayStartMs = dayStart.getTime()
-        const dayEndMs = dayStartMs + (24 * 60 * 60 * 1000)
-
-        let total = 0
-        let count = 0
-        for (const [timeKey, value] of Object.entries(timeData)) {
-          const timeMs = Number(timeKey)
-          const numericValue = Number(value)
-          if (!Number.isFinite(timeMs) || !Number.isFinite(numericValue)) continue
-          if (timeMs >= dayStartMs && timeMs < dayEndMs) {
-            total += numericValue
-            count += 1
-          }
-        }
-
-        if (!count) return undefined
-        return total / count
-      }
       
       for (const [iso2, timeData] of Object.entries(this.historicalPriceData)) {
         if (!timeData) continue
-        if (useDailyAverage) {
-          const value = getDailyAverage(timeData)
-          if (value !== undefined) {
-            result[iso2] = value
-          }
-        } else if (useNearestValue) {
+        if (useNearestValue) {
           const value = findNearestValue(timeData)
           if (value !== undefined) {
             result[iso2] = value
