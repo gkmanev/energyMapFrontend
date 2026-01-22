@@ -4194,7 +4194,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             className: 'price-badge-icon',
             html: badgeHtml,
             iconSize: [72, 48],
-            iconAnchor: [32, 20]
+            iconAnchor: [20, 5]
           }),
           interactive: false,
           keyboard: false,
