@@ -31,7 +31,9 @@
             <span class="logo-highlight">energy</span>
           </div>
           <div class="header-top">
-            <div class="header-clock"><LocalClock :timestamp="headerClockTimestamp" /></div>
+            <div class="header-clock">
+              <LocalClock :timestamp="headerClockTimestamp" :show-date="selectedTimeRange === 'days'" />
+            </div>
           </div>
         </div>
 
