@@ -942,7 +942,12 @@ export default {
         }
       }
 
-      return date.toLocaleString('en-GB', timeRangeFormats[this.selectedTimeRange] || timeRangeFormats.days)
+      const formatOptions = { ...(timeRangeFormats[this.selectedTimeRange] || timeRangeFormats.days) }
+      if (this.selectedTimeRange === 'hours') {
+        formatOptions.timeZone = 'Europe/Paris'
+      }
+
+      return date.toLocaleString('en-GB', formatOptions)
     },
 
     timeRangeHeading() {
@@ -3356,12 +3361,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     
     generateLast48HoursTimestamps() {
       const timestamps = []
-      const now = new Date()
-      const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
+      const now = Date.now()
+      const currentHour = this.normalizeToCETHour(now)
       
       for (let i = 47; i >= 0; i--) {
-        const timestamp = new Date(currentHour.getTime() - (i * 60 * 60 * 1000))
-        timestamps.push(timestamp.getTime())
+        timestamps.push(currentHour - (i * 60 * 60 * 1000))
       }
       
       return timestamps
@@ -3464,7 +3468,46 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.selectedTimeRange === 'days') {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
       }
-      return Math.floor(timestampMs / (60 * 60 * 1000)) * (60 * 60 * 1000)
+      return this.normalizeToCETHour(timestampMs)
+    },
+
+    getTimeZoneOffsetMs(timestampMs, timeZone) {
+      const date = new Date(timestampMs)
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+      }).formatToParts(date)
+
+      const values = Object.fromEntries(
+        parts
+          .filter(part => part.type !== 'literal')
+          .map(part => [part.type, part.value])
+      )
+
+      const utcTime = Date.UTC(
+        Number(values.year),
+        Number(values.month) - 1,
+        Number(values.day),
+        Number(values.hour),
+        Number(values.minute),
+        Number(values.second)
+      )
+
+      return utcTime - timestampMs
+    },
+
+    normalizeToCETHour(timestampMs) {
+      const hourMs = 60 * 60 * 1000
+      const offsetMs = this.getTimeZoneOffsetMs(timestampMs, 'Europe/Paris')
+      const cetTimeMs = timestampMs + offsetMs
+      const rounded = Math.floor(cetTimeMs / hourMs) * hourMs
+      return rounded - offsetMs
     },
 
     getPriceResolutionParam() {
