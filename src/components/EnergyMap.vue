@@ -904,7 +904,8 @@ export default {
     
     currentTimestamp() {
       if (this.selectedTimeRange === 'hours' && this.currentTimeIndex === this.maxTimeIndex) {
-        return Date.now()
+        const quarterMs = 15 * 60 * 1000
+        return Math.floor(Date.now() / quarterMs) * quarterMs
       }
       if (this.heatmapType === 'generation') {
         return this.availableGenerationTimestamps[this.currentTimeIndex] || Date.now()
