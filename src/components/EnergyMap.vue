@@ -1780,11 +1780,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         center = [labelLat, labelLng]
       }
 
-      if (!center && layer?.getCenter) {
-        const c = layer.getCenter()
-        if (c) center = [c.lat, c.lng]
-      }
-
       if (!center) {
         const latlngs = layer?.getLatLngs ? layer.getLatLngs() : null
         const polygons = latlngs ? this.normalizeLayerPolygons(latlngs) : []
@@ -1801,6 +1796,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         })
 
         center = best?.centroid || null
+      }
+
+      if (!center && layer?.getCenter) {
+        const c = layer.getCenter()
+        if (c) center = [c.lat, c.lng]
       }
 
       if (!center && layer?.getBounds) {
