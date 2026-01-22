@@ -3472,39 +3472,48 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     getTimeZoneOffsetMs(timestampMs, timeZone) {
-      const date = new Date(timestampMs)
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hourCycle: 'h23'
-      }).formatToParts(date)
+      try {
+        const date = new Date(timestampMs)
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hourCycle: 'h23'
+        }).formatToParts(date)
 
-      const values = Object.fromEntries(
-        parts
-          .filter(part => part.type !== 'literal')
-          .map(part => [part.type, part.value])
-      )
+        const values = Object.fromEntries(
+          parts
+            .filter(part => part.type !== 'literal')
+            .map(part => [part.type, part.value])
+        )
 
-      const utcTime = Date.UTC(
-        Number(values.year),
-        Number(values.month) - 1,
-        Number(values.day),
-        Number(values.hour),
-        Number(values.minute),
-        Number(values.second)
-      )
+        const utcTime = Date.UTC(
+          Number(values.year),
+          Number(values.month) - 1,
+          Number(values.day),
+          Number(values.hour),
+          Number(values.minute),
+          Number(values.second)
+        )
 
-      return utcTime - timestampMs
+        const offsetMs = utcTime - timestampMs
+        return Number.isFinite(offsetMs) ? offsetMs : 0
+      } catch (error) {
+        console.warn('Failed to compute timezone offset; falling back to UTC.', error)
+        return 0
+      }
     },
 
     normalizeToCETHour(timestampMs) {
       const hourMs = 60 * 60 * 1000
       const offsetMs = this.getTimeZoneOffsetMs(timestampMs, 'Europe/Paris')
+      if (!Number.isFinite(offsetMs)) {
+        return Math.floor(timestampMs / hourMs) * hourMs
+      }
       const cetTimeMs = timestampMs + offsetMs
       const rounded = Math.floor(cetTimeMs / hourMs) * hourMs
       return rounded - offsetMs
