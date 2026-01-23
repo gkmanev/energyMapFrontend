@@ -117,7 +117,6 @@
             </div>
             <div class="slider-info">
               <span class="time-display">{{ currentTimeDisplay }}</span>
-              <span class="price-display">{{ averagePriceDisplay }}</span>
             </div>
           </div>
 
@@ -1001,14 +1000,6 @@ export default {
       }
       
       return ticks
-    },
-    
-    averagePriceDisplay() {
-      if (this.heatmapType !== 'prices' || !this.hasTimeData) return ''
-      const prices = Object.values(this.currentDataByISO2).filter(p => Number.isFinite(p))
-      if (prices.length === 0) return 'No price data'
-      const avg = prices.reduce((sum, price) => sum + price, 0) / prices.length
-      return `Avg: ${avg.toFixed(2)} EUR/MWh`
     },
     
     totalGenerationDisplay() {
@@ -5582,7 +5573,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   color: #667eea;
 }
 
-.price-display, .generation-display {
+.generation-display {
   font-weight: 600;
   color: #48bb78;
 }
