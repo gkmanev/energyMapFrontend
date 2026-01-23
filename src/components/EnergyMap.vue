@@ -1260,7 +1260,16 @@ export default {
       const date = new Date(timestamp)
 
       if (this.selectedTimeRange === 'months') {
-        return date.toLocaleString('en-GB', { month: 'short', year: 'numeric' })
+        const latestDate = new Date(latestTimestamp)
+        const monthsAgo = (latestDate.getFullYear() - date.getFullYear()) * 12
+          + (latestDate.getMonth() - date.getMonth())
+        if (index === 0) {
+          return `${monthsAgo}mo ago`
+        }
+        if (index === totalTicks) {
+          return 'Now'
+        }
+        return `${monthsAgo}mo`
       }
 
       if (this.selectedTimeRange === 'years') {
