@@ -3032,11 +3032,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             },
             plugins: {
               legend: {
-                display: true,
-                position: 'bottom',
-                labels: {
-                  color: '#f8fafc'
-                }
+                display: false
               },
               tooltip: {
                 mode: 'index',
@@ -4680,11 +4676,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           },
           plugins: {
             legend: {
-              display: true,
-              position: 'bottom',
-              labels: {
-                color: '#f8fafc'
-              }
+              display: false
             },
             tooltip: {
               mode: 'index',
