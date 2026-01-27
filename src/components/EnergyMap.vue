@@ -484,6 +484,12 @@
                   <span class="capacity-metric-value">{{ formatPercent(modal.meta.utilization) }}</span>
                 </div>
               </div>
+              <div
+                v-if="modal.meta.generationTimestampLabel"
+                class="capacity-updated"
+              >
+                {{ modal.meta.generationTimestampLabel }}
+              </div>
               <div v-if="modal.meta.updatedLabel" class="capacity-updated">{{ modal.meta.updatedLabel }}</div>
             </div>
 
@@ -1438,6 +1444,9 @@ export default {
         utilization,
         topTechnologies,
         legendItems,
+        generationTimestampLabel: Number.isFinite(timestamp)
+          ? `Generation at ${new Date(timestamp).toLocaleString()}`
+          : '',
         updatedLabel: Number.isFinite(lastUpdatedTs) && lastUpdatedTs > 0
           ? `Last updated ${new Date(lastUpdatedTs).toLocaleString()}`
           : ''
@@ -2706,6 +2715,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           utilization,
           topTechnologies,
           legendItems,
+          generationTimestampLabel: Number.isFinite(this.currentTimestamp)
+            ? `Generation at ${new Date(this.currentTimestamp).toLocaleString()}`
+            : '',
           updatedLabel: Number.isFinite(lastUpdatedTs) && lastUpdatedTs > 0
             ? `Last updated ${new Date(lastUpdatedTs).toLocaleString()}`
             : ''
@@ -6601,8 +6613,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .capacity-updated {
-  font-size: 10px;
-  color: rgba(148, 163, 184, 0.75);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .capacity-top-techs {
