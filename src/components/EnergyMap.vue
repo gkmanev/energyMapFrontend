@@ -786,6 +786,8 @@ export default {
       generationChartInstance: null,
       priceCache: new Map(),
       capacityCache: new Map(),
+      generationByTechCache: new Map(),
+      generationByTechPending: new Map(),
       cacheTimestamp: null,
       cacheValidityMs: 5 * 60 * 1000,
       psrColors: {
@@ -1220,6 +1222,7 @@ export default {
         this.updateColorScheme()
         this.updateGenerationCursorLines()
         this.updateMapBadges()
+        void this.updateCapacityModalGenerationValues()
       },
     },
 
@@ -1350,6 +1353,103 @@ export default {
       this.separateModals
         .filter(modal => ['generation', 'prices'].includes(modal.type) && modal.chart)
         .forEach(modal => this.applyGenerationCursor(modal.chart, timestamp))
+    },
+
+    async updateCapacityModalGenerationValues() {
+      if (!this.separateModals.length) return
+      const timestamp = Number(this.currentTimestamp)
+      if (!Number.isFinite(timestamp)) return
+
+      const capacityModals = this.separateModals
+        .filter(modal => modal.type === 'capacity' && modal.data)
+
+      if (!capacityModals.length) return
+
+      await Promise.all(
+        capacityModals.map(modal => this.refreshCapacityModalGeneration(modal, timestamp))
+      )
+    },
+
+    async refreshCapacityModalGeneration(modal, timestamp) {
+      if (!modal || modal.type !== 'capacity' || !modal.data) return
+
+      const items = [...modal.data].sort((a, b) =>
+        (b.installed_capacity_mw || 0) - (a.installed_capacity_mw || 0)
+      )
+
+      const capacityValues = items.map(i => Number(i.installed_capacity_mw) || 0)
+      const iso2 = this.getCountryISO2ByName(modal.country)
+      const generationByTech = await this.getGenerationByTechnologyAt(iso2, timestamp)
+
+      const generationMapped = items.map(item => {
+        const name = item.psr_name || item.psr_type || 'Unknown'
+        const normalized = this.normalizeTechnologyKey(name)
+        const value = generationByTech[name]
+        if (typeof value === 'number') return value
+        if (normalized && typeof generationByTech[normalized] === 'number') {
+          return generationByTech[normalized]
+        }
+        return 0
+      })
+
+      const remainingCapacity = capacityValues.map((cap, i) => {
+        const installed = cap || 0
+        const gen = generationMapped[i] || 0
+        return Math.max(0, installed - gen)
+      })
+
+      const totalCapacity = capacityValues.reduce((sum, value) => sum + (value || 0), 0)
+      const totalGeneration = generationMapped.reduce((sum, value) => sum + (value || 0), 0)
+      const utilization = totalCapacity > 0 ? (totalGeneration / totalCapacity) * 100 : 0
+
+      const capacityShares = capacityValues.map(value => totalCapacity > 0 ? (value / totalCapacity) * 100 : 0)
+      const utilizationRates = capacityValues.map((cap, index) => cap > 0 ? (generationMapped[index] / cap) * 100 : 0)
+
+      const defaultPalette = { border: '#64748b', fill: 'rgba(100,116,139,0.25)' }
+      const palettes = items.map(item => this.psrColors[item.psr_name] || defaultPalette)
+
+      const legendItems = items.map((item, index) => ({
+        name: item.psr_name,
+        capacity: capacityValues[index] || 0,
+        generation: generationMapped[index] || 0,
+        remaining: remainingCapacity[index] || 0,
+        capacityShare: capacityShares[index] || 0,
+        generationShare: totalGeneration > 0 ? (generationMapped[index] / totalGeneration) * 100 : 0,
+        utilization: utilizationRates[index] || 0,
+        color: palettes[index].border || defaultPalette.border
+      }))
+
+      const topTechnologies = legendItems
+        .filter(item => item.capacity > 0)
+        .slice(0, 3)
+
+      const lastUpdatedTs = items.reduce((latest, item) => {
+        const candidate = item.datetime_utc || item.updated_at || item.modified || item.timestamp || null
+        const parsed = candidate ? Date.parse(candidate) : NaN
+        if (Number.isFinite(parsed)) {
+          return Math.max(latest, parsed)
+        }
+        return latest
+      }, -Infinity)
+
+      modal.meta = {
+        totalCapacity,
+        totalGeneration,
+        utilization,
+        topTechnologies,
+        legendItems,
+        updatedLabel: Number.isFinite(lastUpdatedTs) && lastUpdatedTs > 0
+          ? `Last updated ${new Date(lastUpdatedTs).toLocaleString()}`
+          : ''
+      }
+
+      if (!modal.chart) return
+
+      modal.chart.data.datasets[0].data = generationMapped
+      modal.chart.data.datasets[1].data = remainingCapacity
+      modal.chart.$capacityValues = capacityValues
+      modal.chart.$generationValues = generationMapped
+      modal.chart.update('none')
     },
 
     normalizeTechnologyKey(name) {
@@ -2544,7 +2644,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         // Get ISO2 from modal's country name instead of selectedFeature
         const iso2 = this.getCountryISO2ByName(modal.country)
 
-        const generationByTech = await this.getGenerationByTechnology(iso2)
+        const generationByTech = await this.getGenerationByTechnologyAt(iso2, Number(this.currentTimestamp))
         const generationMapped = items.map(item => {
           const name = item.psr_name || item.psr_type || 'Unknown'
           const normalized = this.normalizeTechnologyKey(name)
@@ -2723,8 +2823,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 callbacks: {
                   label: context => {
                     const index = context.dataIndex
-                    const installed = capacityValues[index] || 0
-                    const generationValue = generationMapped[index] || 0
+                    const installed = Number(context.chart.$capacityValues?.[index]) || 0
+                    const generationValue = Number(context.chart.$generationValues?.[index]) || 0
                     const utilisation = installed > 0 ? (generationValue / installed) * 100 : 0
 
                     if (context.datasetIndex === 0) {
@@ -2739,6 +2839,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             interaction: { mode: 'index', axis: 'y', intersect: false }
           }
         }))
+        modal.chart.$capacityValues = capacityValues
+        modal.chart.$generationValues = generationMapped
 
       } else if (modal.type === 'generation') {
 
@@ -4306,55 +4408,123 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     async getGenerationByTechnology(iso2) {
-      if (!iso2) return {}
+      return this.getGenerationByTechnologyAt(iso2, Date.now())
+    },
 
+    findNearestSeriesValue(seriesEntry, timestamp) {
+      if (!seriesEntry || !seriesEntry.series || seriesEntry.series.size === 0) return undefined
+      const timestamps = seriesEntry.timestamps || []
+      if (!timestamps.length) return undefined
+      if (seriesEntry.series.has(timestamp)) return seriesEntry.series.get(timestamp)
+
+      let left = 0
+      let right = timestamps.length - 1
+      while (left <= right) {
+        const mid = Math.floor((left + right) / 2)
+        const current = timestamps[mid]
+        if (current === timestamp) return seriesEntry.series.get(current)
+        if (current < timestamp) {
+          left = mid + 1
+        } else {
+          right = mid - 1
+        }
+      }
+
+      const past = right >= 0 ? timestamps[right] : null
+      const future = left < timestamps.length ? timestamps[left] : null
+      if (past !== null) return seriesEntry.series.get(past)
+      if (future !== null) return seriesEntry.series.get(future)
+      return undefined
+    },
+
+    async getGenerationByTechnologyAt(iso2, timestamp) {
+      if (!iso2 || !Number.isFinite(timestamp)) return {}
+
+      const cacheKey = iso2
+      const cached = this.generationByTechCache.get(cacheKey)
+      const now = Date.now()
+      const isStale = !cached || (now - cached.fetchedAt > this.cacheValidityMs)
+
+      if (isStale) {
+        await this.fetchGenerationByTechnologySeries(iso2)
+      }
+
+      const entry = this.generationByTechCache.get(cacheKey)
+      if (!entry || !entry.byTech) return {}
+
+      const byTech = {}
+      entry.byTech.forEach((seriesEntry, key) => {
+        const value = this.findNearestSeriesValue(seriesEntry, timestamp)
+        if (value !== undefined) {
+          byTech[key] = value
+        }
+      })
+
+      return byTech
+    },
+
+    async fetchGenerationByTechnologySeries(iso2) {
+      if (!iso2) return
+
+      const cacheKey = iso2
+      if (this.generationByTechPending.has(cacheKey)) {
+        await this.generationByTechPending.get(cacheKey)
+        return
+      }
+
+      const fetchPromise = (async () => {
+        try {
+          const end = new Date()
+          const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+          const startDate = encodeURIComponent(start.toISOString())
+          const endDate = encodeURIComponent(end.toISOString())
+
+          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+          const { data } = await axios.get(url)
+
+          const items = Array.isArray(data.items) ? data.items : []
+          const byTech = new Map()
+
+          const getEntry = key => {
+            if (!byTech.has(key)) {
+              byTech.set(key, { series: new Map(), timestamps: [] })
+            }
+            return byTech.get(key)
+          }
+
+          for (const item of items) {
+            const timestamp = Date.parse(item.datetime_utc)
+            if (!Number.isFinite(timestamp)) continue
+
+            const tech = item.psr_name || item.psr_type || 'Unknown'
+            const value = Number(item.generation_mw) || 0
+
+            getEntry(tech).series.set(timestamp, value)
+
+            const normalized = this.normalizeTechnologyKey(tech)
+            if (normalized && normalized !== tech) {
+              getEntry(normalized).series.set(timestamp, value)
+            }
+          }
+
+          byTech.forEach(entry => {
+            entry.timestamps = Array.from(entry.series.keys()).sort((a, b) => a - b)
+          })
+
+          this.generationByTechCache.set(cacheKey, {
+            fetchedAt: Date.now(),
+            byTech
+          })
+        } catch (e) {
+          console.error(`Failed to get generation for ${iso2}`, e)
+        }
+      })()
+
+      this.generationByTechPending.set(cacheKey, fetchPromise)
       try {
-
-        const end = new Date()
-        const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
-        const startDate = encodeURIComponent(start.toISOString())
-        const endDate = encodeURIComponent(end.toISOString())
-
-        const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
-        const { data } = await axios.get(url)
-
-        if (!Array.isArray(data.items) || !data.items.length) {
-          return {}
-        }
-
-        const latestByTech = new Map()
-        const updateEntry = (key, value, timestamp) => {
-          if (!key) return
-          const existing = latestByTech.get(key)
-          if (!existing || timestamp > existing.timestamp) {
-            latestByTech.set(key, { value, timestamp })
-          }
-        }
-
-        for (const item of data.items) {
-          const timestamp = Date.parse(item.datetime_utc)
-          if (!Number.isFinite(timestamp)) continue
-
-          const tech = item.psr_name || item.psr_type || 'Unknown'
-          const value = Number(item.generation_mw) || 0
-
-          updateEntry(tech, value, timestamp)
-
-          const normalized = this.normalizeTechnologyKey(tech)
-          if (normalized && normalized !== tech) {
-            updateEntry(normalized, value, timestamp)
-          }
-        }
-
-        const byTech = {}
-        latestByTech.forEach((entry, key) => {
-          byTech[key] = entry.value
-        })
-
-        return byTech
-      } catch (e) {
-        console.error(`Failed to get generation for ${iso2}`, e)
-        return {}
+        await fetchPromise
+      } finally {
+        this.generationByTechPending.delete(cacheKey)
       }
     },
 
