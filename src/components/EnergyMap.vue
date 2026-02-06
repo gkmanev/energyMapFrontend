@@ -342,7 +342,30 @@
           @click.stop="handleThumbnailTap(modal.id, $event)"
           :style="{ cursor: isMobileViewport ? 'default' : 'move' }"
         >
-          <h4>{{ modal.country }} - {{ modal.title }}</h4>
+          <div class="separate-modal-title">
+            <h4>{{ modal.country }} - {{ modal.title }}</h4>
+            <div
+              v-if="modal.type === 'generation' && !modal.thumbnail"
+              class="generation-mode-toggle"
+              @pointerdown.stop
+              @click.stop
+            >
+              <button
+                class="generation-mode-button"
+                :class="{ active: modal.generationView === 'all' }"
+                @click="setGenerationModalView(modal.id, 'all')"
+              >
+                All
+              </button>
+              <button
+                class="generation-mode-button"
+                :class="{ active: modal.generationView === 'res' }"
+                @click="setGenerationModalView(modal.id, 'res')"
+              >
+                RES Forecast
+              </button>
+            </div>
+          </div>
           <button
             @click="closeSeparateModal(modal.id)"
             class="separate-modal-close"
@@ -1357,7 +1380,7 @@ export default {
       }
 
       this.separateModals
-        .filter(modal => ['generation', 'prices'].includes(modal.type) && modal.chart)
+        .filter(modal => ['generation', 'prices', 'netflows'].includes(modal.type) && modal.chart)
         .forEach(modal => this.applyGenerationCursor(modal.chart, timestamp))
     },
 
@@ -2166,7 +2189,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         chart: null,
         data: null,
         forecastData: null,
+        resForecastData: null,
         meta: null,
+        generationView: 'all',
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
         lastExpandedSize: expandedSize,
@@ -2623,8 +2648,40 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async retrySeparateModalData(modalId) {
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) {
+        if (modal.type === 'generation' && modal.generationView === 'res') {
+          await this.setGenerationModalView(modalId, 'res', { force: true })
+          return
+        }
         await this.loadSeparateModalData(modalId, modal.country, modal.type)
       }
+    },
+
+    async setGenerationModalView(modalId, view, { force = false } = {}) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal || modal.type !== 'generation') return
+      if (!force && modal.generationView === view) return
+
+      modal.generationView = view
+
+      if (view === 'res') {
+        if (force || modal.resForecastData === null) {
+          modal.loading = true
+          modal.error = null
+          try {
+            const iso2 = this.getCountryISO2ByName(modal.country)
+            if (!iso2) throw new Error('Country not found')
+            modal.resForecastData = await this.fetchGenerationResRange(iso2)
+          } catch (error) {
+            console.error(`Failed to load RES forecast for ${modal.country}:`, error)
+            modal.error = error.message || 'Failed to load RES forecast data'
+          } finally {
+            modal.loading = false
+          }
+        }
+      }
+
+      await nextTick()
+      this.createSeparateModalChart(modalId)
     },
 
     async createSeparateModalChart(modalId) {
@@ -2855,6 +2912,159 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.chart.$generationValues = generationMapped
 
       } else if (modal.type === 'generation') {
+          if (modal.generationView === 'res') {
+            const items = Array.isArray(modal.resForecastData)
+              ? JSON.parse(JSON.stringify(modal.resForecastData))
+              : []
+
+            const resItems = items.filter(item => {
+              const tech = (item.psr_name || item.psr_type || '').toString().toLowerCase()
+              return tech.includes('wind') || tech.includes('solar')
+            })
+
+            const timestamps = Array.from(
+              new Set(resItems.map(i => Date.parse(i.datetime_utc)))
+            ).filter(Number.isFinite).sort((a, b) => a - b)
+
+            const latestTimestamp = timestamps[timestamps.length - 1] || null
+            const xMin = timestamps.length ? timestamps[0] : undefined
+            const xMax = timestamps.length ? timestamps[timestamps.length - 1] : undefined
+
+            const byTech = new Map()
+            resItems.forEach(i => {
+              const tech = i.psr_name || i.psr_type || 'Unknown'
+              const time = Date.parse(i.datetime_utc)
+              if (!Number.isFinite(time)) return
+              const value = Number(i.forecast_mw ?? i.generation_mw ?? i.total_generation_mw ?? i.value)
+              if (!Number.isFinite(value)) return
+              if (!byTech.has(tech)) byTech.set(tech, new Map())
+              byTech.get(tech).set(time, value)
+            })
+
+            const techSummaries = []
+            const datasets = []
+            byTech.forEach((series, tech) => {
+              const color = this.psrColors[tech] || { border: 'rgba(0,0,0,0.8)', fill: 'rgba(0,0,0,0.4)' }
+              const data = timestamps.map(ts => ({
+                x: ts,
+                y: series.get(ts) || 0
+              }))
+              const latestValue = latestTimestamp ? (series.get(latestTimestamp) || 0) : 0
+              techSummaries.push({
+                name: tech,
+                value: latestValue,
+                color: color.border
+              })
+              datasets.push({
+                label: tech,
+                data,
+                borderColor: color.border,
+                backgroundColor: color.fill,
+                pointRadius: 0,
+                borderWidth: 1,
+                fill: true,
+                stack: 'res',
+                tension: 0.25
+              })
+            })
+
+            const totalGeneration = techSummaries.reduce((sum, entry) => sum + (entry.value || 0), 0)
+            const sortedSummaries = techSummaries
+              .slice()
+              .sort((a, b) => (b.value || 0) - (a.value || 0))
+
+            const legendItems = sortedSummaries.map(entry => ({
+              name: entry.name,
+              value: entry.value || 0,
+              share: totalGeneration > 0 ? (entry.value / totalGeneration) * 100 : 0,
+              color: entry.color
+            }))
+
+            modal.meta = {
+              totalGeneration,
+              topTechnologies: legendItems.slice(0, 3),
+              legendItems,
+              updatedLabel: latestTimestamp
+                ? `RES forecast: ${new Date(latestTimestamp).toLocaleString()}`
+                : '',
+              todayForecastTotal: null,
+              todayForecastLabel: ''
+            }
+
+            const cfg = {
+              type: 'line',
+              data: { datasets },
+              plugins: [generationCursorPlugin],
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                normalized: true,
+                parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+                scales: {
+                  x: {
+                    type: 'time',
+                    time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+                    min: xMin,
+                    max: xMax,
+                    grid: {
+                      color: 'rgba(148, 163, 184, 0.14)',
+                      drawBorder: false
+                    },
+                    ticks: {
+                      color: '#cbd5f5'
+                    }
+                  },
+                  y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    title: {
+                      display: true,
+                      text: 'Generation (MW)',
+                      color: '#f8fafc',
+                      font: { size: 12, weight: 600 }
+                    },
+                    grid: {
+                      color: 'rgba(148, 163, 184, 0.12)',
+                      drawBorder: false
+                    },
+                    ticks: {
+                      callback: v => Intl.NumberFormat().format(v),
+                      color: '#cbd5f5'
+                    }
+                  }
+                },
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    position: 'cursorLeft',
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#e2e8f0',
+                    borderColor: 'rgba(148, 163, 184, 0.35)',
+                    borderWidth: 1,
+                    xAlign: 'right',
+                    caretPadding: 10
+                  },
+                  generationCursor: {
+                    timestamp: this.getGenerationCursorTimestamp(),
+                    color: '#fb923c',
+                    lineWidth: 1.5,
+                    dash: [5, 4]
+                  }
+                },
+                interaction: {
+                  mode: 'index',
+                  intersect: false
+                }
+              }
+            }
+
+            modal.chart = markRaw(new Chart(ctx, cfg))
+            this.updateGenerationCursorLines()
+            return
+          }
 
           // Build a stacked area chart for generation by technology
           const items = Array.isArray(modal.data)
@@ -3108,6 +3318,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             datasets
           },
           plugins: [generationCursorPlugin],
+          plugins: [generationCursorPlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -3213,6 +3424,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               }
             ]
           },
+          plugins: [generationCursorPlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -3247,9 +3459,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             },
             plugins: {
               legend: {
-                display: true,
-                position: 'bottom',
-                labels: { color: '#f8fafc' }
+                display: false
               },
               tooltip: {
                 mode: 'index',
@@ -3267,6 +3477,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                     return `${label}: ${Intl.NumberFormat().format(magnitude)} MW`
                   }
                 }
+              },
+              generationCursor: {
+                timestamp: this.getGenerationCursorTimestamp(),
+                color: '#fb923c',
+                lineWidth: 1.5,
+                dash: [5, 4]
               }
             },
             interaction: { mode: 'index', intersect: false }
@@ -3274,6 +3490,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         }
 
         modal.chart = markRaw(new Chart(ctx, cfg))
+        this.updateGenerationCursorLines()
       }
       this.queueModalChartResize(modalId)
     },
@@ -4563,6 +4780,24 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
 
+    async fetchGenerationResRange(iso2) {
+      if (!iso2) return []
+
+      try {
+        const url = `https://api.visualize.energy/api/generation-res/range/?country=${encodeURIComponent(iso2)}&period=today`
+        const { data } = await axios.get(url)
+
+        if (!data || !Array.isArray(data.items)) {
+          return []
+        }
+
+        return data.items
+      } catch (error) {
+        console.error(`Failed to fetch RES generation forecast for ${iso2}`, error)
+        return []
+      }
+    },
+
     prepareForecastSeries(forecastItems) {
       if (!Array.isArray(forecastItems) || !forecastItems.length) return []
 
@@ -5407,6 +5642,49 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
+}
+
+.separate-modal-title {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.generation-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.generation-mode-button {
+  border: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: rgba(15, 23, 42, 0.7);
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.generation-mode-button:hover {
+  color: rgba(15, 23, 42, 0.9);
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.generation-mode-button.active {
+  color: #f8fafc;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
 }
 
 .separate-modal--thumbnail .separate-modal-header {
