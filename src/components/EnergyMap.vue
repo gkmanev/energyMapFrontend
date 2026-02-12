@@ -255,7 +255,7 @@
           :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
-            <h3>Generation Data - Last 48 Hours</h3>
+            <h3>Generation Data - {{ timeRangeHeading }}</h3>
             <div class="time-range-buttons">
               <button
                 v-for="option in timeRangeOptions"
@@ -782,7 +782,7 @@ export default {
       availableTimestamps: [],
       historicalPriceData: {},
       
-      // Generation time-series data for heatmap (48 hours)
+      // Generation time-series data for heatmap (range controlled by selectedTimeRange)
       availableGenerationTimestamps: [],
       historicalGenerationData: {},
       generationForecastData: {},
@@ -1058,7 +1058,9 @@ export default {
         const result = {}
         const timestamp = Number(this.currentTimestamp)
 
-        const useForecast = this.currentTimeIndex === this.maxTimeIndex && Object.keys(this.generationForecastData).length > 0
+        const useForecast = this.selectedTimeRange === 'hours'
+          && this.currentTimeIndex === this.maxTimeIndex
+          && Object.keys(this.generationForecastData).length > 0
 
         const primarySource = useForecast ? this.generationForecastData : this.historicalGenerationData
         const fallbackSource = useForecast ? this.historicalGenerationData : null
@@ -1264,22 +1266,38 @@ export default {
       if (!isSameRange) {
         this.selectedTimeRange = range
       }
+      this.availableGenerationTimestamps = this.generateGenerationRangeTimestamps()
       this.resetTimeRangeToNow()
       if (this.heatmapType === 'prices') {
         await this.refreshAllHistoricalPrices()
         this.currentTimeIndex = this.maxTimeIndex
+        await this.refreshPriceModalsForRange()
+        await this.refreshGenerationModalsForRange()
+        return
+      }
+
+      if (this.heatmapType === 'generation') {
+        await this.refreshAllHistoricalGeneration()
+        if (this.selectedTimeRange === 'hours') {
+          await this.refreshAllGenerationForecasts()
+        } else {
+          this.generationForecastData = {}
+        }
+        this.currentTimeIndex = this.maxTimeIndex
+        await this.refreshPriceModalsForRange()
+        await this.refreshGenerationModalsForRange()
         return
       }
 
       this.availableTimestamps = this.generatePriceRangeTimestamps()
       this.currentTimeIndex = this.maxTimeIndex
+      await this.refreshPriceModalsForRange()
+      await this.refreshGenerationModalsForRange()
     },
 
     resetTimeRangeToNow() {
       if (this.heatmapType === 'generation') {
-        if (!this.availableGenerationTimestamps.length) {
-          this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
-        }
+        this.availableGenerationTimestamps = this.generateGenerationRangeTimestamps()
         this.currentTimeIndex = this.maxTimeIndex
         return
       }
@@ -2559,20 +2577,22 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
 
-          const end = new Date()
-          const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+          const { start, end } = this.getGenerationRangeDates()
           const startDate = encodeURIComponent(start.toISOString())
           const endDate = encodeURIComponent(end.toISOString())
 
           const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
           console.log(url)
+          const forecastPromise = this.selectedTimeRange === 'hours'
+            ? this.fetchGenerationForecastRange(iso2)
+            : Promise.resolve([])
           const [rangeResponse, forecastItems] = await Promise.all([
             axios.get(url),
-            this.fetchGenerationForecastRange(iso2)
+            forecastPromise
           ])
           const response = rangeResponse?.data || {}
           data = response.items || []
-          modal.forecastData = forecastItems
+          modal.forecastData = this.selectedTimeRange === 'hours' ? forecastItems : []
         }
         else if (type === 'prices') {
           // New: prices modal (last 48h). Reuse your historical price fetcher.
@@ -2631,6 +2651,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.loading = false
         modal.error = error.message || 'Failed to load data'
       }
+    },
+
+    async refreshGenerationModalsForRange() {
+      const modals = this.separateModals
+        .filter(modal => modal.type === 'generation' && modal.generationView === 'all')
+
+      if (!modals.length) return
+
+      await Promise.all(
+        modals.map(modal => this.loadSeparateModalData(modal.id, modal.country, modal.type))
+      )
+    },
+
+    async refreshPriceModalsForRange() {
+      const modals = this.separateModals
+        .filter(modal => modal.type === 'prices')
+
+      if (!modals.length) return
+
+      await Promise.all(
+        modals.map(modal => this.loadSeparateModalData(modal.id, modal.country, modal.type))
+      )
     },
 
     // NEW: Helper method to get ISO2 by country name
@@ -3071,17 +3113,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             ? JSON.parse(JSON.stringify(modal.data))
             : [];
 
-          // Extract unique sorted timestamps
-          const timestamps = Array.from(
-            new Set(items.map(i => Date.parse(i.datetime_utc)))
-          ).sort((a, b) => a - b);
-
-          const timeline = this.getAnimationTimeline();
+          const { timestamps, byTech } = this.aggregateGenerationSeriesByTech(items)
+          const timeline = this.getGenerationTimelineForCharts();
           let xMin = timeline.length ? timeline[0] : undefined;
           let xMax = timeline.length ? timeline[timeline.length - 1] : undefined;
 
           const latestTimestamp = timestamps[timestamps.length - 1] || null;
-          let forecastSeries = this.prepareForecastSeries(modal.forecastData);
+          const includeForecast = this.selectedTimeRange === 'hours'
+          let forecastSeries = includeForecast
+            ? this.prepareForecastSeries(modal.forecastData)
+            : [];
+          const timeAxis = this.getGenerationTimeAxisConfig()
 
           if (forecastSeries.length && Number.isFinite(latestTimestamp)) {
             const firstIndex = forecastSeries.findIndex(point => point.x >= latestTimestamp);
@@ -3106,16 +3148,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               xMax = lastForecast;
             }
           }
-
-          // Group generation MW by technology and timestamp
-          const byTech = new Map();
-          items.forEach(i => {
-            const tech = i.psr_name || i.psr_type || 'Unknown';
-            const time = Date.parse(i.datetime_utc);
-            if (!Number.isFinite(time)) return;
-            if (!byTech.has(tech)) byTech.set(tech, new Map());
-            byTech.get(tech).set(time, Number(i.generation_mw) || 0);
-          });
 
           const techSummaries = [];
 
@@ -3176,7 +3208,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             color: entry.color
           }));
 
-          const forecastSummary = this.summarizeTodayForecast(forecastSeries);
+          const forecastSummary = includeForecast
+            ? this.summarizeTodayForecast(forecastSeries)
+            : null;
 
           modal.meta = {
             totalGeneration,
@@ -3201,7 +3235,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               scales: {
                 x: {
                   type: 'time',
-                  time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+                  time: timeAxis,
                   min: xMin,
                   max: xMax,
                   grid: {
@@ -3271,45 +3305,62 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const timestamps = data.map(point => point.x).filter(Number.isFinite)
         const xMin = timestamps.length ? Math.min(...timestamps) : undefined
         const xMax = timestamps.length ? Math.max(...timestamps) : undefined
-        const nowTs = Date.now()
-        const endOfDay = new Date()
-        endOfDay.setHours(23, 59, 59, 999)
-        const endOfDayTs = endOfDay.getTime()
+        const timeAxis = this.getPriceTimeAxisConfig()
+        const useIntradaySplit = this.selectedTimeRange === 'hours'
+        let datasets = []
 
-        const pastData = data.filter(point => point.x < nowTs || point.x > endOfDayTs)
-        const futureData = data.filter(point => point.x >= nowTs && point.x <= endOfDayTs)
+        if (useIntradaySplit) {
+          const nowTs = Date.now()
+          const endOfDay = new Date()
+          endOfDay.setHours(23, 59, 59, 999)
+          const endOfDayTs = endOfDay.getTime()
 
-        if (futureData.length && pastData.length) {
-          const lastPastPoint = pastData[pastData.length - 1]
-          if (lastPastPoint && futureData[0]?.x !== lastPastPoint.x) {
-            futureData.unshift(lastPastPoint)
+          const pastData = data.filter(point => point.x < nowTs || point.x > endOfDayTs)
+          const futureData = data.filter(point => point.x >= nowTs && point.x <= endOfDayTs)
+
+          if (futureData.length && pastData.length) {
+            const lastPastPoint = pastData[pastData.length - 1]
+            if (lastPastPoint && futureData[0]?.x !== lastPastPoint.x) {
+              futureData.unshift(lastPastPoint)
+            }
           }
-        }
 
-        const datasets = [{
-          label: 'Price (EUR/MWh)',
-          data: pastData,
-          borderColor: 'rgba(102,126,234,1)',
-          backgroundColor: 'rgba(102,126,234,0.25)',
-          pointRadius: 0,
-          borderWidth: 2,
-          fill: true,
-          tension: 0.25
-        }]
-
-        if (futureData.length) {
-          datasets.push({
-            label: 'Future price (today)',
-            data: futureData,
-            borderColor: '#facc15',
-            backgroundColor: 'rgba(250, 204, 21, 0.18)',
-            borderDash: [6, 3],
+          datasets = [{
+            label: 'Price (EUR/MWh)',
+            data: pastData,
+            borderColor: 'rgba(102,126,234,1)',
+            backgroundColor: 'rgba(102,126,234,0.25)',
             pointRadius: 0,
             borderWidth: 2,
-            fill: false,
-            tension: 0.25,
-            spanGaps: true
-          })
+            fill: true,
+            tension: 0.25
+          }]
+
+          if (futureData.length) {
+            datasets.push({
+              label: 'Future price (today)',
+              data: futureData,
+              borderColor: '#facc15',
+              backgroundColor: 'rgba(250, 204, 21, 0.18)',
+              borderDash: [6, 3],
+              pointRadius: 0,
+              borderWidth: 2,
+              fill: false,
+              tension: 0.25,
+              spanGaps: true
+            })
+          }
+        } else {
+          datasets = [{
+            label: 'Price (EUR/MWh)',
+            data,
+            borderColor: 'rgba(102,126,234,1)',
+            backgroundColor: 'rgba(102,126,234,0.25)',
+            pointRadius: 0,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.25
+          }]
         }
 
         const cfg = {
@@ -3326,7 +3377,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             scales: {
               x: {
                 type: 'time',
-                time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' },
+                time: timeAxis,
                 min: xMin,
                 max: xMax,
                 grid: {
@@ -3749,6 +3800,142 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
       return ''
     },
+
+    getPriceTimeAxisConfig() {
+      if (this.selectedTimeRange === 'years') {
+        return { unit: 'year', tooltipFormat: 'yyyy' }
+      }
+      if (this.selectedTimeRange === 'months') {
+        return { unit: 'month', tooltipFormat: 'MMM yyyy' }
+      }
+      if (this.selectedTimeRange === 'days') {
+        return { unit: 'day', tooltipFormat: 'dd/MM' }
+      }
+      return { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' }
+    },
+
+    generateLastNDaysUtcTimestamps(days) {
+      const timestamps = []
+      const now = new Date()
+      const currentUtcDay = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate()
+      )
+
+      for (let i = days; i >= 0; i--) {
+        timestamps.push(currentUtcDay - i * 24 * 60 * 60 * 1000)
+      }
+
+      return timestamps
+    },
+
+    generateLastNMonthsUtcTimestamps(months) {
+      const timestamps = []
+      const now = new Date()
+      const currentMonthUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+
+      for (let i = months; i >= 0; i--) {
+        const date = new Date(currentMonthUtc)
+        date.setUTCMonth(currentMonthUtc.getUTCMonth() - i)
+        timestamps.push(date.getTime())
+      }
+
+      return timestamps
+    },
+
+    generateLastNYearsUtcTimestamps(years) {
+      const timestamps = []
+      const now = new Date()
+      const currentYearUtc = new Date(Date.UTC(now.getUTCFullYear(), 0, 1))
+
+      for (let i = years; i >= 0; i--) {
+        const date = new Date(currentYearUtc)
+        date.setUTCFullYear(currentYearUtc.getUTCFullYear() - i)
+        timestamps.push(date.getTime())
+      }
+
+      return timestamps
+    },
+
+    generateGenerationRangeTimestamps() {
+      if (this.selectedTimeRange === 'days') {
+        return this.generateLastNDaysUtcTimestamps(30)
+      }
+      if (this.selectedTimeRange === 'months') {
+        return this.generateLastNMonthsUtcTimestamps(12)
+      }
+      if (this.selectedTimeRange === 'years') {
+        return this.generateLastNYearsUtcTimestamps(5)
+      }
+      return this.generateLast48HoursGenerationTimestamps()
+    },
+
+    getGenerationRangeDates() {
+      const now = new Date()
+      let start
+
+      if (this.selectedTimeRange === 'days') {
+        const currentUtcDay = Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        )
+        start = new Date(currentUtcDay - 30 * 24 * 60 * 60 * 1000)
+      } else if (this.selectedTimeRange === 'months') {
+        start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+        start.setUTCMonth(start.getUTCMonth() - 12)
+      } else if (this.selectedTimeRange === 'years') {
+        start = new Date(Date.UTC(now.getUTCFullYear() - 5, 0, 1))
+      } else {
+        start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+      }
+
+      const end = this.selectedTimeRange === 'months'
+        ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+        : this.selectedTimeRange === 'years'
+          ? new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1))
+          : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+
+      return { start, end }
+    },
+
+    normalizeGenerationTimestamp(timestampMs) {
+      const date = new Date(timestampMs)
+
+      if (this.selectedTimeRange === 'months') {
+        return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
+      }
+      if (this.selectedTimeRange === 'years') {
+        return Date.UTC(date.getUTCFullYear(), 0, 1)
+      }
+      if (this.selectedTimeRange === 'days') {
+        return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+      }
+
+      const hourMs = 60 * 60 * 1000
+      return Math.floor(timestampMs / hourMs) * hourMs
+    },
+
+    getGenerationTimeAxisConfig() {
+      if (this.selectedTimeRange === 'years') {
+        return { unit: 'year', tooltipFormat: 'yyyy' }
+      }
+      if (this.selectedTimeRange === 'months') {
+        return { unit: 'month', tooltipFormat: 'MMM yyyy' }
+      }
+      if (this.selectedTimeRange === 'days') {
+        return { unit: 'day', tooltipFormat: 'dd/MM' }
+      }
+      return { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' }
+    },
+
+    getGenerationTimelineForCharts() {
+      if (this.availableGenerationTimestamps.length) {
+        return this.availableGenerationTimestamps
+      }
+      return this.generateGenerationRangeTimestamps()
+    },
     
     generateLast48HoursGenerationTimestamps() {
       const timestamps = []
@@ -3769,6 +3956,87 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       return timestamps
+    },
+
+    aggregateGenerationTotals(items) {
+      const perTimestamp = Object.create(null)
+      const hourMs = 60 * 60 * 1000
+
+      for (const item of items || []) {
+        const time = Date.parse(item.datetime_utc)
+        if (!Number.isFinite(time)) continue
+        const value = Number(item.generation_mw)
+        if (!Number.isFinite(value)) continue
+
+        const hourTs = Math.floor(time / hourMs) * hourMs
+        perTimestamp[hourTs] = (perTimestamp[hourTs] || 0) + value
+      }
+
+      if (this.selectedTimeRange === 'hours') {
+        return perTimestamp
+      }
+
+      const bucketSums = Object.create(null)
+      const bucketCounts = Object.create(null)
+      for (const [tsKey, value] of Object.entries(perTimestamp)) {
+        const ts = Number(tsKey)
+        const bucketTs = this.normalizeGenerationTimestamp(ts)
+        bucketSums[bucketTs] = (bucketSums[bucketTs] || 0) + value
+        bucketCounts[bucketTs] = (bucketCounts[bucketTs] || 0) + 1
+      }
+
+      const averaged = Object.create(null)
+      for (const [bucketKey, sum] of Object.entries(bucketSums)) {
+        const count = bucketCounts[bucketKey] || 1
+        averaged[bucketKey] = sum / count
+      }
+
+      return averaged
+    },
+
+    aggregateGenerationSeriesByTech(items) {
+      const useBuckets = this.selectedTimeRange !== 'hours'
+      const byTech = new Map()
+
+      for (const item of items || []) {
+        const time = Date.parse(item.datetime_utc)
+        if (!Number.isFinite(time)) continue
+        const tech = item.psr_name || item.psr_type || 'Unknown'
+        const value = Number(item.generation_mw) || 0
+        const bucketTs = useBuckets ? this.normalizeGenerationTimestamp(time) : time
+
+        let techSeries = byTech.get(tech)
+        if (!techSeries) {
+          techSeries = new Map()
+          byTech.set(tech, techSeries)
+        }
+
+        if (useBuckets) {
+          const existing = techSeries.get(bucketTs) || { sum: 0, count: 0 }
+          existing.sum += value
+          existing.count += 1
+          techSeries.set(bucketTs, existing)
+        } else {
+          techSeries.set(bucketTs, (techSeries.get(bucketTs) || 0) + value)
+        }
+      }
+
+      const timestampsSet = new Set()
+      const seriesByTech = new Map()
+
+      byTech.forEach((series, tech) => {
+        const normalizedSeries = new Map()
+        series.forEach((entry, ts) => {
+          const value = useBuckets ? (entry.sum / entry.count) : entry
+          const timestamp = Number(ts)
+          normalizedSeries.set(timestamp, value)
+          timestampsSet.add(timestamp)
+        })
+        seriesByTech.set(tech, normalizedSeries)
+      })
+
+      const timestamps = Array.from(timestampsSet).sort((a, b) => a - b)
+      return { timestamps, byTech: seriesByTech }
     },
     
 
@@ -3964,18 +4232,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (countries.length === 0) return {}
 
       try {
-        // last 48h window, aligned to how you build timestamps for prices
-        const now = new Date()
-        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
-        // end is exclusive; your API accepts full ISO for end
-        const endISO = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+        const { start, end } = this.getGenerationRangeDates()
 
         // Use your new bulk endpoint
         // Supports start/end (UTC) or period. We’ll send start/end for symmetry with prices.
         const url = `https://api.visualize.energy/api/generation/bulk-range/` +
                     `?countries=${countries.join(',')}` +
-                    `&start=${start.toISOString()}` +
-                    `&end=${endISO}`
+                    `&start=${encodeURIComponent(start.toISOString())}` +
+                    `&end=${encodeURIComponent(end.toISOString())}`
 
         const { data } = await axios.get(url, {
           timeout: 15000,
@@ -3988,21 +4252,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         if (data?.data && typeof data.data === 'object') {
           for (const [iso2, countryData] of Object.entries(data.data)) {
-            const byTs = Object.create(null)
-
-            if (Array.isArray(countryData.items)) {
-              for (const item of countryData.items) {
-                const t = new Date(item.datetime_utc).getTime()
-                if (!Number.isFinite(t)) continue
-                const v = Number(item.generation_mw)
-                if (!Number.isFinite(v)) continue
-
-                // Hour-bin (just like prices)
-                const hourTs = Math.floor(t / (60 * 60 * 1000)) * (60 * 60 * 1000)
-                byTs[hourTs] = (byTs[hourTs] || 0) + v
-              }
-            }
-
+            const byTs = this.aggregateGenerationTotals(countryData.items || [])
             if (Object.keys(byTs).length > 0) {
               aggregatedByCountry[iso2] = byTs
             }
@@ -4070,8 +4320,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async refreshAllHistoricalGeneration() {
       if (!this.countriesGeoJson) return
 
-      // Drive the slider with the same 48h grid used for prices
-      this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
+      // Drive the slider with the active generation range
+      this.availableGenerationTimestamps = this.generateGenerationRangeTimestamps()
       this.currentTimeIndex = this.availableGenerationTimestamps.length - 1
 
       // Find supported countries
@@ -4112,6 +4362,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     async refreshAllGenerationForecasts() {
       if (!this.countriesGeoJson) return
+      if (this.selectedTimeRange !== 'hours') {
+        this.generationForecastData = {}
+        return
+      }
 
       const supported = []
       for (const f of this.countriesGeoJson.features) {
@@ -4155,37 +4409,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!this.generationSupported(iso2)) return null
       
       try {
-        const timeData = {}
-        
-        const now = new Date()
-        const start = new Date(now.getTime() - 48 * 60 * 60 * 1000)
-        const end = new Date()
-        
-        const startDate = start.toISOString().split('T')[0]
-        const endDate = end.toISOString().split('T')[0]
-        
+        const { start, end } = this.getGenerationRangeDates()
+        const startDate = encodeURIComponent(start.toISOString())
+        const endDate = encodeURIComponent(end.toISOString())
+
         const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
        
         const { data } = await axios.get(url, { 
           timeout: 10000,
           signal: this.currentAbortController?.signal 
         })
-
-        if (Array.isArray(data.items)) {
-          for (const item of data.items) {
-            const dt = new Date(item.datetime_utc)
-            const timestamp = dt.getTime()
-            
-            if (Number.isFinite(timestamp) && !isNaN(timestamp) && Number.isFinite(item.generation_mw)) {
-              if (!timeData[timestamp]) {
-                timeData[timestamp] = 0
-              }
-              
-              timeData[timestamp] += item.generation_mw
-            }
-          }
-        }
-        
+        const timeData = this.aggregateGenerationTotals(data.items || [])
         return Object.keys(timeData).length > 0 ? timeData : null
       } catch (error) {
         if (error.response?.status === 400) {
@@ -4864,8 +5098,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.destroyGenerationChart()
 
       try {
-        const end = new Date()
-        const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+        const { start, end } = this.getGenerationRangeDates()
         const startDate = encodeURIComponent(start.toISOString())
         const endDate = encodeURIComponent(end.toISOString())
 
@@ -4892,19 +5125,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.destroyGenerationChart()
 
       const items = JSON.parse(JSON.stringify(this.generationItems))
-      const timestamps = Array.from(new Set(items.map(i => Date.parse(i.datetime_utc))))
-        .sort((a, b) => a - b)
-
-      const timeline = this.getAnimationTimeline()
+      const { timestamps, byTech } = this.aggregateGenerationSeriesByTech(items)
+      const timeline = this.getGenerationTimelineForCharts()
       const xMin = timeline.length ? timeline[0] : undefined
       const xMax = timeline.length ? timeline[timeline.length - 1] : undefined
-
-      const byTech = new Map()
-      for (const it of items) {
-        const key = it.psr_name || it.psr_type || 'Unknown'
-        if (!byTech.has(key)) byTech.set(key, new Map())
-        byTech.get(key).set(Date.parse(it.datetime_utc), Number(it.generation_mw) || 0)
-      }
+      const timeAxis = this.getGenerationTimeAxisConfig()
 
       const datasets = []
       for (const [tech, series] of byTech.entries()) {
@@ -4940,7 +5165,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           scales: {
             x: {
               type: 'time',
-              time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+              time: timeAxis,
               min: xMin,
               max: xMax
             },
