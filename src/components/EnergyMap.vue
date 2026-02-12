@@ -2570,16 +2570,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
 
-          const end = new Date()
-          const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+          const { start, end } = this.getGenerationRangeDates()
           const startDate = encodeURIComponent(start.toISOString())
           const endDate = encodeURIComponent(end.toISOString())
+          const resolutionParam = this.getGenerationResolutionParam()
 
-          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
           console.log(url)
           const [rangeResponse, forecastItems] = await Promise.all([
             axios.get(url),
-            this.fetchGenerationForecastRange(iso2)
+            this.fetchGenerationForecastRange(iso2, { start, end, resolutionParam })
           ])
           const response = rangeResponse?.data || {}
           data = response.items || []
@@ -4865,16 +4865,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
 
-    async fetchGenerationForecastRange(iso2) {
+    async fetchGenerationForecastRange(iso2, rangeOptions = null) {
       if (!iso2) return []
 
       try {
-        const start = new Date()
-        start.setHours(0, 0, 0, 0)
-        const end = new Date(start)
-        end.setDate(end.getDate() + 1)
+        const { start, end } = rangeOptions || this.getGenerationRangeDates()
+        const resolutionParam = rangeOptions?.resolutionParam ?? this.getGenerationResolutionParam()
 
-        const url = `https://api.visualize.energy/api/generation-forecast/range/?country=${encodeURIComponent(iso2)}&start=${start.toISOString()}&end=${end.toISOString()}`
+        const url = `https://api.visualize.energy/api/generation-forecast/range/?country=${encodeURIComponent(iso2)}&start=${start.toISOString()}&end=${end.toISOString()}${resolutionParam}`
         const { data } = await axios.get(url)
 
         if (!data || !Array.isArray(data.items)) {
