@@ -1058,7 +1058,9 @@ export default {
         const result = {}
         const timestamp = Number(this.currentTimestamp)
 
-        const useForecast = this.currentTimeIndex === this.maxTimeIndex && Object.keys(this.generationForecastData).length > 0
+        const useForecast = this.selectedTimeRange === 'hours'
+          && this.currentTimeIndex === this.maxTimeIndex
+          && Object.keys(this.generationForecastData).length > 0
 
         const primarySource = useForecast ? this.generationForecastData : this.historicalGenerationData
         const fallbackSource = useForecast ? this.historicalGenerationData : null
@@ -1271,6 +1273,15 @@ export default {
         return
       }
 
+      if (this.heatmapType === 'generation') {
+        await this.refreshAllHistoricalGeneration()
+        if (this.selectedTimeRange === 'hours') {
+          await this.refreshAllGenerationForecasts()
+        }
+        this.currentTimeIndex = this.maxTimeIndex
+        return
+      }
+
       this.availableTimestamps = this.generatePriceRangeTimestamps()
       this.currentTimeIndex = this.maxTimeIndex
     },
@@ -1278,7 +1289,7 @@ export default {
     resetTimeRangeToNow() {
       if (this.heatmapType === 'generation') {
         if (!this.availableGenerationTimestamps.length) {
-          this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
+          this.availableGenerationTimestamps = this.generateGenerationRangeTimestamps()
         }
         this.currentTimeIndex = this.maxTimeIndex
         return
@@ -3770,6 +3781,110 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       return timestamps
     },
+
+    generateLastNDaysGenerationTimestamps(days) {
+      const timestamps = []
+      const now = new Date()
+      const currentDayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
+
+      for (let i = days; i >= 0; i--) {
+        timestamps.push(currentDayUTC - (i * 24 * 60 * 60 * 1000))
+      }
+
+      return timestamps
+    },
+
+    generateLastNMonthsGenerationTimestamps(months) {
+      const timestamps = []
+      const now = new Date()
+      const currentMonthUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)
+
+      for (let i = months; i >= 0; i--) {
+        const d = new Date(currentMonthUTC)
+        d.setUTCMonth(d.getUTCMonth() - i)
+        timestamps.push(d.getTime())
+      }
+
+      return timestamps
+    },
+
+    generateLastNYearsGenerationTimestamps(years) {
+      const timestamps = []
+      const now = new Date()
+      const currentYearUTC = Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0)
+
+      for (let i = years; i >= 0; i--) {
+        const d = new Date(currentYearUTC)
+        d.setUTCFullYear(d.getUTCFullYear() - i)
+        timestamps.push(d.getTime())
+      }
+
+      return timestamps
+    },
+
+    generateGenerationRangeTimestamps() {
+      if (this.selectedTimeRange === 'days') {
+        return this.generateLastNDaysGenerationTimestamps(30)
+      }
+      if (this.selectedTimeRange === 'months') {
+        return this.generateLastNMonthsGenerationTimestamps(12)
+      }
+      if (this.selectedTimeRange === 'years') {
+        return this.generateLastNYearsGenerationTimestamps(5)
+      }
+      return this.generateLast48HoursGenerationTimestamps()
+    },
+
+    getGenerationRangeDates() {
+      const now = new Date()
+      let start
+
+      if (this.selectedTimeRange === 'days') {
+        start = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000))
+      } else if (this.selectedTimeRange === 'months') {
+        start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 12, 1, 0, 0, 0, 0))
+      } else if (this.selectedTimeRange === 'years') {
+        start = new Date(Date.UTC(now.getUTCFullYear() - 5, 0, 1, 0, 0, 0, 0))
+      } else {
+        start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+      }
+
+      const end = this.selectedTimeRange === 'months'
+        ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0))
+        : this.selectedTimeRange === 'years'
+          ? new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1, 0, 0, 0, 0))
+          : new Date(now.getTime())
+
+      return { start, end }
+    },
+
+    normalizeGenerationTimestamp(timestampMs) {
+      const date = new Date(timestampMs)
+      if (this.selectedTimeRange === 'months') {
+        return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0)
+      }
+      if (this.selectedTimeRange === 'years') {
+        return Date.UTC(date.getUTCFullYear(), 0, 1, 0, 0, 0, 0)
+      }
+      if (this.selectedTimeRange === 'days') {
+        return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0)
+      }
+      return Math.floor(timestampMs / (60 * 60 * 1000)) * (60 * 60 * 1000)
+    },
+
+
+    getGenerationResolutionParam() {
+      if (this.selectedTimeRange === 'months' || this.selectedTimeRange === 'month') {
+        return '&resolution=m'
+      }
+      if (this.selectedTimeRange === 'days') {
+        return '&resolution=d'
+      }
+      if (this.selectedTimeRange === 'years') {
+        return '&resolution=y'
+      }
+      return ''
+    },
     
 
 
@@ -3964,18 +4079,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (countries.length === 0) return {}
 
       try {
-        // last 48h window, aligned to how you build timestamps for prices
-        const now = new Date()
-        const start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
-        // end is exclusive; your API accepts full ISO for end
-        const endISO = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+        const { start, end } = this.getGenerationRangeDates()
 
-        // Use your new bulk endpoint
-        // Supports start/end (UTC) or period. We’ll send start/end for symmetry with prices.
+        const resolutionParam = this.getGenerationResolutionParam()
         const url = `https://api.visualize.energy/api/generation/bulk-range/` +
                     `?countries=${countries.join(',')}` +
                     `&start=${start.toISOString()}` +
-                    `&end=${endISO}`
+                    `&end=${end.toISOString()}${resolutionParam}`
 
         const { data } = await axios.get(url, {
           timeout: 15000,
@@ -3997,9 +4107,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 const v = Number(item.generation_mw)
                 if (!Number.isFinite(v)) continue
 
-                // Hour-bin (just like prices)
-                const hourTs = Math.floor(t / (60 * 60 * 1000)) * (60 * 60 * 1000)
-                byTs[hourTs] = (byTs[hourTs] || 0) + v
+                const normalizedTs = this.normalizeGenerationTimestamp(t)
+                byTs[normalizedTs] = (byTs[normalizedTs] || 0) + v
               }
             }
 
@@ -4070,8 +4179,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async refreshAllHistoricalGeneration() {
       if (!this.countriesGeoJson) return
 
-      // Drive the slider with the same 48h grid used for prices
-      this.availableGenerationTimestamps = this.generateLast48HoursGenerationTimestamps()
+      this.availableGenerationTimestamps = this.generateGenerationRangeTimestamps()
       this.currentTimeIndex = this.availableGenerationTimestamps.length - 1
 
       // Find supported countries
