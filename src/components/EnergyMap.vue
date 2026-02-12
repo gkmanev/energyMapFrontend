@@ -2576,7 +2576,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const resolutionParam = this.getGenerationResolutionParam()
 
           const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
-          console.log(url)
+          console.log('[Generation Modal] Range endpoint:', url)
           const [rangeResponse, forecastItems] = await Promise.all([
             axios.get(url),
             this.fetchGenerationForecastRange(iso2, { start, end, resolutionParam })
@@ -4873,6 +4873,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const resolutionParam = rangeOptions?.resolutionParam ?? this.getGenerationResolutionParam()
 
         const url = `https://api.visualize.energy/api/generation-forecast/range/?country=${encodeURIComponent(iso2)}&start=${start.toISOString()}&end=${end.toISOString()}${resolutionParam}`
+        console.log('[Generation Modal] Forecast endpoint:', url)
         const { data } = await axios.get(url)
 
         if (!data || !Array.isArray(data.items)) {
@@ -4891,6 +4892,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       try {
         const url = `https://api.visualize.energy/api/generation-res/range/?country=${encodeURIComponent(iso2)}&period=today`
+        console.log('[Generation Modal] RES endpoint:', url)
         const { data } = await axios.get(url)
 
         if (!data || !Array.isArray(data.items)) {
