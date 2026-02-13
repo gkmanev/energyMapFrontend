@@ -1269,6 +1269,8 @@ export default {
       this.resetTimeRangeToNow()
       if (this.heatmapType === 'prices') {
         await this.refreshAllHistoricalPrices()
+        await this.refreshVisiblePriceModals()
+        await this.refreshVisibleGenerationModals()
         this.currentTimeIndex = this.maxTimeIndex
         return
       }
@@ -1278,11 +1280,15 @@ export default {
         if (this.selectedTimeRange === 'hours') {
           await this.refreshAllGenerationForecasts()
         }
+        await this.refreshVisiblePriceModals()
+        await this.refreshVisibleGenerationModals()
         this.currentTimeIndex = this.maxTimeIndex
         return
       }
 
       this.availableTimestamps = this.generatePriceRangeTimestamps()
+      await this.refreshVisiblePriceModals()
+      await this.refreshVisibleGenerationModals()
       this.currentTimeIndex = this.maxTimeIndex
     },
 
@@ -2576,7 +2582,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const resolutionParam = this.getGenerationResolutionParam()
 
           const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
-          console.log('[Generation Modal] Range endpoint:', url)
           const [rangeResponse, forecastItems] = await Promise.all([
             axios.get(url),
             this.fetchGenerationForecastRange(iso2, { start, end, resolutionParam })
@@ -2642,6 +2647,32 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.loading = false
         modal.error = error.message || 'Failed to load data'
       }
+    },
+
+    async refreshVisibleGenerationModals() {
+      const visibleGenerationModals = this.separateModals.filter(
+        modal => modal.visible && modal.type === 'generation'
+      )
+      if (!visibleGenerationModals.length) return
+
+      await Promise.allSettled(
+        visibleGenerationModals.map(modal =>
+          this.loadSeparateModalData(modal.id, modal.country, modal.type)
+        )
+      )
+    },
+
+    async refreshVisiblePriceModals() {
+      const visiblePriceModals = this.separateModals.filter(
+        modal => modal.visible && modal.type === 'prices'
+      )
+      if (!visiblePriceModals.length) return
+
+      await Promise.allSettled(
+        visiblePriceModals.map(modal =>
+          this.loadSeparateModalData(modal.id, modal.country, modal.type)
+        )
+      )
     },
 
     // NEW: Helper method to get ISO2 by country name
@@ -2991,6 +3022,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               color: entry.color
             }))
 
+            const timeConfig = this.getGenerationChartTimeConfig(true)
+
             modal.meta = {
               totalGeneration,
               topTechnologies: legendItems.slice(0, 3),
@@ -3014,7 +3047,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 scales: {
                   x: {
                     type: 'time',
-                    time: { unit: 'hour', tooltipFormat: 'HH:mm' },
+                    time: timeConfig,
                     min: xMin,
                     max: xMax,
                     grid: {
@@ -3187,6 +3220,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             color: entry.color
           }));
 
+          const timeConfig = this.getGenerationChartTimeConfig();
           const forecastSummary = this.summarizeTodayForecast(forecastSeries);
 
           modal.meta = {
@@ -3210,11 +3244,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               normalized: true,
               parsing: { xAxisKey: 'x', yAxisKey: 'y' },
               scales: {
-                x: {
-                  type: 'time',
-                  time: { unit: 'hour', tooltipFormat: 'HH:mm' },
-                  min: xMin,
-                  max: xMax,
+              x: {
+                type: 'time',
+                time: timeConfig,
+                min: xMin,
+                max: xMax,
                   grid: {
                     color: 'rgba(148, 163, 184, 0.14)',
                     drawBorder: false
@@ -3280,8 +3314,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         const data = points.map(p => ({ x: p.ts, y: Number(p.price) || 0 }))
         const timestamps = data.map(point => point.x).filter(Number.isFinite)
-        const xMin = timestamps.length ? Math.min(...timestamps) : undefined
-        const xMax = timestamps.length ? Math.max(...timestamps) : undefined
+        let xMin = timestamps.length ? Math.min(...timestamps) : undefined
+        let xMax = timestamps.length ? Math.max(...timestamps) : undefined
+        if (['days', 'months', 'years'].includes(this.selectedTimeRange)) {
+          const rangeTimeline = this.generatePriceRangeTimestamps()
+          if (rangeTimeline.length) {
+            xMin = rangeTimeline[0]
+            xMax = rangeTimeline[rangeTimeline.length - 1]
+          }
+        }
         const nowTs = Date.now()
         const endOfDay = new Date()
         endOfDay.setHours(23, 59, 59, 999)
@@ -3323,6 +3364,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           })
         }
 
+        const timeConfig = this.getPriceChartTimeConfig()
         const cfg = {
           type: 'line',
           data: {
@@ -3337,7 +3379,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             scales: {
               x: {
                 type: 'time',
-                time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' },
+                time: timeConfig,
                 min: xMin,
                 max: xMax,
                 grid: {
@@ -3885,6 +3927,35 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
       return ''
     },
+
+    getGenerationChartTimeConfig(forceHour = false) {
+      if (forceHour) {
+        return { unit: 'hour', tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm' } }
+      }
+      if (this.selectedTimeRange === 'years') {
+        return { unit: 'year', tooltipFormat: 'yyyy', displayFormats: { year: 'yyyy' } }
+      }
+      if (this.selectedTimeRange === 'months') {
+        return { unit: 'month', tooltipFormat: 'MMM yyyy', displayFormats: { month: 'MMM yyyy' } }
+      }
+      if (this.selectedTimeRange === 'days') {
+        return { unit: 'day', tooltipFormat: 'MMM d', displayFormats: { day: 'MMM d' } }
+      }
+      return { unit: 'hour', tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm' } }
+    },
+
+    getPriceChartTimeConfig() {
+      if (this.selectedTimeRange === 'years') {
+        return { unit: 'year', tooltipFormat: 'yyyy', displayFormats: { year: 'yyyy' } }
+      }
+      if (this.selectedTimeRange === 'months') {
+        return { unit: 'month', tooltipFormat: 'MMM yyyy', displayFormats: { month: 'MMM yyyy' } }
+      }
+      if (this.selectedTimeRange === 'days') {
+        return { unit: 'day', tooltipFormat: 'MMM d', displayFormats: { day: 'MMM d' } }
+      }
+      return { unit: 'hour', tooltipFormat: 'dd/MM HH:mm', displayFormats: { hour: 'dd/MM HH:mm' } }
+    },
     
 
 
@@ -3905,7 +3976,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         const resolutionParam = this.getPriceResolutionParam()
         const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
-        console.log("forCountry",url)
+        console.log('[Price] range endpoint:', url)
         const { data } = await axios.get(url, {
           timeout: 10000,
           signal: this.currentAbortController?.signal
@@ -4034,12 +4105,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (countries.length === 0) return {}
       
       try {
-        console.log("Called!")
         const { start, end } = this.getPriceRangeDates()
 
         const resolutionParam = this.getPriceResolutionParam()
         const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
-        console.log(url)
+        console.log('[Price] bulk-range endpoint:', url)
         const { data } = await axios.get(url, {
           timeout: this.getBulkPriceTimeoutMs(),
           signal: this.currentAbortController?.signal
@@ -4873,7 +4943,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const resolutionParam = rangeOptions?.resolutionParam ?? this.getGenerationResolutionParam()
 
         const url = `https://api.visualize.energy/api/generation-forecast/range/?country=${encodeURIComponent(iso2)}&start=${start.toISOString()}&end=${end.toISOString()}${resolutionParam}`
-        console.log('[Generation Modal] Forecast endpoint:', url)
         const { data } = await axios.get(url)
 
         if (!data || !Array.isArray(data.items)) {
@@ -4892,7 +4961,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       try {
         const url = `https://api.visualize.energy/api/generation-res/range/?country=${encodeURIComponent(iso2)}&period=today`
-        console.log('[Generation Modal] RES endpoint:', url)
         const { data } = await axios.get(url)
 
         if (!data || !Array.isArray(data.items)) {
