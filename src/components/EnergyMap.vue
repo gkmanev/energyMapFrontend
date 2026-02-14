@@ -249,6 +249,73 @@
           </div>
         </div>
 
+        <!-- Capacity Slider -->
+        <div
+          v-if="heatmapType === 'capacity'"
+          :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
+        >
+          <div class="overlay-header">
+            <h3>Installed Capacity - Last 48 Hours [MW]</h3>
+            <div class="slider-info">
+              <span class="time-display">{{ currentTimeDisplay }}</span>
+              <span class="capacity-display">{{ totalCapacityDisplay }}</span>
+            </div>
+          </div>
+
+          <div class="slider-row">
+            <div class="play-controls">
+              <button
+                @click="togglePlay"
+                :disabled="!hasTimeData || isRefreshing"
+                class="play-button"
+              >
+                {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+              </button>
+            </div>
+
+            <!-- Enhanced smooth draggable slider -->
+            <div class="slider-wrapper">
+              <div class="custom-slider">
+                <!-- Native range input for smooth dragging -->
+                <input
+                  v-model="currentTimeIndex"
+                  type="range"
+                  :min="0"
+                  :max="maxTimeIndex"
+                  :disabled="!hasTimeData || isRefreshing"
+                  class="smooth-range-slider"
+                  @input="onSliderChange"
+                  @change="onSliderChange"
+                  @pointerdown="onSliderPointerDown"
+                  @pointerup="onSliderPointerUp"
+                />
+
+                <!-- Custom visual track and progress -->
+                <div class="slider-track"></div>
+                <div class="slider-progress" :style="progressStyle"></div>
+              </div>
+
+              <!-- Time tick marks BELOW the slider -->
+              <div v-if="hasTimeData" class="time-ticks-below">
+                <div
+                  v-for="(tick, index) in timeTicks"
+                  :key="index"
+                  class="time-tick-below"
+                  :style="{ left: tick.position }"
+                  @click="jumpToTick(tick.index)"
+                >
+                  <div class="tick-mark-below"></div>
+                  <div class="tick-label-below">{{ tick.label }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="!hasTimeData && heatmapType === 'capacity'" class="no-data-message">
+            Click "Refresh Data" to load historical capacity data
+          </div>
+        </div>
+
         <!-- Generation Slider -->
         <div
           v-if="heatmapType === 'generation'"
