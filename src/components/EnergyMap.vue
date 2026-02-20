@@ -4868,13 +4868,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async getGenerationByTechnologyAt(iso2, timestamp) {
       if (!iso2 || !Number.isFinite(timestamp)) return {}
 
-      const cacheKey = iso2
+      const range = this.selectedTimeRange || 'hours'
+      const cacheKey = `${iso2}_${range}`
       const cached = this.generationByTechCache.get(cacheKey)
       const now = Date.now()
       const isStale = !cached || (now - cached.fetchedAt > this.cacheValidityMs)
 
       if (isStale) {
-        await this.fetchGenerationByTechnologySeries(iso2)
+        await this.fetchGenerationByTechnologySeries(iso2, range)
       }
 
       const entry = this.generationByTechCache.get(cacheKey)
@@ -4891,10 +4892,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return byTech
     },
 
-    async fetchGenerationByTechnologySeries(iso2) {
+    async fetchGenerationByTechnologySeries(iso2, range) {
       if (!iso2) return
 
-      const cacheKey = iso2
+      const effectiveRange = range || this.selectedTimeRange || 'hours'
+      const cacheKey = `${iso2}_${effectiveRange}`
       if (this.generationByTechPending.has(cacheKey)) {
         await this.generationByTechPending.get(cacheKey)
         return
@@ -4902,12 +4904,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       const fetchPromise = (async () => {
         try {
-          const end = new Date()
-          const start = new Date(end.getTime() - 48 * 60 * 60 * 1000)
+          const { start, end } = this.getGenerationRangeDates()
+          const resolutionParam = this.getGenerationResolutionParam()
           const startDate = encodeURIComponent(start.toISOString())
           const endDate = encodeURIComponent(end.toISOString())
 
-          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
           const { data } = await axios.get(url)
 
           const items = Array.isArray(data.items) ? data.items : []
