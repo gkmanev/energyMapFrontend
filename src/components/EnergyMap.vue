@@ -633,12 +633,30 @@ const BULK_REQUEST_CONFIG = {
   retryDelay: 1000
 }
 
-import PowerFlow from "@/components/PowerFlow.vue";
+import { defineAsyncComponent } from 'vue'
+const PowerFlow = defineAsyncComponent(() => import("@/components/PowerFlow.vue"));
 import LocalClock from "@/components/LocalClock.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
-import Chart from 'chart.js/auto'
-import { Tooltip } from 'chart.js'
+import {
+  Chart,
+  LineController,
+  BarController,
+  LineElement,
+  BarElement,
+  PointElement,
+  LinearScale,
+  TimeScale,
+  CategoryScale,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js'
+
+Chart.register(
+  LineController, BarController, LineElement, BarElement, PointElement,
+  LinearScale, TimeScale, CategoryScale, Tooltip, Legend, Filler
+)
 import 'chartjs-adapter-date-fns'
 import axios from '@/services/axiosClient'
 import { scaleSequential } from 'd3-scale'
@@ -4029,24 +4047,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       for (let i = 0; i < supportedCountries.length; i += chunkSize) {
         chunks.push(supportedCountries.slice(i, i + chunkSize))
       }
-      console.log(chunks)
       const chunkPromises = chunks.map(async (chunk, index) => {
+        if (this.currentAbortController?.signal?.aborted) return {}
         try {
-          const chunkData = await this.fetchBulkHistoricalPricesWithRetry(chunk)
-          return { success: true, data: chunkData, chunkIndex: index }
+          return await this.fetchBulkHistoricalPricesWithRetry(chunk)
         } catch (error) {
           console.error(`Bulk call ${index + 1} failed:`, error)
-          return { success: false, error, chunkIndex: index }
+          return {}
         }
       })
-      
       const results = await Promise.allSettled(chunkPromises)
-      
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value.success) {
-          Object.assign(newHistoricalData, result.value.data)
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          Object.assign(newHistoricalData, result.value)
         }
-      })
+      }
 
       this.historicalPriceData = newHistoricalData
       this.updateColorScheme()
@@ -4055,15 +4070,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     getBulkPriceChunkSize() {
-      if (this.selectedTimeRange === 'hours') return 10
-      if (this.selectedTimeRange === 'days') return 14
+      if (this.selectedTimeRange === 'hours') return 5
+      if (this.selectedTimeRange === 'days') return 10
       return 20
     },
 
     getBulkPriceTimeoutMs() {
-      if (this.selectedTimeRange === 'hours') return 30000
-      if (this.selectedTimeRange === 'days') return 30000
-      return 20000
+      if (this.selectedTimeRange === 'hours') return 60000
+      if (this.selectedTimeRange === 'days') return 60000
+      return 30000
     },
 
     async fetchBulkHistoricalPricesWithRetry(countries) {
@@ -4459,25 +4474,33 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     async refreshAllCapacities() {
       if (!this.countriesGeoJson) return
-      const updates = {}
-      const tasks = []
 
+      const supportedCountries = []
       for (const feature of this.countriesGeoJson.features) {
         const iso2 = this.getCountryISO2(feature)
-        if (!iso2 || !this.capacitySupported(iso2)) continue
+        if (iso2 && this.capacitySupported(iso2)) {
+          supportedCountries.push(iso2)
+        }
+      }
+      if (!supportedCountries.length) return
 
-        tasks.push(
-          this.fetchCapacityForHeatmap(iso2)
-            .then(totalMW => { 
-              if (Number.isFinite(totalMW) && totalMW > 0) {
-                updates[iso2] = totalMW
-              }
-            })
-            .catch(() => {})
-        )
+      const updates = {}
+      try {
+        const url = `https://api.visualize.energy/api/capacity/bulk-latest/?countries=${supportedCountries.join(',')}`
+        const { data } = await axios.get(url, { timeout: 30000 })
+
+        for (const [iso2, countryData] of Object.entries(data.data || {})) {
+          const totalMW = Array.isArray(countryData.items)
+            ? countryData.items.reduce((sum, item) => sum + (item.installed_capacity_mw || 0), 0)
+            : 0
+          if (Number.isFinite(totalMW) && totalMW > 0) {
+            updates[iso2] = totalMW
+          }
+        }
+      } catch (e) {
+        console.error('Bulk capacity fetch failed:', e)
       }
 
-      await Promise.allSettled(tasks)
       this.countryCapacityByISO2 = { ...this.countryCapacityByISO2, ...updates }
       this.updateColorScheme()
       this.updateMapBadges()
@@ -4514,9 +4537,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     async loadCountriesData() {
       try {
-        const response = await axios.get(
-          'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'
-        )
+        const response = await axios.get('/data/countries.geojson')
         this.countriesGeoJson = markRaw(response.data)
       } catch (err) {
         console.error('Error loading countries data:', err)
@@ -5373,7 +5394,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&display=swap');
+/* Font loaded via <link> in index.html for faster initial render */
 
 /* App container */
 .energy-map-app {
