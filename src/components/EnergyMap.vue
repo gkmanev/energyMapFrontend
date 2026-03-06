@@ -273,6 +273,16 @@
           </div>
 
           <div class="slider-row slider-row--full">
+            <div class="play-controls">
+              <button
+                @click="togglePlay"
+                :disabled="!hasTimeData || isRefreshing"
+                class="play-button"
+              >
+                {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+              </button>
+            </div>
+
             <!-- Enhanced smooth draggable slider -->
             <div class="slider-wrapper">
               <div class="custom-slider">
@@ -1005,7 +1015,9 @@ export default {
       if (!this.hasTimeData || !['prices', 'capacity'].includes(this.heatmapType)) return []
       
       const ticks = []
-      const totalTicks = 8
+      const totalTicks = this.selectedTimeRange === 'months'
+        ? this.maxTimeIndex
+        : 8
       
       for (let i = 0; i <= totalTicks; i++) {
         const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
@@ -1030,7 +1042,9 @@ export default {
       if (!this.hasTimeData || this.heatmapType !== 'generation') return []
       
       const ticks = []
-      const totalTicks = 8
+      const totalTicks = this.selectedTimeRange === 'months'
+        ? this.maxTimeIndex
+        : 8
       
       for (let i = 0; i <= totalTicks; i++) {
         const tickIndex = Math.floor((i / totalTicks) * this.maxTimeIndex)
@@ -1354,16 +1368,11 @@ export default {
         return `${daysAgo}d`
       }
 
-      if (index === 0) {
-        return '48h ago'
-      }
-
-      if (index === totalTicks) {
-        return 'Now'
-      }
-
-      const hoursAgo = Math.round((latestTimestamp - timestamp) / (60 * 60 * 1000))
-      return `${hoursAgo}h`
+      return date.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
     },
 
     formatMegawatts(value) {
@@ -3144,19 +3153,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
           const latestTimestamp = timestamps[timestamps.length - 1] || null;
           let forecastSeries = this.prepareForecastSeries(modal.forecastData);
-
-          if (forecastSeries.length && Number.isFinite(latestTimestamp)) {
-            const firstIndex = forecastSeries.findIndex(point => point.x >= latestTimestamp);
-            if (firstIndex === -1) {
-              forecastSeries = [];
-            } else {
-              const trimmed = forecastSeries.slice(firstIndex);
-              if (trimmed.length && trimmed[0].x !== latestTimestamp) {
-                trimmed.unshift({ x: latestTimestamp, y: trimmed[0].y });
-              }
-              forecastSeries = trimmed;
-            }
-          }
 
           if (forecastSeries.length) {
             const firstForecast = forecastSeries[0]?.x;
