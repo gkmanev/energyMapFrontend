@@ -2609,9 +2609,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const resolutionParam = this.getGenerationResolutionParam()
 
           const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
+          const todayForecastRange = this.getTodayRangeDates()
+          const modalForecastRange = this.selectedTimeRange === 'days'
+            ? { start, end, resolutionParam }
+            : { ...todayForecastRange, resolutionParam: '' }
           const [rangeResponse, forecastItems] = await Promise.all([
             axios.get(url),
-            this.fetchGenerationForecastRange(iso2, { start, end, resolutionParam })
+            this.fetchGenerationForecastRange(iso2, modalForecastRange)
           ])
           const response = rangeResponse?.data || {}
           data = response.items || []
@@ -3152,7 +3156,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           let xMax = timeline.length ? timeline[timeline.length - 1] : undefined;
 
           const latestTimestamp = timestamps[timestamps.length - 1] || null;
-          let forecastSeries = this.prepareForecastSeries(modal.forecastData);
+          const todayForecastRange = this.getTodayRangeDates();
+          const forecastSeriesOptions = this.selectedTimeRange === 'days'
+            ? { bucket: 'day', aggregation: 'average' }
+            : {
+              startMs: todayForecastRange.start.getTime(),
+              endMs: todayForecastRange.end.getTime(),
+              bucket: 'hour',
+              aggregation: 'sum'
+            };
+          let forecastSeries = this.prepareForecastSeries(modal.forecastData, forecastSeriesOptions);
 
           if (forecastSeries.length) {
             const firstForecast = forecastSeries[0]?.x;
@@ -3911,6 +3924,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           ? new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1, 0, 0, 0, 0))
           : new Date(now.getTime())
 
+      return { start, end }
+    },
+
+    getTodayRangeDates() {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(start)
+      end.setDate(end.getDate() + 1)
       return { start, end }
     },
 
@@ -4993,28 +5014,61 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
 
-    prepareForecastSeries(forecastItems) {
+    prepareForecastSeries(forecastItems, options = {}) {
       if (!Array.isArray(forecastItems) || !forecastItems.length) return []
 
-      const hourly = new Map()
       const HOUR_MS = 60 * 60 * 1000
+      const startMs = Number(options.startMs)
+      const endMs = Number(options.endMs)
+      const hasBounds = Number.isFinite(startMs) && Number.isFinite(endMs)
+      const bucket = options.bucket || 'hour'
+      const aggregation = options.aggregation || 'sum'
+      const hourlyTotals = new Map()
 
       for (const item of forecastItems) {
         const timestamp = Date.parse(item.datetime_utc)
         if (!Number.isFinite(timestamp)) continue
+        if (hasBounds && (timestamp < startMs || timestamp >= endMs)) continue
         const value = Number(item.forecast_mw ?? item.generation_mw ?? item.total_generation_mw ?? item.value)
         if (!Number.isFinite(value)) continue
 
         const hourTs = Math.floor(timestamp / HOUR_MS) * HOUR_MS
-        const bucket = hourly.get(hourTs) || { sum: 0, count: 0 }
-        bucket.sum += value
-        bucket.count += 1
-        hourly.set(hourTs, bucket)
+        hourlyTotals.set(hourTs, (hourlyTotals.get(hourTs) || 0) + value)
       }
 
-      return Array.from(hourly.entries())
+      if (!hourlyTotals.size) return []
+
+      if (bucket === 'hour' && aggregation === 'sum') {
+        return Array.from(hourlyTotals.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([x, y]) => ({ x, y }))
+      }
+
+      const grouped = new Map()
+      for (const [pointTs, value] of hourlyTotals.entries()) {
+        const date = new Date(pointTs)
+        let bucketTs = pointTs
+
+        if (bucket === 'day') {
+          bucketTs = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0)
+        } else if (bucket === 'month') {
+          bucketTs = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0)
+        } else if (bucket === 'year') {
+          bucketTs = Date.UTC(date.getUTCFullYear(), 0, 1, 0, 0, 0, 0)
+        }
+
+        const acc = grouped.get(bucketTs) || { sum: 0, count: 0 }
+        acc.sum += value
+        acc.count += 1
+        grouped.set(bucketTs, acc)
+      }
+
+      return Array.from(grouped.entries())
         .sort((a, b) => a[0] - b[0])
-        .map(([x, bucket]) => ({ x, y: bucket.count ? bucket.sum / bucket.count : 0 }))
+        .map(([x, acc]) => ({
+          x,
+          y: aggregation === 'average' ? (acc.count ? acc.sum / acc.count : 0) : acc.sum
+        }))
     },
 
     summarizeTodayForecast(series) {
