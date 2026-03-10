@@ -339,7 +339,7 @@
           :id="'separate-modal-' + modal.id"
           :class="[
             'separate-modal',
-            { 'separate-modal--thumbnail': modal.thumbnail, 'separate-modal--mobile': isMobileViewport }
+            { 'separate-modal--thumbnail': modal.thumbnail, 'separate-modal--mobile': usesStackedModalLayout }
           ]"
           :style="getSeparateModalStyle(modal.id)"
           v-show="modal.visible"
@@ -350,7 +350,7 @@
           @pointerdown.stop="startSeparateModalDrag($event, modal.id)"
           @dblclick="toggleSeparateModalView(modal.id)"
           @click.stop="handleThumbnailTap(modal.id, $event)"
-          :style="{ cursor: isMobileViewport ? 'default' : 'move' }"
+          :style="{ cursor: usesStackedModalLayout ? 'default' : 'move' }"
         >
           <div class="separate-modal-title">
             <h4>{{ modal.country }} - {{ modal.title }}</h4>
@@ -563,17 +563,17 @@
 
         <!-- Resize handles -->
         <div
-          v-if="!isMobileViewport"
+          v-if="isLargeModalViewport"
           class="separate-modal-resize-handle separate-modal-resize-right"
           @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'right')"
         ></div>
         <div
-          v-if="!isMobileViewport"
+          v-if="isLargeModalViewport"
           class="separate-modal-resize-handle separate-modal-resize-bottom"
           @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'bottom')"
         ></div>
         <div
-          v-if="!isMobileViewport"
+          v-if="isLargeModalViewport"
           class="separate-modal-resize-handle separate-modal-resize-corner"
           @pointerdown.stop.prevent="startSeparateModalResize($event, modal.id, 'corner')"
         ></div>
@@ -610,6 +610,7 @@ const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
 const DEFAULT_MODAL_WIDTH = 350
 const DEFAULT_MODAL_HEIGHT = 280
 const MODAL_MOBILE_BREAKPOINT = 1200
+const MODAL_DESKTOP_LAYOUT_BREAKPOINT = 2000
 const MIN_DESKTOP_HEIGHT = 680
 
 const calculateResponsiveModalSize = () => {
@@ -823,6 +824,7 @@ export default {
       europeBounds: [[34, -25], [72, 45]],
       isModalOpen: false,
       isMobileViewport: typeof window !== 'undefined' ? window.innerWidth < MODAL_MOBILE_BREAKPOINT : false,
+      isLargeModalViewport: typeof window !== 'undefined' ? window.innerWidth >= MODAL_DESKTOP_LAYOUT_BREAKPOINT : false,
       mobilePanelVisible: false,
       mobilePanelLoading: false,
       mobilePanelError: null,
@@ -920,6 +922,10 @@ export default {
         height: this.modalSize.height ? `${this.modalSize.height}px` : 'auto',
         position: 'absolute'
       }
+    },
+
+    usesStackedModalLayout() {
+      return !this.isLargeModalViewport
     },
     
     progressStyle() {
@@ -1594,10 +1600,9 @@ export default {
 
     isLargeScreenLayout() {
       if (typeof window === 'undefined') return false
+      if (!this.isLargeModalViewport) return false
 
-      const viewportWidth = window.innerWidth || 0
       const viewportHeight = window.innerHeight || 0
-      if (viewportWidth < MODAL_MOBILE_BREAKPOINT) return false
 
       const comfortableHeight = viewportHeight >= 760
       const laptopHeight = viewportHeight >= 620
@@ -1612,7 +1617,7 @@ export default {
 
       const viewportHeight = window.innerHeight || 0
       const viewportWidth = window.innerWidth || 0
-      const isMediumDesktop = viewportWidth >= MODAL_MOBILE_BREAKPOINT && viewportWidth <= 1440
+      const isMediumDesktop = viewportWidth >= MODAL_DESKTOP_LAYOUT_BREAKPOINT && viewportWidth <= 2400
       const normalizedSize = {
         width: Math.max(baseSize.width, 320),
         height: Math.max(baseSize.height, 240)
@@ -1683,19 +1688,18 @@ export default {
     shouldUseThumbnailMode() {
       if (typeof window === 'undefined') return false
 
-      const viewportWidth = window.innerWidth || 0
       const viewportHeight = window.innerHeight || 0
 
-      if (this.isMobileViewport) return false
+      if (this.usesStackedModalLayout || this.isMobileViewport) return false
 
-      return viewportWidth < MODAL_MOBILE_BREAKPOINT && viewportHeight <= 800
+      return viewportHeight <= 800
     },
 
     getSeparateModalStyle(modalId) {
       const modal = this.separateModals.find(m => m.id === modalId)
       if (!modal) return {}
 
-      if (this.isMobileViewport) {
+      if (this.usesStackedModalLayout) {
         return {
           position: 'relative',
           width: '100%',
@@ -2218,7 +2222,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       // Determine 2×2 grid slot (desktop only)
       const visibleModals = this.separateModals.filter(m => m.visible)
       const slotIndex = visibleModals.length
-      const { x, y } = this.isMobileViewport
+      const { x, y } = this.usesStackedModalLayout
         ? { x: 0, y: 0 }
         : this._gridPosition(slotIndex, modalWidth, modalHeight)
 
@@ -2244,12 +2248,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
 
       const desktopLayout = this.getDesktopLayoutPosition(modal, modal.size)
-      if (!this.isMobileViewport && desktopLayout) {
+      if (!this.usesStackedModalLayout && desktopLayout) {
         modal.position = desktopLayout.position
         modal.size = desktopLayout.size
       }
 
-      if (this.isMobileViewport) {
+      if (this.usesStackedModalLayout) {
         modal.thumbnail = false
         modal.size = { ...expandedSize }
       }
@@ -2278,7 +2282,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     scrollToModal(modalId) {
-      if (!this.isMobileViewport || typeof window === 'undefined') return
+      if (!this.usesStackedModalLayout || typeof window === 'undefined') return
 
       this.$nextTick(() => {
         const modalEl = document.getElementById(`separate-modal-${modalId}`)
@@ -2295,7 +2299,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     repositionSeparateModals() {
-      if (this.isMobileViewport) return
+      if (this.usesStackedModalLayout) return
 
       // Keep the 2×2 grid when auto-arranging (e.g. on resize),
       // but don't move modals the user already dragged/resized.
@@ -2373,7 +2377,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     // Start dragging separate modal
     startSeparateModalDrag(event, modalId) {
-      if (this.isMobileViewport) return
+      if (this.usesStackedModalLayout) return
 
       if (event.target.closest('.separate-modal-close') ||
           event.target.closest('.separate-modal-resize-handle')) {
@@ -2454,7 +2458,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
     // Start resizing separate modal
     startSeparateModalResize(event, modalId, direction) {
-      if (this.isMobileViewport) return
+      if (this.usesStackedModalLayout) return
 
       const resizeState = this.separateModalResizeState[modalId]
       const modal = this.separateModals.find(m => m.id === modalId)
@@ -4643,7 +4647,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
                 vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
 
-                if (vm.isMobileViewport && capacityModalId !== undefined) {
+                if (!vm.isLargeModalViewport && capacityModalId !== undefined) {
                   vm.scrollToModal(capacityModalId)
                 }
               } else {
@@ -5227,16 +5231,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     updateMobileState() {
-      const previous = this.isMobileViewport
-      this.isMobileViewport = typeof window !== 'undefined'
-        ? window.innerWidth < MODAL_MOBILE_BREAKPOINT
-        : false
+      const previousMobile = this.isMobileViewport
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0
+      this.isMobileViewport = viewportWidth < MODAL_MOBILE_BREAKPOINT
+      this.isLargeModalViewport = viewportWidth >= MODAL_DESKTOP_LAYOUT_BREAKPOINT
 
-      if (this.isMobileViewport) {
+      if (!this.isLargeModalViewport) {
         this.stackModalsForMobile()
       }
 
-      if (previous && !this.isMobileViewport) {
+      if (previousMobile && !this.isMobileViewport) {
         this.closeMobilePanel()
         this.sliderFloatingEnabled = false
       }
@@ -5272,7 +5276,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     stackModalsForMobile() {
-      if (!this.isMobileViewport) return
+      if (this.isLargeModalViewport) return
 
       this.separateModals.forEach(modal => {
         modal.thumbnail = false
