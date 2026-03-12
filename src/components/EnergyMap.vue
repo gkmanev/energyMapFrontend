@@ -79,6 +79,7 @@
             <div class="mobile-panel-titles">
               <p class="mobile-panel-label">Energy Prices (48h)</p>
               <h4 class="mobile-panel-country">{{ mobilePanelCountry }}</h4>
+              <span class="chart-brand-signature">visualize.energy</span>
             </div>
             <button class="mobile-panel-close" @click="closeMobilePanel">Hide</button>
           </div>
@@ -354,6 +355,7 @@
         >
           <div class="separate-modal-title">
             <h4>{{ modal.country }} - {{ modal.title }}</h4>
+            <span class="chart-brand-signature">visualize.energy</span>
             <div
               v-if="modal.type === 'generation' && !modal.thumbnail"
               class="generation-mode-toggle"
@@ -606,6 +608,12 @@ const SUPPORTED_CAPACITY_ISO2 = new Set([
 
 // Generation uses same countries as capacity for now
 const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
+
+const PSR_TYPE_NAME_OVERRIDES = Object.freeze({
+  B99: 'BESS Charging'
+})
+const BESS_CHARGING_PSR_TYPE = 'B99'
+const BESS_CHARGING_CAPACITY_PLACEHOLDER_MW = 2
 
 const DEFAULT_MODAL_WIDTH = 350
 const DEFAULT_MODAL_HEIGHT = 280
@@ -1542,6 +1550,68 @@ export default {
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .replace(/\s+/g, ' ')
+    },
+
+    getPsrTypeKey(value) {
+      if (value == null) return ''
+      return String(value).trim().toUpperCase()
+    },
+
+    applyGenerationPsrOverrides(items) {
+      if (!Array.isArray(items)) return []
+
+      return items.map(item => {
+        if (!item || typeof item !== 'object') return item
+
+        const psrType = this.getPsrTypeKey(item.psr_type)
+        const overrideName = PSR_TYPE_NAME_OVERRIDES[psrType]
+
+        return {
+          ...item,
+          psr_type: psrType || item.psr_type,
+          psr_name: overrideName || item.psr_name || psrType || 'Unknown'
+        }
+      })
+    },
+
+    applyCapacityModalOverrides(items) {
+      const normalizedItems = Array.isArray(items)
+        ? items
+            .filter(item => item && typeof item === 'object')
+            .map(item => {
+              const psrType = this.getPsrTypeKey(item.psr_type)
+              const overrideName = PSR_TYPE_NAME_OVERRIDES[psrType]
+              return {
+                ...item,
+                psr_type: psrType || item.psr_type,
+                psr_name: overrideName || item.psr_name || psrType || 'Unknown',
+                installed_capacity_mw: Number(item.installed_capacity_mw) || 0
+              }
+            })
+        : []
+
+      const normalizedBessName = this.normalizeTechnologyKey(PSR_TYPE_NAME_OVERRIDES[BESS_CHARGING_PSR_TYPE])
+      const bessIndex = normalizedItems.findIndex(item => (
+        this.getPsrTypeKey(item.psr_type) === BESS_CHARGING_PSR_TYPE
+        || this.normalizeTechnologyKey(item.psr_name) === normalizedBessName
+      ))
+
+      const bessItem = {
+        psr_type: BESS_CHARGING_PSR_TYPE,
+        psr_name: PSR_TYPE_NAME_OVERRIDES[BESS_CHARGING_PSR_TYPE],
+        installed_capacity_mw: BESS_CHARGING_CAPACITY_PLACEHOLDER_MW
+      }
+
+      if (bessIndex >= 0) {
+        normalizedItems[bessIndex] = {
+          ...normalizedItems[bessIndex],
+          ...bessItem
+        }
+      } else {
+        normalizedItems.push(bessItem)
+      }
+
+      return normalizedItems
     },
 
     applyAlpha(color, alpha) {
@@ -2601,7 +2671,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           
           const url = `https://api.visualize.energy/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
           const { data: response } = await axios.get(url)
-          data = response.items || []
+          data = this.applyCapacityModalOverrides(response.items)
         } else if (type === 'generation') {
           // Use existing generation method
           const iso2 = this.getCountryISO2ByName(country)
@@ -2614,15 +2684,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
           const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
           const todayForecastRange = this.getTodayRangeDates()
-          const modalForecastRange = this.selectedTimeRange === 'days'
+          const modalForecastRange = this.selectedTimeRange === 'hours'
+            ? { ...todayForecastRange, resolutionParam: '' }
+            : this.selectedTimeRange === 'days'
             ? { start, end, resolutionParam }
-            : { ...todayForecastRange, resolutionParam: '' }
+            : this.selectedTimeRange === 'months'
+              ? { start, end, resolutionParam }
+              : this.selectedTimeRange === 'years'
+                ? { start, end, resolutionParam }
+                : { ...todayForecastRange, resolutionParam: '' }
           const [rangeResponse, forecastItems] = await Promise.all([
             axios.get(url),
             this.fetchGenerationForecastRange(iso2, modalForecastRange)
           ])
           const response = rangeResponse?.data || {}
-          data = response.items || []
+          data = this.applyGenerationPsrOverrides(response.items)
           modal.forecastData = forecastItems
         }
         else if (type === 'prices') {
@@ -3163,12 +3239,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const todayForecastRange = this.getTodayRangeDates();
           const forecastSeriesOptions = this.selectedTimeRange === 'days'
             ? { bucket: 'day', aggregation: 'average' }
-            : {
-              startMs: todayForecastRange.start.getTime(),
-              endMs: todayForecastRange.end.getTime(),
-              bucket: 'hour',
-              aggregation: 'sum'
-            };
+            : this.selectedTimeRange === 'months'
+              ? { bucket: 'month', aggregation: 'average' }
+              : this.selectedTimeRange === 'years'
+                ? { bucket: 'year', aggregation: 'average' }
+                : {
+                  startMs: todayForecastRange.start.getTime(),
+                  endMs: todayForecastRange.end.getTime(),
+                  bucket: 'hour',
+                  aggregation: 'average'
+                };
           let forecastSeries = this.prepareForecastSeries(modal.forecastData, forecastSeriesOptions);
 
           if (forecastSeries.length) {
@@ -4933,7 +5013,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
           const { data } = await axios.get(url)
 
-          const items = Array.isArray(data.items) ? data.items : []
+          const items = this.applyGenerationPsrOverrides(data.items)
           const byTech = new Map()
 
           const getEntry = key => {
@@ -5027,7 +5107,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const hasBounds = Number.isFinite(startMs) && Number.isFinite(endMs)
       const bucket = options.bucket || 'hour'
       const aggregation = options.aggregation || 'sum'
-      const hourlyTotals = new Map()
+      const hourlyStats = new Map()
 
       for (const item of forecastItems) {
         const timestamp = Date.parse(item.datetime_utc)
@@ -5037,21 +5117,30 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         if (!Number.isFinite(value)) continue
 
         const hourTs = Math.floor(timestamp / HOUR_MS) * HOUR_MS
-        hourlyTotals.set(hourTs, (hourlyTotals.get(hourTs) || 0) + value)
+        const stats = hourlyStats.get(hourTs) || { sum: 0, count: 0 }
+        stats.sum += value
+        stats.count += 1
+        hourlyStats.set(hourTs, stats)
       }
 
-      if (!hourlyTotals.size) return []
+      if (!hourlyStats.size) return []
 
-      if (bucket === 'hour' && aggregation === 'sum') {
-        return Array.from(hourlyTotals.entries())
+      if (bucket === 'hour') {
+        return Array.from(hourlyStats.entries())
           .sort((a, b) => a[0] - b[0])
-          .map(([x, y]) => ({ x, y }))
+          .map(([x, stats]) => ({
+            x,
+            y: aggregation === 'average' ? (stats.count ? stats.sum / stats.count : 0) : stats.sum
+          }))
       }
 
       const grouped = new Map()
-      for (const [pointTs, value] of hourlyTotals.entries()) {
+      for (const [pointTs, hourly] of hourlyStats.entries()) {
         const date = new Date(pointTs)
         let bucketTs = pointTs
+        const value = aggregation === 'average'
+          ? (hourly.count ? hourly.sum / hourly.count : 0)
+          : hourly.sum
 
         if (bucket === 'day') {
           bucketTs = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0)
@@ -5124,7 +5213,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
         const { data } = await axios.get(url)
-        this.generationItems = Array.isArray(data.items) ? data.items : []
+        this.generationItems = this.applyGenerationPsrOverrides(data.items)
       } catch (e) {
         this.generationError = 'Failed to load generation data'
       } finally {
@@ -5902,6 +5991,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+}
+
+.chart-brand-signature {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.separate-modal-title .chart-brand-signature {
+  color: rgba(15, 23, 42, 0.58);
+}
+
+.mobile-panel-titles .chart-brand-signature {
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.separate-modal--thumbnail .chart-brand-signature {
+  display: none;
 }
 
 .generation-mode-toggle {
