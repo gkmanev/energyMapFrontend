@@ -24,6 +24,30 @@
               <input type="radio" v-model="heatmapType" value="generation">
               <span>Generation</span>
             </label>
+            <label
+              :class="[
+                'cloud-switch',
+                {
+                  'cloud-switch--active': showCloudCoverage,
+                  'cloud-switch--loading': cloudCoverageLoading
+                }
+              ]"
+              :title="cloudCoverageToggleTitle"
+            >
+              <input
+                v-model="showCloudCoverage"
+                type="checkbox"
+                class="cloud-switch__input"
+                aria-label="Toggle cloud coverage overlay"
+              >
+              <span class="cloud-switch__track" aria-hidden="true">
+                <span class="cloud-switch__thumb"></span>
+              </span>
+              <span class="cloud-switch__text">
+                <span class="cloud-switch__label">Clouds</span>
+                <span class="cloud-switch__status">{{ cloudCoverageToggleStateLabel }}</span>
+              </span>
+            </label>
           </div>
           <div class="header-logo" aria-label="visualize.energy">
             <span class="logo-primary">visualize</span>
@@ -701,6 +725,9 @@ L.Icon.Default.mergeOptions({
 })
 
 const generationCursorState = new Map()
+const CLOUD_COVERAGE_GRID_COLUMNS = 22
+const CLOUD_COVERAGE_GRID_ROWS = 14
+const CLOUD_COVERAGE_REFRESH_MS = 15 * 60 * 1000
 
 const CURSOR_TOOLTIP_OFFSET = 32
 
@@ -800,6 +827,12 @@ export default {
 
       // Heatmap type controls - Price is default
       heatmapType: 'prices',
+      showCloudCoverage: false,
+      cloudCoverageOverlay: null,
+      cloudCoverageLoading: false,
+      cloudCoverageError: null,
+      cloudCoverageRequestId: 0,
+      cloudCoverageRefreshTimer: null,
       isRefreshing: false,
       initialLoading: true,
       isMapUpdating: false,
@@ -934,6 +967,26 @@ export default {
 
     usesStackedModalLayout() {
       return !this.isLargeModalViewport
+    },
+
+    cloudCoverageToggleTitle() {
+      if (this.cloudCoverageLoading) {
+        return 'Loading Open-Meteo cloud coverage'
+      }
+      if (this.cloudCoverageError) {
+        return this.cloudCoverageError
+      }
+      return 'Toggle Open-Meteo cloud coverage overlay'
+    },
+
+    cloudCoverageToggleStateLabel() {
+      if (this.cloudCoverageLoading) {
+        return 'Loading'
+      }
+      if (this.cloudCoverageError) {
+        return 'Retry'
+      }
+      return this.showCloudCoverage ? 'On' : 'Off'
     },
     
     progressStyle() {
@@ -1301,6 +1354,19 @@ export default {
         this.updateMapBadges()
         void this.updateCapacityModalGenerationValues()
       },
+    },
+
+    showCloudCoverage: {
+      handler(enabled) {
+        if (enabled) {
+          this.startCloudCoverageRefresh()
+          void this.refreshCloudCoverageOverlay()
+          return
+        }
+
+        this.stopCloudCoverageRefresh()
+        this.clearCloudCoverageOverlay()
+      }
     },
 
   },
@@ -4771,15 +4837,182 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         this.map.createPane('flowsPane')
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
       }
+      this.ensureCloudCoveragePane()
 
       this.updateResponsiveZoom()
       this.updateMapBadges()
       this.map.on('zoomend moveend', this.handleMapViewportChange)
 
+      if (this.showCloudCoverage) {
+        this.startCloudCoverageRefresh()
+        void this.refreshCloudCoverageOverlay()
+      }
+
     },
 
     handleMapViewportChange() {
       this.updateMapBadges()
+    },
+
+    ensureCloudCoveragePane() {
+      if (!this.map || this.map.getPane('cloudCoveragePane')) return
+      this.map.createPane('cloudCoveragePane')
+      this.map.getPane('cloudCoveragePane').style.zIndex = 350
+      this.map.getPane('cloudCoveragePane').style.pointerEvents = 'none'
+    },
+
+    buildCloudCoverageSampleGrid() {
+      const [[south, west], [north, east]] = this.europeBounds
+      const latStep = CLOUD_COVERAGE_GRID_ROWS > 1 ? (north - south) / (CLOUD_COVERAGE_GRID_ROWS - 1) : 0
+      const lngStep = CLOUD_COVERAGE_GRID_COLUMNS > 1 ? (east - west) / (CLOUD_COVERAGE_GRID_COLUMNS - 1) : 0
+      const points = []
+
+      for (let row = 0; row < CLOUD_COVERAGE_GRID_ROWS; row += 1) {
+        const latitude = Number((north - row * latStep).toFixed(2))
+        for (let col = 0; col < CLOUD_COVERAGE_GRID_COLUMNS; col += 1) {
+          const longitude = Number((west + col * lngStep).toFixed(2))
+          points.push({ latitude, longitude })
+        }
+      }
+
+      return points
+    },
+
+    normalizeCloudCoverageResponse(data) {
+      const locations = Array.isArray(data) ? data : [data]
+      return locations.map((location) => {
+        const currentCloudCover = location?.current?.cloud_cover
+        const hourlyCloudCover = Array.isArray(location?.hourly?.cloud_cover)
+          ? location.hourly.cloud_cover[0]
+          : null
+        const value = Number.isFinite(currentCloudCover) ? currentCloudCover : hourlyCloudCover
+        return Number.isFinite(value) ? value : 0
+      })
+    },
+
+    renderCloudCoverageOverlayDataUrl(values) {
+      const pixelCanvas = document.createElement('canvas')
+      pixelCanvas.width = CLOUD_COVERAGE_GRID_COLUMNS
+      pixelCanvas.height = CLOUD_COVERAGE_GRID_ROWS
+
+      const pixelContext = pixelCanvas.getContext('2d')
+      if (!pixelContext) return null
+
+      const imageData = pixelContext.createImageData(CLOUD_COVERAGE_GRID_COLUMNS, CLOUD_COVERAGE_GRID_ROWS)
+
+      values.forEach((rawValue, index) => {
+        const boundedValue = Math.max(0, Math.min(100, Number(rawValue) || 0))
+        const intensity = boundedValue / 100
+        const alpha = Math.round(Math.pow(intensity, 1.15) * 230)
+        const offset = index * 4
+
+        imageData.data[offset] = Math.round(214 + intensity * 26)
+        imageData.data[offset + 1] = Math.round(224 + intensity * 22)
+        imageData.data[offset + 2] = Math.round(236 + intensity * 18)
+        imageData.data[offset + 3] = alpha
+      })
+
+      pixelContext.putImageData(imageData, 0, 0)
+
+      const displayCanvas = document.createElement('canvas')
+      displayCanvas.width = CLOUD_COVERAGE_GRID_COLUMNS * 28
+      displayCanvas.height = CLOUD_COVERAGE_GRID_ROWS * 28
+
+      const displayContext = displayCanvas.getContext('2d')
+      if (!displayContext) return null
+
+      displayContext.imageSmoothingEnabled = true
+      displayContext.globalAlpha = 0.9
+      displayContext.drawImage(pixelCanvas, 0, 0, displayCanvas.width, displayCanvas.height)
+
+      return displayCanvas.toDataURL('image/png')
+    },
+
+    setCloudCoverageOverlay(imageUrl) {
+      if (!this.map || !imageUrl) return
+      this.ensureCloudCoveragePane()
+
+      if (!this.cloudCoverageOverlay) {
+        this.cloudCoverageOverlay = L.imageOverlay(imageUrl, this.europeBounds, {
+          pane: 'cloudCoveragePane',
+          opacity: 0.82,
+          interactive: false,
+          className: 'cloud-coverage-overlay'
+        })
+        this.cloudCoverageOverlay.addTo(this.map)
+        return
+      }
+
+      this.cloudCoverageOverlay.setBounds(this.europeBounds)
+      this.cloudCoverageOverlay.setUrl(imageUrl)
+      if (!this.map.hasLayer(this.cloudCoverageOverlay)) {
+        this.cloudCoverageOverlay.addTo(this.map)
+      }
+    },
+
+    clearCloudCoverageOverlay() {
+      this.cloudCoverageRequestId += 1
+      this.cloudCoverageLoading = false
+      this.cloudCoverageError = null
+
+      if (this.cloudCoverageOverlay && this.map?.hasLayer(this.cloudCoverageOverlay)) {
+        this.map.removeLayer(this.cloudCoverageOverlay)
+      }
+    },
+
+    startCloudCoverageRefresh() {
+      this.stopCloudCoverageRefresh()
+      this.cloudCoverageRefreshTimer = window.setInterval(() => {
+        void this.refreshCloudCoverageOverlay()
+      }, CLOUD_COVERAGE_REFRESH_MS)
+    },
+
+    stopCloudCoverageRefresh() {
+      if (this.cloudCoverageRefreshTimer) {
+        clearInterval(this.cloudCoverageRefreshTimer)
+        this.cloudCoverageRefreshTimer = null
+      }
+    },
+
+    async refreshCloudCoverageOverlay() {
+      if (!this.showCloudCoverage || !this.map) return
+
+      const requestId = ++this.cloudCoverageRequestId
+      this.cloudCoverageLoading = true
+      this.cloudCoverageError = null
+
+      try {
+        const samplePoints = this.buildCloudCoverageSampleGrid()
+        const latitude = samplePoints.map((point) => point.latitude).join(',')
+        const longitude = samplePoints.map((point) => point.longitude).join(',')
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover&timezone=GMT`
+        const { data } = await axios.get(url, { timeout: 20000 })
+
+        if (requestId !== this.cloudCoverageRequestId || !this.showCloudCoverage) return
+
+        const values = this.normalizeCloudCoverageResponse(data)
+        if (values.length !== samplePoints.length) {
+          throw new Error('Open-Meteo returned incomplete cloud coverage data.')
+        }
+
+        const imageUrl = this.renderCloudCoverageOverlayDataUrl(values)
+        if (!imageUrl) {
+          throw new Error('Unable to render cloud coverage overlay.')
+        }
+
+        this.setCloudCoverageOverlay(imageUrl)
+      } catch (error) {
+        if (requestId !== this.cloudCoverageRequestId) return
+        this.cloudCoverageError = 'Open-Meteo cloud coverage is temporarily unavailable'
+        console.warn('Failed to load Open-Meteo cloud coverage overlay:', error)
+        if (this.cloudCoverageOverlay && this.map?.hasLayer(this.cloudCoverageOverlay)) {
+          this.map.removeLayer(this.cloudCoverageOverlay)
+        }
+      } finally {
+        if (requestId === this.cloudCoverageRequestId) {
+          this.cloudCoverageLoading = false
+        }
+      }
     },
 
     ensureMapBadgeLayer() {
@@ -5521,6 +5754,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.mobilePanelChart = null
     }
 
+    this.stopCloudCoverageRefresh()
+    this.clearCloudCoverageOverlay()
+
     if (this.mapBadgeLayer && this.map) {
       this.mapBadgeLayer.remove()
       this.mapBadgeLayer = null
@@ -5711,6 +5947,111 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .radio-pill input[type="radio"]:focus-visible + span {
   outline: 2px solid #ffffff;
   outline-offset: 4px;
+}
+
+.cloud-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.cloud-switch__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cloud-switch__track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.cloud-switch__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.35);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.cloud-switch__text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.cloud-switch__label {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #f4f4f4;
+}
+
+.cloud-switch__status {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.58);
+  transition: color 0.18s ease;
+}
+
+.cloud-switch:hover .cloud-switch__track {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.cloud-switch--active .cloud-switch__track {
+  background: linear-gradient(135deg, rgba(203, 213, 225, 0.9), rgba(148, 163, 184, 0.95));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.cloud-switch--active .cloud-switch__thumb {
+  transform: translateX(18px);
+  background: #0f172a;
+}
+
+.cloud-switch--active .cloud-switch__status {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.cloud-switch--loading .cloud-switch__track {
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.4), rgba(203, 213, 225, 0.3));
+}
+
+.cloud-switch--loading .cloud-switch__thumb {
+  animation: cloud-switch-pulse 1.1s ease-in-out infinite;
+}
+
+.cloud-switch__input:focus-visible + .cloud-switch__track {
+  outline: 2px solid rgba(255, 255, 255, 0.95);
+  outline-offset: 3px;
+}
+
+@keyframes cloud-switch-pulse {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.35);
+  }
+  50% {
+    box-shadow: 0 2px 10px rgba(255, 255, 255, 0.45);
+  }
 }
 
 /* Map layout */
@@ -6676,10 +7017,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 :global(.leaflet-interactive),
 :global(.leaflet-overlay-pane svg),
 :global(.leaflet-overlay-pane path),
+:global(.cloud-coverage-overlay),
 :global(.leaflet-clickable),
 :global(.leaflet-container),
 :global(.leaflet-container:focus) {
   outline: none !important;
+}
+
+:global(.cloud-coverage-overlay) {
+  mix-blend-mode: screen;
 }
 
 .leaflet-container {
@@ -6920,6 +7266,32 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   
   .controls label, .controls button {
     font-size: 11px;
+  }
+
+  .cloud-switch {
+    gap: 8px;
+  }
+
+  .cloud-switch__track {
+    width: 38px;
+    height: 22px;
+  }
+
+  .cloud-switch__thumb {
+    width: 16px;
+    height: 16px;
+  }
+
+  .cloud-switch--active .cloud-switch__thumb {
+    transform: translateX(16px);
+  }
+
+  .cloud-switch__label {
+    font-size: 13px;
+  }
+
+  .cloud-switch__status {
+    font-size: 10px;
   }
 
   .time-slider-overlay {
