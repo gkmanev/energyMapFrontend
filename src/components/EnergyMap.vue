@@ -28,24 +28,24 @@
               :class="[
                 'cloud-switch',
                 {
-                  'cloud-switch--active': showCloudCoverage,
-                  'cloud-switch--loading': cloudCoverageLoading
+                  'cloud-switch--active': showIrradianceLayer,
+                  'cloud-switch--loading': irradianceLayerLoading
                 }
               ]"
-              :title="cloudCoverageToggleTitle"
+              :title="irradianceLayerToggleTitle"
             >
               <input
-                v-model="showCloudCoverage"
+                v-model="showIrradianceLayer"
                 type="checkbox"
                 class="cloud-switch__input"
-                aria-label="Toggle cloud coverage overlay"
+                aria-label="Toggle tilted irradiance overlay"
               >
               <span class="cloud-switch__track" aria-hidden="true">
                 <span class="cloud-switch__thumb"></span>
               </span>
               <span class="cloud-switch__text">
-                <span class="cloud-switch__label">Clouds</span>
-                <span class="cloud-switch__status">{{ cloudCoverageToggleStateLabel }}</span>
+                <span class="cloud-switch__label">Irradiance</span>
+                <span class="cloud-switch__status">{{ irradianceLayerToggleStateLabel }}</span>
               </span>
             </label>
           </div>
@@ -725,9 +725,7 @@ L.Icon.Default.mergeOptions({
 })
 
 const generationCursorState = new Map()
-const CLOUD_COVERAGE_GRID_COLUMNS = 22
-const CLOUD_COVERAGE_GRID_ROWS = 14
-const CLOUD_COVERAGE_REFRESH_MS = 15 * 60 * 1000
+const IRRADIANCE_LAYER_REFRESH_MS = 15 * 60 * 1000
 
 const CURSOR_TOOLTIP_OFFSET = 32
 
@@ -827,12 +825,14 @@ export default {
 
       // Heatmap type controls - Price is default
       heatmapType: 'prices',
-      showCloudCoverage: false,
-      cloudCoverageOverlay: null,
-      cloudCoverageLoading: false,
-      cloudCoverageError: null,
-      cloudCoverageRequestId: 0,
-      cloudCoverageRefreshTimer: null,
+      showIrradianceLayer: false,
+      irradianceOverlayLayer: null,
+      irradianceSeriesByISO2: {},
+      irradianceLayerByISO2: {},
+      irradianceLayerLoading: false,
+      irradianceLayerError: null,
+      irradianceLayerRequestId: 0,
+      irradianceLayerRefreshTimer: null,
       isRefreshing: false,
       initialLoading: true,
       isMapUpdating: false,
@@ -969,24 +969,24 @@ export default {
       return !this.isLargeModalViewport
     },
 
-    cloudCoverageToggleTitle() {
-      if (this.cloudCoverageLoading) {
-        return 'Loading Open-Meteo cloud coverage'
+    irradianceLayerToggleTitle() {
+      if (this.irradianceLayerLoading) {
+        return 'Loading tilted irradiance overlay'
       }
-      if (this.cloudCoverageError) {
-        return this.cloudCoverageError
+      if (this.irradianceLayerError) {
+        return this.irradianceLayerError
       }
-      return 'Toggle Open-Meteo cloud coverage overlay'
+      return 'Toggle tilted irradiance overlay'
     },
 
-    cloudCoverageToggleStateLabel() {
-      if (this.cloudCoverageLoading) {
+    irradianceLayerToggleStateLabel() {
+      if (this.irradianceLayerLoading) {
         return 'Loading'
       }
-      if (this.cloudCoverageError) {
+      if (this.irradianceLayerError) {
         return 'Retry'
       }
-      return this.showCloudCoverage ? 'On' : 'Off'
+      return this.showIrradianceLayer ? 'On' : 'Off'
     },
     
     progressStyle() {
@@ -1353,19 +1353,22 @@ export default {
         this.updateGenerationCursorLines()
         this.updateMapBadges()
         void this.updateCapacityModalGenerationValues()
+        if (this.showIrradianceLayer && Object.keys(this.irradianceSeriesByISO2).length) {
+          this.applyIrradianceOverlay()
+        }
       },
     },
 
-    showCloudCoverage: {
+    showIrradianceLayer: {
       handler(enabled) {
         if (enabled) {
-          this.startCloudCoverageRefresh()
-          void this.refreshCloudCoverageOverlay()
+          this.startIrradianceLayerRefresh()
+          void this.refreshIrradianceLayerOverlay()
           return
         }
 
-        this.stopCloudCoverageRefresh()
-        this.clearCloudCoverageOverlay()
+        this.stopIrradianceLayerRefresh()
+        this.clearIrradianceLayerOverlay()
       }
     },
 
@@ -4837,15 +4840,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         this.map.createPane('flowsPane')
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
       }
-      this.ensureCloudCoveragePane()
+      this.ensureIrradiancePane()
 
       this.updateResponsiveZoom()
       this.updateMapBadges()
       this.map.on('zoomend moveend', this.handleMapViewportChange)
 
-      if (this.showCloudCoverage) {
-        this.startCloudCoverageRefresh()
-        void this.refreshCloudCoverageOverlay()
+      if (this.showIrradianceLayer) {
+        this.startIrradianceLayerRefresh()
+        void this.refreshIrradianceLayerOverlay()
       }
 
     },
@@ -4854,163 +4857,247 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.updateMapBadges()
     },
 
-    ensureCloudCoveragePane() {
-      if (!this.map || this.map.getPane('cloudCoveragePane')) return
-      this.map.createPane('cloudCoveragePane')
-      this.map.getPane('cloudCoveragePane').style.zIndex = 350
-      this.map.getPane('cloudCoveragePane').style.pointerEvents = 'none'
+    ensureIrradiancePane() {
+      if (!this.map || this.map.getPane('irradiancePane')) return
+      this.map.createPane('irradiancePane')
+      this.map.getPane('irradiancePane').style.zIndex = 350
+      this.map.getPane('irradiancePane').style.pointerEvents = 'none'
     },
 
-    buildCloudCoverageSampleGrid() {
-      const [[south, west], [north, east]] = this.europeBounds
-      const latStep = CLOUD_COVERAGE_GRID_ROWS > 1 ? (north - south) / (CLOUD_COVERAGE_GRID_ROWS - 1) : 0
-      const lngStep = CLOUD_COVERAGE_GRID_COLUMNS > 1 ? (east - west) / (CLOUD_COVERAGE_GRID_COLUMNS - 1) : 0
-      const points = []
+    normalizeIrradianceBulkResponse(payload) {
+      const result = {}
+      const countries = payload?.data || {}
 
-      for (let row = 0; row < CLOUD_COVERAGE_GRID_ROWS; row += 1) {
-        const latitude = Number((north - row * latStep).toFixed(2))
-        for (let col = 0; col < CLOUD_COVERAGE_GRID_COLUMNS; col += 1) {
-          const longitude = Number((west + col * lngStep).toFixed(2))
-          points.push({ latitude, longitude })
+      Object.entries(countries).forEach(([iso2, countryData]) => {
+        const series = Array.isArray(countryData?.items)
+          ? countryData.items
+              .map((item) => ({
+                timestamp: Date.parse(item?.datetime_utc),
+                irradiance: Math.round((Number(item?.irradiance_wm2) || 0) * 100) / 100
+              }))
+              .filter((point) => Number.isFinite(point.timestamp) && Number.isFinite(point.irradiance))
+              .sort((a, b) => a.timestamp - b.timestamp)
+          : []
+
+        if (series.length) {
+          result[iso2] = series
+        }
+      })
+
+      return result
+    },
+
+    getIrradianceValueForTimestamp(series, targetTimestamp) {
+      if (!Array.isArray(series) || !series.length) return null
+
+      const target = Number.isFinite(targetTimestamp) ? targetTimestamp : Date.now()
+      let nearestPoint = series[0]
+      let nearestDistance = Math.abs(series[0].timestamp - target)
+
+      for (const point of series) {
+        const distance = Math.abs(point.timestamp - target)
+        if (distance < nearestDistance) {
+          nearestPoint = point
+          nearestDistance = distance
         }
       }
 
-      return points
+      return nearestPoint?.irradiance ?? null
     },
 
-    normalizeCloudCoverageResponse(data) {
-      const locations = Array.isArray(data) ? data : [data]
-      return locations.map((location) => {
-        const currentCloudCover = location?.current?.cloud_cover
-        const hourlyCloudCover = Array.isArray(location?.hourly?.cloud_cover)
-          ? location.hourly.cloud_cover[0]
-          : null
-        const value = Number.isFinite(currentCloudCover) ? currentCloudCover : hourlyCloudCover
-        return Number.isFinite(value) ? value : 0
-      })
-    },
+    buildIrradianceSnapshot() {
+      const snapshot = {}
+      const targetTimestamp = Number(this.currentTimestamp)
 
-    renderCloudCoverageOverlayDataUrl(values) {
-      const pixelCanvas = document.createElement('canvas')
-      pixelCanvas.width = CLOUD_COVERAGE_GRID_COLUMNS
-      pixelCanvas.height = CLOUD_COVERAGE_GRID_ROWS
-
-      const pixelContext = pixelCanvas.getContext('2d')
-      if (!pixelContext) return null
-
-      const imageData = pixelContext.createImageData(CLOUD_COVERAGE_GRID_COLUMNS, CLOUD_COVERAGE_GRID_ROWS)
-
-      values.forEach((rawValue, index) => {
-        const boundedValue = Math.max(0, Math.min(100, Number(rawValue) || 0))
-        const intensity = boundedValue / 100
-        const alpha = Math.round(Math.pow(intensity, 1.15) * 230)
-        const offset = index * 4
-
-        imageData.data[offset] = Math.round(214 + intensity * 26)
-        imageData.data[offset + 1] = Math.round(224 + intensity * 22)
-        imageData.data[offset + 2] = Math.round(236 + intensity * 18)
-        imageData.data[offset + 3] = alpha
+      Object.entries(this.irradianceSeriesByISO2).forEach(([iso2, series]) => {
+        const value = this.getIrradianceValueForTimestamp(series, targetTimestamp)
+        if (Number.isFinite(value)) {
+          snapshot[iso2] = value
+        }
       })
 
-      pixelContext.putImageData(imageData, 0, 0)
-
-      const displayCanvas = document.createElement('canvas')
-      displayCanvas.width = CLOUD_COVERAGE_GRID_COLUMNS * 28
-      displayCanvas.height = CLOUD_COVERAGE_GRID_ROWS * 28
-
-      const displayContext = displayCanvas.getContext('2d')
-      if (!displayContext) return null
-
-      displayContext.imageSmoothingEnabled = true
-      displayContext.globalAlpha = 0.9
-      displayContext.drawImage(pixelCanvas, 0, 0, displayCanvas.width, displayCanvas.height)
-
-      return displayCanvas.toDataURL('image/png')
+      return snapshot
     },
 
-    setCloudCoverageOverlay(imageUrl) {
-      if (!this.map || !imageUrl) return
-      this.ensureCloudCoveragePane()
+    getIrradianceOverlayColor(value) {
+      const normalized = Math.max(0, Math.min(1, value / 800))
+      const hue = 52 - normalized * 14
+      const saturation = 88
+      const lightness = 60 - normalized * 10
+      return `hsl(${hue} ${saturation}% ${lightness}%)`
+    },
 
-      if (!this.cloudCoverageOverlay) {
-        this.cloudCoverageOverlay = L.imageOverlay(imageUrl, this.europeBounds, {
-          pane: 'cloudCoveragePane',
-          opacity: 0.82,
-          interactive: false,
-          className: 'cloud-coverage-overlay'
+    getIrradianceOverlayPoints() {
+      return Object.entries(this.irradianceLayerByISO2)
+        .map(([iso2, value]) => {
+          const center = this.getCountryCenter(iso2)
+          if (!center || !Number.isFinite(value) || value <= 0) return null
+          return {
+            lat: center[0],
+            lng: center[1],
+            value
+          }
         })
-        this.cloudCoverageOverlay.addTo(this.map)
-        return
+        .filter(Boolean)
+    },
+
+    getIrradianceOverlayRgba(value, maxValue) {
+      const normalized = maxValue > 0 ? Math.max(0, Math.min(1, value / maxValue)) : 0
+      const referenceScale = Math.max(0, Math.min(1, value / 800))
+      if (referenceScale < 0.04) return [0, 0, 0, 0]
+
+      let r
+      let g
+      let b
+      if (referenceScale < 0.5) {
+        const stage = referenceScale / 0.5
+        r = 255
+        g = Math.round(255 - stage * 55)
+        b = Math.round(230 - stage * 230)
+      } else {
+        const stage = (referenceScale - 0.5) / 0.5
+        r = 255
+        g = Math.round(200 - stage * 130)
+        b = 0
       }
 
-      this.cloudCoverageOverlay.setBounds(this.europeBounds)
-      this.cloudCoverageOverlay.setUrl(imageUrl)
-      if (!this.map.hasLayer(this.cloudCoverageOverlay)) {
-        this.cloudCoverageOverlay.addTo(this.map)
+      const alpha = Math.round(40 + Math.max(normalized, referenceScale) * 175)
+      return [r, g, b, alpha]
+    },
+
+    renderIrradianceOverlayDataUrl(points) {
+      if (!points.length) return null
+
+      const [[south, west], [north, east]] = this.europeBounds
+      const canvasWidth = 420
+      const canvasHeight = 320
+      const maxValue = Math.max(...points.map((point) => point.value), 1)
+      const canvas = document.createElement('canvas')
+      canvas.width = canvasWidth
+      canvas.height = canvasHeight
+
+      const context = canvas.getContext('2d')
+      if (!context) return null
+
+      const image = context.createImageData(canvasWidth, canvasHeight)
+
+      for (let py = 0; py < canvasHeight; py += 1) {
+        for (let px = 0; px < canvasWidth; px += 1) {
+          const lat = north - (py / canvasHeight) * (north - south)
+          const lng = west + (px / canvasWidth) * (east - west)
+
+          let weightSum = 0
+          let valueSum = 0
+
+          for (const point of points) {
+            const dLat = lat - point.lat
+            const dLng = lng - point.lng
+            const distanceSquared = dLat * dLat + dLng * dLng
+
+            if (distanceSquared < 0.0001) {
+              weightSum = 1
+              valueSum = point.value
+              break
+            }
+
+            const weight = 1 / (distanceSquared * distanceSquared)
+            weightSum += weight
+            valueSum += weight * point.value
+          }
+
+          const interpolatedValue = weightSum > 0 ? valueSum / weightSum : 0
+          const [r, g, b, a] = this.getIrradianceOverlayRgba(interpolatedValue, maxValue)
+          const index = (py * canvasWidth + px) * 4
+
+          image.data[index] = r
+          image.data[index + 1] = g
+          image.data[index + 2] = b
+          image.data[index + 3] = a
+        }
+      }
+
+      context.putImageData(image, 0, 0)
+      return canvas.toDataURL('image/png')
+    },
+
+    applyIrradianceOverlay() {
+      if (!this.map) return
+      this.ensureIrradiancePane()
+
+      if (this.irradianceOverlayLayer) {
+        this.irradianceOverlayLayer.remove()
+        this.irradianceOverlayLayer = null
+      }
+
+      this.irradianceLayerByISO2 = this.buildIrradianceSnapshot()
+      const points = this.getIrradianceOverlayPoints()
+      if (!points.length) return
+
+      const imageUrl = this.renderIrradianceOverlayDataUrl(points)
+      if (!imageUrl) return
+
+      this.irradianceOverlayLayer = L.imageOverlay(imageUrl, this.europeBounds, {
+        pane: 'irradiancePane',
+        opacity: 0.78,
+        interactive: false,
+        className: 'irradiance-overlay-image'
+      })
+      this.irradianceOverlayLayer.addTo(this.map)
+    },
+
+    clearIrradianceLayerOverlay() {
+      this.irradianceLayerRequestId += 1
+      this.irradianceLayerLoading = false
+      this.irradianceLayerError = null
+      this.irradianceSeriesByISO2 = {}
+      this.irradianceLayerByISO2 = {}
+
+      if (this.irradianceOverlayLayer && this.map?.hasLayer(this.irradianceOverlayLayer)) {
+        this.map.removeLayer(this.irradianceOverlayLayer)
+      }
+      this.irradianceOverlayLayer = null
+    },
+
+    startIrradianceLayerRefresh() {
+      this.stopIrradianceLayerRefresh()
+      this.irradianceLayerRefreshTimer = window.setInterval(() => {
+        void this.refreshIrradianceLayerOverlay()
+      }, IRRADIANCE_LAYER_REFRESH_MS)
+    },
+
+    stopIrradianceLayerRefresh() {
+      if (this.irradianceLayerRefreshTimer) {
+        clearInterval(this.irradianceLayerRefreshTimer)
+        this.irradianceLayerRefreshTimer = null
       }
     },
 
-    clearCloudCoverageOverlay() {
-      this.cloudCoverageRequestId += 1
-      this.cloudCoverageLoading = false
-      this.cloudCoverageError = null
+    async refreshIrradianceLayerOverlay() {
+      if (!this.showIrradianceLayer || !this.map) return
 
-      if (this.cloudCoverageOverlay && this.map?.hasLayer(this.cloudCoverageOverlay)) {
-        this.map.removeLayer(this.cloudCoverageOverlay)
-      }
-    },
-
-    startCloudCoverageRefresh() {
-      this.stopCloudCoverageRefresh()
-      this.cloudCoverageRefreshTimer = window.setInterval(() => {
-        void this.refreshCloudCoverageOverlay()
-      }, CLOUD_COVERAGE_REFRESH_MS)
-    },
-
-    stopCloudCoverageRefresh() {
-      if (this.cloudCoverageRefreshTimer) {
-        clearInterval(this.cloudCoverageRefreshTimer)
-        this.cloudCoverageRefreshTimer = null
-      }
-    },
-
-    async refreshCloudCoverageOverlay() {
-      if (!this.showCloudCoverage || !this.map) return
-
-      const requestId = ++this.cloudCoverageRequestId
-      this.cloudCoverageLoading = true
-      this.cloudCoverageError = null
+      const requestId = ++this.irradianceLayerRequestId
+      this.irradianceLayerLoading = true
+      this.irradianceLayerError = null
 
       try {
-        const samplePoints = this.buildCloudCoverageSampleGrid()
-        const latitude = samplePoints.map((point) => point.latitude).join(',')
-        const longitude = samplePoints.map((point) => point.longitude).join(',')
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=cloud_cover&timezone=GMT`
+        const url = 'https://api.visualize.energy/api/generation-irradiance/bulk-range/?period=today'
         const { data } = await axios.get(url, { timeout: 20000 })
 
-        if (requestId !== this.cloudCoverageRequestId || !this.showCloudCoverage) return
+        if (requestId !== this.irradianceLayerRequestId || !this.showIrradianceLayer) return
 
-        const values = this.normalizeCloudCoverageResponse(data)
-        if (values.length !== samplePoints.length) {
-          throw new Error('Open-Meteo returned incomplete cloud coverage data.')
-        }
-
-        const imageUrl = this.renderCloudCoverageOverlayDataUrl(values)
-        if (!imageUrl) {
-          throw new Error('Unable to render cloud coverage overlay.')
-        }
-
-        this.setCloudCoverageOverlay(imageUrl)
+        this.irradianceSeriesByISO2 = this.normalizeIrradianceBulkResponse(data)
+        this.applyIrradianceOverlay()
       } catch (error) {
-        if (requestId !== this.cloudCoverageRequestId) return
-        this.cloudCoverageError = 'Open-Meteo cloud coverage is temporarily unavailable'
-        console.warn('Failed to load Open-Meteo cloud coverage overlay:', error)
-        if (this.cloudCoverageOverlay && this.map?.hasLayer(this.cloudCoverageOverlay)) {
-          this.map.removeLayer(this.cloudCoverageOverlay)
+        if (requestId !== this.irradianceLayerRequestId) return
+        this.irradianceLayerError = 'Tilted irradiance overlay is temporarily unavailable'
+        console.warn('Failed to load tilted irradiance overlay:', error)
+        if (this.irradianceOverlayLayer && this.map?.hasLayer(this.irradianceOverlayLayer)) {
+          this.map.removeLayer(this.irradianceOverlayLayer)
         }
+        this.irradianceOverlayLayer = null
       } finally {
-        if (requestId === this.cloudCoverageRequestId) {
-          this.cloudCoverageLoading = false
+        if (requestId === this.irradianceLayerRequestId) {
+          this.irradianceLayerLoading = false
         }
       }
     },
@@ -5754,8 +5841,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.mobilePanelChart = null
     }
 
-    this.stopCloudCoverageRefresh()
-    this.clearCloudCoverageOverlay()
+    this.stopIrradianceLayerRefresh()
+    this.clearIrradianceLayerOverlay()
 
     if (this.mapBadgeLayer && this.map) {
       this.mapBadgeLayer.remove()
@@ -6017,10 +6104,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .cloud-switch--active .cloud-switch__track {
-  background: linear-gradient(135deg, rgba(203, 213, 225, 0.9), rgba(148, 163, 184, 0.95));
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.96), rgba(249, 115, 22, 0.92));
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+    inset 0 0 0 1px rgba(255, 248, 220, 0.28),
+    0 0 0 1px rgba(251, 191, 36, 0.18);
 }
 
 .cloud-switch--active .cloud-switch__thumb {
@@ -7017,15 +7104,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 :global(.leaflet-interactive),
 :global(.leaflet-overlay-pane svg),
 :global(.leaflet-overlay-pane path),
-:global(.cloud-coverage-overlay),
+:global(.irradiance-overlay-image),
 :global(.leaflet-clickable),
 :global(.leaflet-container),
 :global(.leaflet-container:focus) {
   outline: none !important;
 }
 
-:global(.cloud-coverage-overlay) {
+:global(.irradiance-overlay-image) {
   mix-blend-mode: screen;
+  filter: saturate(1.08) brightness(1.02);
 }
 
 .leaflet-container {
