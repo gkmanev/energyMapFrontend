@@ -95,6 +95,18 @@
                 ref="geoJsonLayer"
               />
             </LMap>
+            <div
+              v-show="showIrradianceLayer"
+              class="irradiance-legend"
+            >
+              <div class="irradiance-legend__title">Irradiance W/m²</div>
+              <div class="irradiance-legend__bar"></div>
+              <div class="irradiance-legend__labels">
+                <span>0</span>
+                <span>400</span>
+                <span>800+</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -4860,7 +4872,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     ensureIrradiancePane() {
       if (!this.map || this.map.getPane('irradiancePane')) return
       this.map.createPane('irradiancePane')
-      this.map.getPane('irradiancePane').style.zIndex = 350
+      this.map.getPane('irradiancePane').style.zIndex = 430
       this.map.getPane('irradiancePane').style.pointerEvents = 'none'
     },
 
@@ -4952,16 +4964,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (referenceScale < 0.5) {
         const stage = referenceScale / 0.5
         r = 255
-        g = Math.round(255 - stage * 55)
-        b = Math.round(230 - stage * 230)
+        g = Math.round(248 - stage * 78)
+        b = Math.round(220 - stage * 220)
       } else {
         const stage = (referenceScale - 0.5) / 0.5
         r = 255
-        g = Math.round(200 - stage * 130)
+        g = Math.round(185 - stage * 155)
         b = 0
       }
 
-      const alpha = Math.round(40 + Math.max(normalized, referenceScale) * 175)
+      const alpha = Math.round(70 + Math.max(normalized, referenceScale) * 185)
       return [r, g, b, alpha]
     },
 
@@ -5038,7 +5050,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       this.irradianceOverlayLayer = L.imageOverlay(imageUrl, this.europeBounds, {
         pane: 'irradiancePane',
-        opacity: 0.78,
+        opacity: 0.92,
         interactive: false,
         className: 'irradiance-overlay-image'
       })
@@ -6650,8 +6662,56 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1 1 auto;
   min-width: 0;
   height: auto;
+  position: relative;
   display: flex;
   justify-content: center;
+}
+
+.irradiance-legend {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1260;
+  min-width: 148px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(10, 14, 28, 0.9);
+  border: 1px solid rgba(255, 185, 52, 0.24);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.irradiance-legend__title {
+  margin-bottom: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 185, 52, 0.95);
+}
+
+.irradiance-legend__bar {
+  height: 6px;
+  border-radius: 999px;
+  margin-bottom: 5px;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 220, 0.28),
+    rgba(251, 205, 52, 0.76),
+    rgba(255, 140, 0, 0.92),
+    rgba(230, 60, 0, 1)
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 220, 0.12);
+}
+
+.irradiance-legend__labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.52);
 }
 
 .map {
@@ -7265,6 +7325,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     padding: 0 4px;
   }
 
+  .irradiance-legend {
+    top: 10px;
+    right: 10px;
+    min-width: 132px;
+    padding: 9px 10px;
+  }
+
   .content-shell {
     padding-bottom: 140px;
   }
@@ -7380,6 +7447,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .cloud-switch__status {
     font-size: 10px;
+  }
+
+  .irradiance-legend {
+    top: 8px;
+    right: 8px;
+    min-width: 124px;
+    padding: 8px 9px;
+  }
+
+  .irradiance-legend__title {
+    font-size: 9px;
+  }
+
+  .irradiance-legend__labels {
+    font-size: 8px;
   }
 
   .time-slider-overlay {
