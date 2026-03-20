@@ -4973,7 +4973,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         b = 0
       }
 
-      const alpha = Math.round(70 + Math.max(normalized, referenceScale) * 185)
+      const alpha = Math.round(62 + Math.max(normalized, referenceScale) * 155)
       return [r, g, b, alpha]
     },
 
