@@ -94,70 +94,7 @@
 </template>
 
 <script>
-const EIC_BY_ISO = {
-  AL: '10YAL-KESH-----5',
-  AT: '10YAT-APG------L',
-  BA: '10YBA-JPCC-----D',
-  BE: '10YBE----------2',
-  BG: '10YCA-BULGARIA-R',
-  BY: '10Y1001A1001A51S',
-  CH: '10YCH-SWISSGRIDZ',
-  CY: '10YCY-1001A0003J',
-  CZ: '10YCZ-CEPS-----N',
-  DE: [
-    '10YDE-VE-------2', // 50Hertz
-    '10YDE-RWENET---I', // Amprion
-    '10YDE-EON------1', // TenneT GER
-    '10YDE-ENBW-----N', // TransnetBW
-  ],
-  DK: ['10YDK-1--------W', '10YDK-2--------M'],
-  EE: '10Y1001A1001A39I',
-  ES: '10YES-REE------0',
-  FI: '10YFI-1--------U',
-  FR: '10YFR-RTE------C',
-  GB: '10YGB----------A',
-  GR: '10YGR-HTSO-----Y',
-  HR: '10YHR-HEP------M',
-  HU: '10YHU-MAVIR----U',
-  IE: '10YIE-1001A00010',
-  LT: '10YLT-1001A0008Q',
-  LU: '10YLU-CEGEDEL-NQ',
-  LV: '10YLV-1001A00074',
-  MD: '10Y1001A1001A990',
-  ME: '10YCS-CG-TSO---S',
-  MK: '10YMK-MEPSO----8',
-  MT: '10Y1001A1001A93C',
-  NL: '10YNL----------L',
-  NO: [
-    '10YNO-1--------2', // NO1
-    '10YNO-2--------T', // NO2
-    '10YNO-3--------J', // NO3
-    '10YNO-4--------9', // NO4
-    '10Y1001A1001A48H', // NO5
-  ],
-  PL: '10YPL-AREA-----S',
-  PT: '10YPT-REN------W',
-  RO: '10YRO-TEL------P',
-  RS: '10YCS-SERBIATSOV',
-  SE: [
-    '10Y1001A1001A44P', // SE1
-    '10Y1001A1001A45N', // SE2
-    '10Y1001A1001A46L', // SE3
-    '10Y1001A1001A47J', // SE4
-  ],
-  SI: '10YSI-ELES-----O',
-  SK: '10YSK-SEPS-----K',
-  TR: '10YTR-TEIAS----W',
-  UA: '10Y1001C--00003F',
-  XK: '10Y1001C--00100H',
-  GE: '10Y1001A1001B012',
-}
-
-const ISO_BY_EIC = Object.entries(EIC_BY_ISO).reduce((acc, [iso, eic]) => {
-  const codes = Array.isArray(eic) ? eic : [eic]
-  for (const code of codes) acc[code] = iso
-  return acc
-}, {})
+import { FLOW_EIC_BY_ISO, FLOW_ISO_BY_EIC } from '@/utils/flowDomains'
 
 const COUNTRY_NEIGHBOURS = {
   AD: ['FR', 'ES'],
@@ -284,7 +221,11 @@ export default {
 
   computed: {
     centerEic() {
-      return EIC_BY_ISO[this.countryIso]
+      return FLOW_EIC_BY_ISO[this.countryIso]
+    },
+    centerEicCodes() {
+      const value = this.centerEic
+      return Array.isArray(value) ? value : value ? [value] : []
     },
     centerName() {
       return NAME_BY_ISO[this.countryIso] || this.countryIso
@@ -310,17 +251,18 @@ export default {
     },
     aggregated() {
       const res = {}
-      if (!this.centerEic) return res
+      if (!this.centerEicCodes.length) return res
+      const centerCodeSet = new Set(this.centerEicCodes)
       for (const row of this.latestItems) {
         const { out_domain_eic, in_domain_eic, quantity_mw } = row
         if (!quantity_mw) continue
-        if (out_domain_eic === this.centerEic) {
-          const iso = ISO_BY_EIC[in_domain_eic]
+        if (centerCodeSet.has(out_domain_eic)) {
+          const iso = FLOW_ISO_BY_EIC[in_domain_eic]
           if (!iso) continue
           if (!res[iso]) res[iso] = { import: 0, export: 0 }
           res[iso].export += quantity_mw
-        } else if (in_domain_eic === this.centerEic) {
-          const iso = ISO_BY_EIC[out_domain_eic]
+        } else if (centerCodeSet.has(in_domain_eic)) {
+          const iso = FLOW_ISO_BY_EIC[out_domain_eic]
           if (!iso) continue
           if (!res[iso]) res[iso] = { import: 0, export: 0 }
           res[iso].import += quantity_mw

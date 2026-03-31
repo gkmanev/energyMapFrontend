@@ -48,6 +48,30 @@
                 <span class="cloud-switch__status">{{ irradianceLayerToggleStateLabel }}</span>
               </span>
             </label>
+            <label
+              :class="[
+                'cloud-switch',
+                {
+                  'cloud-switch--active': showWindLayer,
+                  'cloud-switch--loading': windLayerLoading
+                }
+              ]"
+              :title="windLayerTitle"
+            >
+              <input
+                v-model="showWindLayer"
+                type="checkbox"
+                class="cloud-switch__input"
+                aria-label="Toggle wind particle layer"
+              >
+              <span class="cloud-switch__track" aria-hidden="true">
+                <span class="cloud-switch__thumb"></span>
+              </span>
+              <span class="cloud-switch__text">
+                <span class="cloud-switch__label">Wind</span>
+                <span class="cloud-switch__status">{{ windLayerStateLabel }}</span>
+              </span>
+            </label>
           </div>
           <div class="header-logo" aria-label="visualize.energy">
             <span class="logo-primary">visualize</span>
@@ -105,6 +129,13 @@
                 <span>0</span>
                 <span>400</span>
                 <span>800+</span>
+              </div>
+            </div>
+            <div v-show="showWindLayer" class="wind-legend">
+              <div class="wind-legend__title">Wind 120 m (m/s)</div>
+              <div class="wind-legend__bar"></div>
+              <div class="wind-legend__labels">
+                <span>0</span><span>7</span><span>12</span><span>18</span><span>25+</span>
               </div>
             </div>
           </div>
@@ -688,6 +719,16 @@ const BULK_REQUEST_CONFIG = {
   retryDelay: 1000
 }
 
+// Wind layer
+const WIND_GRID_LATS = [35, 40, 45, 50, 55, 60, 65, 70]
+const WIND_GRID_LONS = [-10, -3, 5, 13, 21, 30, 38]
+const WIND_GNC = WIND_GRID_LONS.length
+const WIND_N_PARTICLES = 2000
+const WIND_FIELD_RES = 7
+const WIND_SPEED_SCALE = 0.27
+const WIND_TRAIL_FADE = 0.042
+const WIND_REFRESH_MS = 15 * 60 * 1000
+
 import { defineAsyncComponent } from 'vue'
 const PowerFlow = defineAsyncComponent(() => import("@/components/PowerFlow.vue"));
 import LocalClock from "@/components/LocalClock.vue"
@@ -714,6 +755,7 @@ Chart.register(
 )
 import 'chartjs-adapter-date-fns'
 import axios from '@/services/axiosClient'
+import { FLOW_EIC_BY_ISO, FLOW_ISO_BY_EIC } from '@/utils/flowDomains'
 import { scaleSequential } from 'd3-scale'
 import {
   interpolateViridis,
@@ -809,6 +851,7 @@ export default {
       showFlows: true,
       flowsLayer: null,
       flowsData: {},                  // { "BG-RO": { [ts]: mw, ... }, ... }
+      latestRealFlowsByEdge: {},      // { "BG-RO": { value, timestamp } }
       flowEdges: [                    // pick the borders you want to visualize
         // Examples – add more as you wish:
         ['BG','RO'], ['BG','GR'], ['BG','RS'], ['BG','TR'], ['RO','HU'],
@@ -845,6 +888,18 @@ export default {
       irradianceLayerError: null,
       irradianceLayerRequestId: 0,
       irradianceLayerRefreshTimer: null,
+      // Wind layer
+      showWindLayer: false,
+      windLayerLoading: false,
+      windLayerError: null,
+      windCanvas: null,
+      windCtx: null,
+      windAnimFrame: null,
+      windParticles: [],
+      windField: null,
+      windGridSource: [],
+      windRefreshTimer: null,
+      windRequestId: 0,
       isRefreshing: false,
       initialLoading: true,
       isMapUpdating: false,
@@ -999,6 +1054,18 @@ export default {
         return 'Retry'
       }
       return this.showIrradianceLayer ? 'On' : 'Off'
+    },
+
+    windLayerTitle() {
+      if (this.windLayerLoading) return 'Loading wind data...'
+      if (this.windLayerError) return this.windLayerError
+      return 'Toggle animated wind particle layer'
+    },
+
+    windLayerStateLabel() {
+      if (this.windLayerLoading) return 'Loading'
+      if (this.windLayerError) return 'Retry'
+      return this.showWindLayer ? 'On' : 'Off'
     },
     
     progressStyle() {
@@ -1341,6 +1408,9 @@ export default {
           if (!this.hasCompleteCapacityCoverage()) {
             this.refreshAllCapacities()
           }
+          if (!Object.keys(this.latestRealFlowsByEdge || {}).length) {
+            void this.refreshLatestRealFlows()
+          }
         } else if (newType === 'generation') {
           if (this.availableGenerationTimestamps.length === 0) {
             this.refreshAllHistoricalGeneration()
@@ -1381,6 +1451,14 @@ export default {
 
         this.stopIrradianceLayerRefresh()
         this.clearIrradianceLayerOverlay()
+      }
+    },
+
+    showWindLayer(enabled) {
+      if (enabled) {
+        void this.startWindLayer()
+      } else {
+        this.stopWindLayer()
       }
     },
 
@@ -1941,9 +2019,108 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 },
 
     async refreshAllFlows() {
-      // Just synthesize for now
       this.generateFakeFlowsData()
+      await this.refreshLatestRealFlows()
+      this.$nextTick(() => {
+        void this.redrawFlowsWhenReady()
+      })
+    },
+    resolveConfiguredFlowEdge(sourceIso, targetIso) {
+      for (const [fromIso, toIso] of this.flowEdges) {
+        if (fromIso === sourceIso && toIso === targetIso) {
+          return { key: `${fromIso}-${toIso}`, sign: 1 }
+        }
+        if (fromIso === targetIso && toIso === sourceIso) {
+          return { key: `${fromIso}-${toIso}`, sign: -1 }
+        }
+      }
+      return null
+    },
+    collectLatestRealFlowRecord(countryIso, row, edgeStore) {
+      const domainCodes = FLOW_EIC_BY_ISO[countryIso]
+      const centerCodes = new Set(
+        (Array.isArray(domainCodes) ? domainCodes : [domainCodes]).filter(Boolean)
+      )
+      if (!centerCodes.size) return
 
+      const quantityMw = Number(row?.quantity_mw)
+      if (!Number.isFinite(quantityMw) || quantityMw <= 0) return
+
+      const outDomain = row?.out_domain_eic
+      const inDomain = row?.in_domain_eic
+      if (!outDomain || !inDomain) return
+
+      let sourceIso = null
+      let targetIso = null
+
+      if (centerCodes.has(outDomain)) {
+        sourceIso = countryIso
+        targetIso = FLOW_ISO_BY_EIC[inDomain] || null
+      } else if (centerCodes.has(inDomain)) {
+        sourceIso = FLOW_ISO_BY_EIC[outDomain] || null
+        targetIso = countryIso
+      } else {
+        return
+      }
+
+      if (!sourceIso || !targetIso || sourceIso === targetIso) return
+
+      const resolvedEdge = this.resolveConfiguredFlowEdge(sourceIso, targetIso)
+      if (!resolvedEdge) return
+
+      const parsedTimestamp = Date.parse(row?.datetime_utc || row?.timestamp || '')
+      const timestamp = Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now()
+      const signedValue = quantityMw * resolvedEdge.sign
+      const existing = edgeStore[resolvedEdge.key]
+
+      if (
+        !existing ||
+        timestamp > existing.timestamp ||
+        (timestamp === existing.timestamp && Math.abs(signedValue) > Math.abs(existing.value))
+      ) {
+        edgeStore[resolvedEdge.key] = {
+          value: signedValue,
+          timestamp
+        }
+      }
+    },
+    async refreshLatestRealFlows() {
+      const countries = [...new Set(this.flowEdges.flat())].filter((iso2) => FLOW_EIC_BY_ISO[iso2])
+      if (!countries.length) return
+
+      const latestByEdge = {}
+      const responses = await Promise.allSettled(
+        countries.map(async (iso2) => {
+          const url = `https://api.visualize.energy/api/flows/latest/?country=${encodeURIComponent(iso2)}&neighbors=1`
+          const { data } = await axios.get(url, { timeout: 20000 })
+          const items = Array.isArray(data?.items)
+            ? data.items
+            : Array.isArray(data?.data)
+              ? data.data
+              : []
+
+          return { iso2, items }
+        })
+      )
+
+      responses.forEach((response) => {
+        if (response.status !== 'fulfilled') {
+          console.warn('Failed to fetch latest cross-border flows:', response.reason)
+          return
+        }
+
+        const { iso2, items } = response.value
+        items.forEach((row) => {
+          this.collectLatestRealFlowRecord(iso2, row, latestByEdge)
+        })
+      })
+
+      if (Object.keys(latestByEdge).length) {
+        this.latestRealFlowsByEdge = latestByEdge
+        this.$nextTick(() => {
+          this.updateFlowsOverlay()
+        })
+      }
     },
     generateFakeFlowsData() {
       // Use your 48h timestamps from prices; if missing, synthesize them
@@ -2202,6 +2379,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const t = Math.min(mwAbs / max, 1)
       return 1 + Math.round(7 * Math.sqrt(t)) // sqrt for visual balance
     },
+    capacityFlowStrokeWidth(capacityMw, baseWidth = 0) {
+      const maxCapacity = Math.max(this.maxValue || 1, 1)
+      const safeCapacity = Math.max(Number(capacityMw) || 0, 0)
+      const t = Math.min(safeCapacity / maxCapacity, 1)
+      const scaledWidth = 5 + (18 * Math.pow(t, 0.65))
+      return Math.max(baseWidth + 5, Math.round(scaledWidth * 10) / 10)
+    },
 
     // Color by direction (A->B is positive)
     flowColor(mw) {
@@ -2211,7 +2395,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return '#9aa0a6'
     },
     // Build a tiny arrowhead polygon near the line end
-    makeArrowHead(pStart, pEnd, sizeMeters = 25000) {
+    makeArrowHead(pStart, pEnd, sizeMeters = 25000, { minPx = 6, maxPx = 14 } = {}) {
       // Convert lat/lng to Leaflet points at current zoom for simple math
       if (!this.map) return null
       const map = this.map
@@ -2227,7 +2411,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       // Convert size in meters to pixels (rough) using current scale
       const metersPerPixel = (40075017 * Math.cos((pEnd.lat*Math.PI)/180)) / Math.pow(2, this.map.getZoom()+8)
-      const px = Math.max(6, Math.min(14, sizeMeters / Math.max(metersPerPixel, 1)))
+      const px = Math.max(minPx, Math.min(maxPx, sizeMeters / Math.max(metersPerPixel, 1)))
 
       const left  = tip.add(perp.multiplyBy(px * 0.6)).subtract(unit.multiplyBy(px))
       const right = tip.subtract(perp.multiplyBy(px * 0.6)).subtract(unit.multiplyBy(px))
@@ -2235,16 +2419,183 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const toLatLng = (pt) => map.layerPointToLatLng(pt)
       return [ toLatLng(left), toLatLng(tip), toLatLng(right) ]
     },
-    async redrawFlowsWhenReady() {
-  // Wait up to ~2s for layers to attach
-  const needs = new Set(this.flowEdges.flat()) // ISO2 involved in flows
-  const have = () => [...needs].every(iso => this.layerByISO2[iso])
-  const start = performance.now()
-  while (!have() && performance.now() - start < 2000) {
-    await new Promise(r => setTimeout(r, 50))
-  }
+    getLatestFlowValue(edgeKey) {
+      const realFlow = this.latestRealFlowsByEdge?.[edgeKey]
+      if (Number.isFinite(realFlow?.value)) {
+        return realFlow.value
+      }
 
-},
+      const series = this.flowsData?.[edgeKey]
+      if (!series) return null
+
+      let latestTimestamp = -Infinity
+      let latestValue = null
+
+      Object.entries(series).forEach(([timestamp, value]) => {
+        const parsedTimestamp = Number(timestamp)
+        const parsedValue = Number(value)
+        if (!Number.isFinite(parsedTimestamp) || !Number.isFinite(parsedValue)) return
+        if (parsedTimestamp > latestTimestamp) {
+          latestTimestamp = parsedTimestamp
+          latestValue = parsedValue
+        }
+      })
+
+      return latestValue
+    },
+    buildCurvedFlowPoints(start, end, edgeKey, segments = 22) {
+      if (!this.map || !start || !end) return []
+
+      const startLatLng = L.latLng(start[0], start[1])
+      const endLatLng = L.latLng(end[0], end[1])
+      const startPoint = this.map.latLngToLayerPoint(startLatLng)
+      const endPoint = this.map.latLngToLayerPoint(endLatLng)
+      const delta = endPoint.subtract(startPoint)
+      const length = Math.max(Math.hypot(delta.x, delta.y), 1)
+      const unit = delta.multiplyBy(1 / length)
+      const perpendicular = L.point(-unit.y, unit.x)
+      const bendDirection = this._rand01(`curve:${edgeKey}`) >= 0.5 ? 1 : -1
+      const bendDepth = Math.max(18, Math.min(60, length * 0.18)) * bendDirection
+      const controlPoint = startPoint
+        .add(delta.multiplyBy(0.5))
+        .add(perpendicular.multiplyBy(bendDepth))
+
+      const points = []
+      for (let i = 0; i <= segments; i += 1) {
+        const t = i / segments
+        const oneMinusT = 1 - t
+        const x = (oneMinusT * oneMinusT * startPoint.x) +
+          (2 * oneMinusT * t * controlPoint.x) +
+          (t * t * endPoint.x)
+        const y = (oneMinusT * oneMinusT * startPoint.y) +
+          (2 * oneMinusT * t * controlPoint.y) +
+          (t * t * endPoint.y)
+        points.push(this.map.layerPointToLatLng(L.point(x, y)))
+      }
+
+      return points
+    },
+    clearFlowsOverlay() {
+      if (this.flowsLayer) {
+        this.flowsLayer.remove()
+        this.flowsLayer = null
+      }
+    },
+    updateFlowsOverlay() {
+      this.clearFlowsOverlay()
+
+      if (!this.map || !this.showFlows || this.heatmapType !== 'capacity') return
+      if (!Object.keys(this.flowsData || {}).length) return
+
+      const overlay = L.featureGroup()
+      const routeColor = '#718adb'
+      const capacityData = this.currentDataByISO2 || {}
+
+      this.flowEdges.forEach(([fromIso, toIso]) => {
+        const rawFlow = this.getLatestFlowValue(`${fromIso}-${toIso}`)
+        if (!Number.isFinite(rawFlow) || Math.abs(rawFlow) < 1) return
+
+        const sourceIso = rawFlow >= 0 ? fromIso : toIso
+        const targetIso = rawFlow >= 0 ? toIso : fromIso
+
+        if (!Number.isFinite(capacityData[sourceIso]) || !Number.isFinite(capacityData[targetIso])) {
+          return
+        }
+
+        const sourceCenter = this.getCountryCenter(sourceIso)
+        const targetCenter = this.getCountryCenter(targetIso)
+        if (!sourceCenter || !targetCenter) return
+
+        const curvePoints = this.buildCurvedFlowPoints(sourceCenter, targetCenter, `${sourceIso}-${targetIso}`)
+        if (curvePoints.length < 2) return
+
+        const strokeWidth = Math.max(2, this.flowStrokeWidth(Math.abs(rawFlow)))
+        const capacityStrokeWidth = this.capacityFlowStrokeWidth(capacityData[targetIso], strokeWidth)
+
+        overlay.addLayer(L.polyline(curvePoints, {
+          pane: 'flowsPane',
+          color: routeColor,
+          weight: capacityStrokeWidth,
+          opacity: 0.7,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false,
+          className: 'capacity-flow-route capacity-flow-route--capacity'
+        }))
+
+        overlay.addLayer(L.polyline(curvePoints, {
+          pane: 'flowsPane',
+          color: '#1f2e57',
+          weight: strokeWidth + 4,
+          opacity: 0.18,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false,
+          className: 'capacity-flow-route capacity-flow-route--glow'
+        }))
+
+        overlay.addLayer(L.polyline(curvePoints, {
+          pane: 'flowsPane',
+          color: routeColor,
+          weight: strokeWidth,
+          opacity: 0.96,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false,
+          className: 'capacity-flow-route'
+        }))
+
+        const arrowStart = curvePoints[Math.max(0, curvePoints.length - 4)]
+        const arrowEnd = curvePoints[curvePoints.length - 1]
+        const capacityArrowHead = this.makeArrowHead(
+          arrowStart,
+          arrowEnd,
+          18000 + capacityStrokeWidth * 2200,
+          { minPx: 9, maxPx: 22 }
+        )
+        if (capacityArrowHead?.length) {
+          overlay.addLayer(L.polygon(capacityArrowHead, {
+            pane: 'flowsPane',
+            color: routeColor,
+            fillColor: routeColor,
+            fillOpacity: 0.7,
+            weight: 1,
+            opacity: 0.7,
+            interactive: false,
+            className: 'capacity-flow-arrow capacity-flow-arrow--capacity'
+          }))
+        }
+
+        const arrowHead = this.makeArrowHead(arrowStart, arrowEnd, 14000 + strokeWidth * 1800)
+        if (arrowHead?.length) {
+          overlay.addLayer(L.polygon(arrowHead, {
+            pane: 'flowsPane',
+            color: routeColor,
+            fillColor: routeColor,
+            fillOpacity: 0.98,
+            weight: 1,
+            opacity: 0.98,
+            interactive: false,
+            className: 'capacity-flow-arrow'
+          }))
+        }
+      })
+
+      if (!overlay.getLayers().length) return
+
+      this.flowsLayer = overlay
+      this.flowsLayer.addTo(this.map)
+    },
+    async redrawFlowsWhenReady() {
+      // Wait up to ~2s for layers to attach
+      const needs = new Set(this.flowEdges.flat()) // ISO2 involved in flows
+      const have = () => [...needs].every(iso => this.layerByISO2[iso])
+      const start = performance.now()
+      while (!have() && performance.now() - start < 2000) {
+        await new Promise(r => setTimeout(r, 50))
+      }
+      this.updateFlowsOverlay()
+    },
 
     closeAllSeparateModals() {
       // Destroy charts to avoid leaks
@@ -4700,7 +5051,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         if (this.heatmapType === 'prices') {
           await this.refreshAllHistoricalPrices()
         } else if (this.heatmapType === 'capacity') {
-          await this.refreshAllCapacities()
+          await Promise.all([
+            this.refreshAllCapacities(),
+            this.refreshAllFlows()
+          ])
         } else if (this.heatmapType === 'generation') {
           await Promise.all([
             this.refreshAllHistoricalGeneration(),
@@ -4844,6 +5198,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           console.warn('Error updating layer styles:', error)
         }
       }
+      this.updateFlowsOverlay()
     },
 
     onMapReady(mapObject) {
@@ -4851,22 +5206,29 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!this.map.getPane('flowsPane')) {
         this.map.createPane('flowsPane')
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
+        this.map.getPane('flowsPane').style.pointerEvents = 'none'
       }
       this.ensureIrradiancePane()
 
       this.updateResponsiveZoom()
       this.updateMapBadges()
       this.map.on('zoomend moveend', this.handleMapViewportChange)
+      this.map.on('moveend zoomend', this.onWindMapViewportChange)
+      void this.redrawFlowsWhenReady()
 
       if (this.showIrradianceLayer) {
         this.startIrradianceLayerRefresh()
         void this.refreshIrradianceLayerOverlay()
+      }
+      if (this.showWindLayer) {
+        void this.startWindLayer()
       }
 
     },
 
     handleMapViewportChange() {
       this.updateMapBadges()
+      this.updateFlowsOverlay()
     },
 
     ensureIrradiancePane() {
@@ -5640,6 +6002,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.updateMobileState()
       this.syncSeparateModalModes()
       this.repositionSeparateModals()
+      if (this.showWindLayer) void this.onWindMapViewportChange()
 
     },
     autoArrangeSeparateModals() {
@@ -5803,6 +6166,304 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.mobilePanelISO2) {
         this.openMobilePricePanel(this.mobilePanelCountry, this.mobilePanelISO2)
       }
+    },
+
+    // Wind layer
+    async startWindLayer() {
+      if (!this.map) return
+      this.createWindCanvas()
+      await this.refreshWindData()
+      this.scheduleWindRefresh()
+    },
+
+    stopWindLayer() {
+      this.windRequestId += 1
+      this.stopWindAnimation()
+      this.scheduleWindRefresh(false)
+      this.windLayerLoading = false
+      this.windLayerError = null
+      this.windGridSource = []
+      this.windField = null
+      this.windParticles = []
+      if (this.windCtx && this.windCanvas) {
+        this.windCtx.clearRect(0, 0, this.windCanvas.width, this.windCanvas.height)
+      }
+      this.destroyWindCanvas()
+    },
+
+    scheduleWindRefresh(on = true) {
+      if (this.windRefreshTimer) {
+        clearInterval(this.windRefreshTimer)
+        this.windRefreshTimer = null
+      }
+      if (on) {
+        this.windRefreshTimer = window.setInterval(() => {
+          void this.refreshWindData()
+        }, WIND_REFRESH_MS)
+      }
+    },
+
+    createWindCanvas() {
+      if (!this.map || this.windCanvas) return
+      const container = this.map.getContainer()
+      const canvas = document.createElement('canvas')
+      canvas.className = 'wind-particle-canvas'
+      canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:620;mix-blend-mode:screen;border-radius:18px;'
+      canvas.width = container.clientWidth || 900
+      canvas.height = container.clientHeight || 600
+      container.appendChild(canvas)
+      this.windCanvas = canvas
+      this.windCtx = canvas.getContext('2d')
+    },
+
+    destroyWindCanvas() {
+      this.stopWindAnimation()
+      if (this.windCanvas?.parentElement) {
+        this.windCanvas.parentElement.removeChild(this.windCanvas)
+      }
+      this.windCanvas = null
+      this.windCtx = null
+    },
+
+    stopWindAnimation() {
+      if (this.windAnimFrame) {
+        cancelAnimationFrame(this.windAnimFrame)
+        this.windAnimFrame = null
+      }
+    },
+
+    resizeWindCanvas() {
+      if (!this.windCanvas || !this.map) return
+      const container = this.map.getContainer()
+      const width = container.clientWidth || 900
+      const height = container.clientHeight || 600
+      if (this.windCanvas.width !== width || this.windCanvas.height !== height) {
+        this.windCanvas.width = width
+        this.windCanvas.height = height
+        this.windParticles = []
+      }
+    },
+
+    async refreshWindData() {
+      if (!this.showWindLayer) return
+      const requestId = ++this.windRequestId
+      this.windLayerLoading = true
+      this.windLayerError = null
+      try {
+        const grid = await this.fetchWindGrid()
+        if (requestId !== this.windRequestId) return
+        this.windGridSource = grid
+        this.resizeWindCanvas()
+        this.buildWindField()
+        if (!this.windParticles.length) this.initWindParticles()
+        if (!this.windAnimFrame) this.animateWind()
+      } catch (error) {
+        if (requestId !== this.windRequestId) return
+        console.warn('Wind layer fetch error:', error)
+        this.windLayerError = 'Wind data temporarily unavailable'
+      } finally {
+        if (requestId === this.windRequestId) this.windLayerLoading = false
+      }
+    },
+
+    windFindCurrentHourIdx(times) {
+      if (!times?.length) return 0
+      const nowPrefix = new Date().toISOString().slice(0, 13)
+      const exact = times.findIndex(time => time.startsWith(nowPrefix))
+      return exact >= 0 ? exact : times.length - 1
+    },
+
+    async fetchWindGrid() {
+      const lats = WIND_GRID_LATS.flatMap(lat => WIND_GRID_LONS.map(() => lat))
+      const lons = WIND_GRID_LATS.flatMap(() => WIND_GRID_LONS)
+      const params = new URLSearchParams({
+        latitude: lats.join(','),
+        longitude: lons.join(','),
+        hourly: 'wind_speed_120m,wind_direction_120m',
+        wind_speed_unit: 'ms',
+        timezone: 'UTC',
+        forecast_days: '1',
+      })
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 14000)
+      try {
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json()
+        const entries = Array.isArray(data) ? data : [data]
+        return lats.map((lat, index) => {
+          const hourly = entries[index]?.hourly || {}
+          const times = hourly.time || []
+          const speedSeries = hourly.wind_speed_120m || []
+          const directionSeries = hourly.wind_direction_120m || []
+          const currentIndex = this.windFindCurrentHourIdx(times)
+          const speed = Number(speedSeries[currentIndex]) || 0
+          const direction = (Number(directionSeries[currentIndex]) || 0) * Math.PI / 180
+          return {
+            lat,
+            lng: lons[index],
+            u: -speed * Math.sin(direction),
+            v: -speed * Math.cos(direction),
+            spd: speed
+          }
+        })
+      } finally {
+        clearTimeout(timeoutId)
+      }
+    },
+
+    windGridInterp(lat, lng) {
+      const points = this.windGridSource
+      if (!points.length) return { u: 0, v: 0, spd: 0 }
+      const clampedLat = Math.max(WIND_GRID_LATS[0], Math.min(WIND_GRID_LATS[WIND_GRID_LATS.length - 1], lat))
+      const clampedLng = Math.max(WIND_GRID_LONS[0], Math.min(WIND_GRID_LONS[WIND_GRID_LONS.length - 1], lng))
+      let latIndex = 0
+      while (latIndex < WIND_GRID_LATS.length - 2 && WIND_GRID_LATS[latIndex + 1] < clampedLat) latIndex += 1
+      let lonIndex = 0
+      while (lonIndex < WIND_GRID_LONS.length - 2 && WIND_GRID_LONS[lonIndex + 1] < clampedLng) lonIndex += 1
+      const ty = (clampedLat - WIND_GRID_LATS[latIndex]) / (WIND_GRID_LATS[latIndex + 1] - WIND_GRID_LATS[latIndex])
+      const tx = (clampedLng - WIND_GRID_LONS[lonIndex]) / (WIND_GRID_LONS[lonIndex + 1] - WIND_GRID_LONS[lonIndex])
+      const gridPoint = (rowIndex, colIndex) => points[rowIndex * WIND_GNC + colIndex] || {}
+      const bilinear = key => (
+        (gridPoint(latIndex, lonIndex)[key] || 0) * (1 - tx) * (1 - ty) +
+        (gridPoint(latIndex, lonIndex + 1)[key] || 0) * tx * (1 - ty) +
+        (gridPoint(latIndex + 1, lonIndex)[key] || 0) * (1 - tx) * ty +
+        (gridPoint(latIndex + 1, lonIndex + 1)[key] || 0) * tx * ty
+      )
+      return { u: bilinear('u'), v: bilinear('v'), spd: bilinear('spd') }
+    },
+
+    buildWindField() {
+      if (!this.windGridSource.length || !this.windCanvas || !this.map) return
+      const width = this.windCanvas.width
+      const height = this.windCanvas.height
+      const cols = Math.ceil(width / WIND_FIELD_RES) + 2
+      const rows = Math.ceil(height / WIND_FIELD_RES) + 2
+      const vx = new Float32Array(cols * rows)
+      const vy = new Float32Array(cols * rows)
+      const spd = new Float32Array(cols * rows)
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          try {
+            const latLng = this.map.containerPointToLatLng([col * WIND_FIELD_RES, row * WIND_FIELD_RES])
+            const lat = latLng.lat
+            const lng = latLng.lng
+            if (lat < 25 || lat > 78 || lng < -28 || lng > 60) continue
+            const wind = this.windGridInterp(lat, lng)
+            if (wind.spd < 0.15) continue
+            const metersPerDegreeLon = 111320 * Math.cos(lat * Math.PI / 180)
+            const deltaLat = (wind.v / wind.spd) * 50000 / 111320
+            const deltaLon = (wind.u / wind.spd) * 50000 / Math.max(metersPerDegreeLon, 1)
+            const startPoint = this.map.latLngToContainerPoint([lat, lng])
+            const endPoint = this.map.latLngToContainerPoint([lat + deltaLat, lng + deltaLon])
+            const dx = endPoint.x - startPoint.x
+            const dy = endPoint.y - startPoint.y
+            const length = Math.hypot(dx, dy)
+            if (length < 0.01) continue
+            const index = row * cols + col
+            vx[index] = (dx / length) * wind.spd * WIND_SPEED_SCALE
+            vy[index] = (dy / length) * wind.spd * WIND_SPEED_SCALE
+            spd[index] = wind.spd
+          } catch (_) {
+            // Ignore projection errors outside the view.
+          }
+        }
+      }
+      this.windField = { vx, vy, spd, cols, rows }
+    },
+
+    windFieldAt(x, y) {
+      const field = this.windField
+      if (!field) return null
+      const col = x / WIND_FIELD_RES
+      const row = y / WIND_FIELD_RES
+      if (col < 0 || row < 0 || col >= field.cols - 1 || row >= field.rows - 1) return null
+      const c0 = col | 0
+      const r0 = row | 0
+      const tx = col - c0
+      const ty = row - r0
+      const i00 = r0 * field.cols + c0
+      const bilinear = array => (
+        array[i00] * (1 - tx) * (1 - ty) +
+        array[i00 + 1] * tx * (1 - ty) +
+        array[(r0 + 1) * field.cols + c0] * (1 - tx) * ty +
+        array[(r0 + 1) * field.cols + c0 + 1] * tx * ty
+      )
+      return { vx: bilinear(field.vx), vy: bilinear(field.vy), spd: bilinear(field.spd) }
+    },
+
+    windColor(spd, alpha = 0.9) {
+      const [r, g, b] = spd < 3 ? [70, 130, 255]
+        : spd < 7 ? [0, 210, 190]
+        : spd < 12 ? [100, 220, 70]
+        : spd < 18 ? [255, 200, 0]
+        : spd < 25 ? [255, 110, 10]
+        : [255, 50, 50]
+      return `rgba(${r},${g},${b},${Math.min(1, alpha).toFixed(2)})`
+    },
+
+    initWindParticles() {
+      if (!this.windCanvas) return
+      const { width, height } = this.windCanvas
+      this.windParticles = Array.from({ length: WIND_N_PARTICLES }, () => {
+        const maxAge = 80 + Math.random() * 100
+        return {
+          x: Math.random() * width,
+          y: Math.random() * height,
+          age: Math.random() * maxAge,
+          maxAge
+        }
+      })
+    },
+
+    animateWind() {
+      if (!this.showWindLayer || !this.windCtx || !this.windField || !this.windCanvas) return
+      const ctx = this.windCtx
+      const { width, height } = this.windCanvas
+      ctx.fillStyle = `rgba(0,0,0,${WIND_TRAIL_FADE})`
+      ctx.fillRect(0, 0, width, height)
+      const resetParticle = (particle) => {
+        particle.x = Math.random() * width
+        particle.y = Math.random() * height
+        particle.age = 0
+        particle.maxAge = 80 + Math.random() * 100
+      }
+      for (const particle of this.windParticles) {
+        const wind = this.windFieldAt(particle.x, particle.y)
+        if (!wind || Math.abs(wind.vx) + Math.abs(wind.vy) < 0.01) {
+          resetParticle(particle)
+          continue
+        }
+        const oldX = particle.x
+        const oldY = particle.y
+        particle.x += wind.vx
+        particle.y += wind.vy
+        particle.age += 1
+        if (
+          particle.x < 0 || particle.x > width ||
+          particle.y < 0 || particle.y > height ||
+          particle.age >= particle.maxAge
+        ) {
+          resetParticle(particle)
+          continue
+        }
+        const life = particle.age / particle.maxAge
+        const alpha = life < 0.08 ? life / 0.08 : life > 0.85 ? (1 - life) / 0.15 : 1
+        ctx.strokeStyle = this.windColor(wind.spd, alpha * 0.9)
+        ctx.lineWidth = wind.spd > 20 ? 1.7 : 1
+        ctx.beginPath()
+        ctx.moveTo(oldX, oldY)
+        ctx.lineTo(particle.x, particle.y)
+        ctx.stroke()
+      }
+      this.windAnimFrame = requestAnimationFrame(() => this.animateWind())
+    },
+
+    async onWindMapViewportChange() {
+      if (!this.showWindLayer || !this.windGridSource.length) return
+      this.resizeWindCanvas()
+      this.buildWindField()
+      if (!this.windParticles.length) this.initWindParticles()
     }
   },
 
@@ -5833,6 +6494,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   },
 
   beforeUnmount() {
+    this.stopWindLayer()
     window.removeEventListener('resize', this.handleWindowResize)
     window.removeEventListener('keydown', this.onKeydown)
     this.destroyCapacityChart()
@@ -5860,8 +6522,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.mapBadgeLayer.remove()
       this.mapBadgeLayer = null
     }
+    this.clearFlowsOverlay()
     if (this.map) {
       this.map.off('zoomend moveend', this.handleMapViewportChange)
+      this.map.off('moveend zoomend', this.onWindMapViewportChange)
     }
 
     // Clean up drag/resize listeners
@@ -8075,6 +8739,82 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1;
   position: relative;
   z-index: 1;
+}
+
+:deep(.capacity-flow-route) {
+  stroke-dasharray: 14 10;
+  animation: capacity-flow-dash 12s linear infinite;
+}
+
+:deep(.capacity-flow-route--glow) {
+  stroke-dasharray: none;
+  animation: none;
+}
+
+:deep(.capacity-flow-route--capacity) {
+  stroke-dasharray: none;
+  animation: none;
+}
+
+:deep(.capacity-flow-arrow) {
+  filter: drop-shadow(0 0 5px rgba(113, 138, 219, 0.45));
+}
+
+@keyframes capacity-flow-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -48;
+  }
+}
+
+:deep(.wind-particle-canvas) {
+  border-radius: 18px;
+}
+
+.wind-legend {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  z-index: 1260;
+  min-width: 148px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(10, 14, 28, 0.9);
+  border: 1px solid rgba(100, 160, 255, 0.22);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.wind-legend__title {
+  margin-bottom: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(130, 170, 255, 0.95);
+}
+
+.wind-legend__bar {
+  height: 6px;
+  border-radius: 999px;
+  margin-bottom: 5px;
+  background: linear-gradient(to right,
+    rgb(70,130,255), rgb(0,210,190),
+    rgb(100,220,70), rgb(255,200,0),
+    rgb(255,110,10), rgb(255,50,50));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+
+.wind-legend__labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.52);
 }
 
 </style>
