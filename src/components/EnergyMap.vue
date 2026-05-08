@@ -1000,7 +1000,7 @@ const generationCursorPlugin = {
   }
 }
 
-const AGENT_CHAT_WELCOME_MESSAGE = 'Ask about the current map mode, active overlays, or what the visible data means.'
+const AGENT_CHAT_WELCOME_MESSAGE = 'Ask about the energy data for different countries.'
 const AGENT_CHAT_SESSION_STORAGE_KEY = 'energy-map-agent-chat-session'
 const AGENT_CHART_QUERY_URL = 'https://api.visualize.energy/api/chart-query/'
 
