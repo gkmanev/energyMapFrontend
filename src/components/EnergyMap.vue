@@ -82,6 +82,19 @@
             <div class="header-clock">
               <LocalClock :timestamp="headerClockTimestamp" :show-date="selectedTimeRange === 'days'" />
             </div>
+            <div ref="agentChatMenu" class="agent-chat-menu">
+              <button
+                type="button"
+                class="agent-chat-toggle"
+                :class="{ 'agent-chat-toggle--active': showAgentChat }"
+                aria-haspopup="dialog"
+                :aria-expanded="showAgentChat ? 'true' : 'false'"
+                @click.stop="toggleAgentChat"
+              >
+                AI Agent
+                <span v-if="agentChatAwaitingClarification" class="agent-chat-toggle__badge">Clarify</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -97,6 +110,142 @@
 
           <!-- Map column -->
           <div class="map-col">
+            <transition name="agent-chat-pop">
+              <div
+                v-if="showAgentChat"
+                ref="agentChatPopover"
+                class="agent-chat-popover agent-chat-popover--map"
+                role="dialog"
+                aria-label="AI agent chat"
+                @click.stop
+              >
+                <div class="agent-chat-popover__header">
+                  <div class="agent-chat-popover__header-copy">
+                    <strong>Energy Agent</strong>
+                    <p>Quick map context and chart queries.</p>
+                    <div class="agent-chat-popover__status-row">
+                      <span v-if="agentChatAwaitingClarification" class="agent-chat-status-badge">
+                        Waiting for clarification
+                      </span>
+                      <span
+                        v-else-if="agentChatConversationId"
+                        class="agent-chat-status-badge agent-chat-status-badge--muted"
+                      >
+                        Conversation active
+                      </span>
+                    </div>
+                  </div>
+                  <div class="agent-chat-popover__header-actions">
+                    <button
+                      type="button"
+                      class="agent-chat-popover__clear"
+                      @click="clearAgentChat"
+                    >
+                      New conversation
+                    </button>
+                    <button
+                      type="button"
+                      class="agent-chat-popover__close"
+                      aria-label="Close AI agent chat"
+                      @click="closeAgentChat"
+                    >
+                      x
+                    </button>
+                  </div>
+                </div>
+
+                <div ref="agentChatBody" class="agent-chat-body">
+                  <div ref="agentChatMessages" class="agent-chat-messages">
+                    <div
+                      v-for="message in agentChatMessages"
+                      :key="message.id"
+                      :class="[
+                        'agent-chat-message',
+                        `agent-chat-message--${message.role}`
+                      ]"
+                    >
+                      {{ message.text }}
+                    </div>
+                    <div v-if="agentChatTyping" class="agent-chat-message agent-chat-message--assistant agent-chat-message--typing">
+                      Thinking...
+                    </div>
+                  </div>
+
+                  <div v-if="agentChatPendingClarification" class="agent-chat-clarification">
+                    <div class="agent-chat-clarification__label">Need more detail</div>
+                    <p>{{ agentChatPendingClarification.question }}</p>
+                    <div v-if="agentChatPendingClarification.missingFields.length" class="agent-chat-clarification__fields">
+                      <span
+                        v-for="field in agentChatPendingClarification.missingFields"
+                        :key="field"
+                        class="agent-chat-clarification__field"
+                      >
+                        {{ field }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div v-if="agentChatQuickReplies.length" class="agent-chat-quick-replies">
+                    <button
+                      v-for="reply in agentChatQuickReplies"
+                      :key="reply.prompt"
+                      type="button"
+                      :disabled="agentChatTyping"
+                      @click="sendAgentPrompt(reply.prompt)"
+                    >
+                      {{ reply.label }}
+                    </button>
+                  </div>
+
+                  <div v-if="agentChatPanels.length" class="agent-chat-results">
+                    <div v-if="agentChatLastQuery" class="agent-chat-query-summary">
+                      <span v-if="getAgentChartCountryLabel(agentChatLastQuery)" class="agent-chat-query-pill">
+                        {{ getAgentChartCountryLabel(agentChatLastQuery) }}
+                      </span>
+                      <span v-if="agentChatLastQuery.time_phrase" class="agent-chat-query-pill">{{ agentChatLastQuery.time_phrase }}</span>
+                      <span v-if="agentChatLastQuery.resolution" class="agent-chat-query-pill">
+                        {{ formatAgentResolutionLabel(agentChatLastQuery.resolution) }}
+                      </span>
+                    </div>
+
+                    <section
+                      v-for="panel in agentChatPanels"
+                      :key="panel._canvasId"
+                      class="agent-chat-panel"
+                    >
+                      <div class="agent-chat-panel__header">
+                        <div>
+                          <h4>{{ panel.title || panel.id }}</h4>
+                          <p>{{ panel.series?.length || 0 }} series</p>
+                        </div>
+                        <span class="agent-chat-panel__unit">{{ panel.unit || 'Value' }}</span>
+                      </div>
+                      <div class="chart-container agent-chat-chart-container">
+                        <canvas :id="panel._canvasId"></canvas>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+
+                <form class="agent-chat-form" @submit.prevent="sendAgentChatMessage">
+                  <input
+                    ref="agentChatInput"
+                    v-model.trim="agentChatInput"
+                    type="text"
+                    maxlength="240"
+                    class="agent-chat-form__input"
+                    :placeholder="agentChatInputPlaceholder"
+                  >
+                  <button
+                    type="submit"
+                    class="agent-chat-form__submit"
+                    :disabled="!agentChatInput || agentChatTyping"
+                  >
+                    Send
+                  </button>
+                </form>
+              </div>
+            </transition>
             <LMap
               :zoom="zoom"
               :center="center"
@@ -780,6 +929,21 @@ L.Icon.Default.mergeOptions({
 
 const generationCursorState = new Map()
 const IRRADIANCE_LAYER_REFRESH_MS = 15 * 60 * 1000
+const AGENT_CHART_PALETTE = [
+  { border: '#60a5fa', fill: 'rgba(96, 165, 250, 0.24)' },
+  { border: '#f59e0b', fill: 'rgba(245, 158, 11, 0.22)' },
+  { border: '#22c55e', fill: 'rgba(34, 197, 94, 0.22)' },
+  { border: '#f472b6', fill: 'rgba(244, 114, 182, 0.22)' },
+  { border: '#a78bfa', fill: 'rgba(167, 139, 250, 0.22)' },
+  { border: '#38bdf8', fill: 'rgba(56, 189, 248, 0.22)' }
+]
+
+const AGENT_SERIES_COLOR_HINTS = {
+  wind: { border: '#22c55e', fill: 'rgba(34, 197, 94, 0.22)' },
+  solar: { border: '#f5b000', fill: 'rgba(245, 176, 0, 0.24)' },
+  price: { border: '#60a5fa', fill: 'rgba(96, 165, 250, 0.24)' },
+  prices: { border: '#60a5fa', fill: 'rgba(96, 165, 250, 0.24)' }
+}
 
 const CURSOR_TOOLTIP_OFFSET = 32
 
@@ -834,6 +998,20 @@ const generationCursorPlugin = {
   afterDestroy(chart) {
     generationCursorState.delete(chart.id)
   }
+}
+
+const AGENT_CHAT_WELCOME_MESSAGE = 'Ask about the current map mode, active overlays, or what the visible data means.'
+const AGENT_CHAT_SESSION_STORAGE_KEY = 'energy-map-agent-chat-session'
+const AGENT_CHART_QUERY_URL = 'https://api.visualize.energy/api/chart-query/'
+
+function createInitialAgentChatMessages() {
+  return [
+    {
+      id: 1,
+      role: 'assistant',
+      text: AGENT_CHAT_WELCOME_MESSAGE
+    }
+  ]
 }
 
 export default {
@@ -904,6 +1082,18 @@ export default {
       initialLoading: true,
       isMapUpdating: false,
       isPlaying: false,
+      showAgentChat: false,
+      agentChatInput: '',
+      agentChatTyping: false,
+      agentChatCharts: [],
+      agentChatConversationId: null,
+      agentChatLastQuery: null,
+      agentChatStatus: 'idle',
+      agentChatPendingClarification: null,
+      agentChatPanels: [],
+      agentChatResponseKey: 0,
+      agentChatMessageIdCounter: 2,
+      agentChatMessages: createInitialAgentChatMessages(),
       playInterval: null,
       playSpeed: 500,
       selectedTimeRange: 'hours',
@@ -1081,6 +1271,49 @@ export default {
 
     shouldFloatTimeSlider() {
       return this.isMobileViewport && this.sliderFloatingEnabled
+    },
+
+    agentChatAwaitingClarification() {
+      return this.agentChatStatus === 'needs_clarification' && Boolean(this.agentChatPendingClarification?.question)
+    },
+
+    agentChatInputPlaceholder() {
+      return this.agentChatAwaitingClarification
+        ? 'Answer the clarification...'
+        : 'Ask for a chart...'
+    },
+
+    agentChatQuickReplies() {
+      const replies = []
+      const seen = new Set()
+      const missingFields = new Set(
+        (this.agentChatPendingClarification?.missingFields || [])
+          .map(field => String(field || '').trim().toLowerCase())
+          .filter(Boolean)
+      )
+
+      const addReply = (label, prompt = label) => {
+        const key = `${label}|${prompt}`.toLowerCase()
+        if (seen.has(key)) return
+        seen.add(key)
+        replies.push({ label, prompt })
+      }
+
+      const hasMissingField = (...values) => values.some(value => missingFields.has(value))
+
+      if (hasMissingField('metric', 'metrics')) {
+        ;['RES', 'wind', 'solar', 'prices'].forEach(label => addReply(label))
+      }
+
+      if (hasMissingField('country', 'countries')) {
+        ;['Bulgaria', 'Germany', 'France', 'Spain'].forEach(label => addReply(label))
+      }
+
+      if (hasMissingField('timeframe', 'period', 'date', 'date_range')) {
+        ;['today', 'last month', 'April'].forEach(label => addReply(label))
+      }
+
+      return replies
     },
     
     hasTimeData() {
@@ -1465,6 +1698,469 @@ export default {
   },
 
   methods: {
+    toggleAgentChat() {
+      if (this.showAgentChat) {
+        this.closeAgentChat()
+        return
+      }
+
+      this.openAgentChat()
+    },
+
+    async openAgentChat() {
+      this.showAgentChat = true
+      await nextTick()
+      if (this.agentChatPanels.length) {
+        this.renderAgentChatCharts()
+      }
+      this.focusAgentChatInput()
+      this.scrollAgentChatToBottom()
+    },
+
+    closeAgentChat() {
+      this.showAgentChat = false
+      this.agentChatTyping = false
+      this.destroyAgentChatCharts()
+    },
+
+    clearAgentChat() {
+      this.agentChatResponseKey += 1
+      this.agentChatInput = ''
+      this.agentChatTyping = false
+      this.agentChatConversationId = null
+      this.agentChatLastQuery = null
+      this.agentChatStatus = 'idle'
+      this.agentChatPendingClarification = null
+      this.destroyAgentChatCharts()
+      this.agentChatPanels = []
+      this.agentChatMessageIdCounter = 2
+      this.agentChatMessages = createInitialAgentChatMessages()
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem(AGENT_CHAT_SESSION_STORAGE_KEY)
+      }
+      this.$nextTick(() => {
+        this.scrollAgentChatToBottom()
+        this.focusAgentChatInput()
+      })
+    },
+
+    focusAgentChatInput() {
+      this.$refs.agentChatInput?.focus?.()
+    },
+
+    scrollAgentChatToBottom() {
+      const container = this.$refs.agentChatBody || this.$refs.agentChatMessages
+      if (!container) return
+      container.scrollTop = container.scrollHeight
+    },
+
+    pushAgentChatMessage(role, text) {
+      const content = String(text || '').trim()
+      if (!content) return
+
+      this.agentChatMessages.push({
+        id: this.agentChatMessageIdCounter++,
+        role,
+        text: content
+      })
+    },
+
+    mapAgentChatPanels(panels, responseKey = this.agentChatResponseKey) {
+      return (Array.isArray(panels) ? panels : [])
+        .filter(panel => panel && typeof panel === 'object')
+        .map((panel, index) => ({
+          ...panel,
+          _canvasId: panel._canvasId || `agent-chat-chart-${responseKey}-${index}`
+        }))
+    },
+
+    persistAgentChatSession() {
+      if (typeof window === 'undefined' || !window.sessionStorage) return
+
+      window.sessionStorage.setItem(
+        AGENT_CHAT_SESSION_STORAGE_KEY,
+        JSON.stringify({
+          conversationId: this.agentChatConversationId,
+          messages: this.agentChatMessages,
+          lastQuery: this.agentChatLastQuery,
+          status: this.agentChatStatus,
+          pendingClarification: this.agentChatPendingClarification,
+          panels: this.agentChatPanels,
+          responseKey: this.agentChatResponseKey,
+          messageIdCounter: this.agentChatMessageIdCounter
+        })
+      )
+    },
+
+    restoreAgentChatSession() {
+      if (typeof window === 'undefined' || !window.sessionStorage) return
+
+      const rawSession = window.sessionStorage.getItem(AGENT_CHAT_SESSION_STORAGE_KEY)
+      if (!rawSession) return
+
+      try {
+        const parsedSession = JSON.parse(rawSession)
+        const restoredResponseKey = Number(parsedSession?.responseKey)
+        const restoredMessages = Array.isArray(parsedSession?.messages)
+          ? parsedSession.messages
+              .filter(message => message && typeof message === 'object')
+              .map((message, index) => ({
+                id: Number.isFinite(Number(message.id)) ? Number(message.id) : index + 1,
+                role: message.role === 'user' ? 'user' : 'assistant',
+                text: String(message.text ?? message.content ?? '').trim()
+              }))
+              .filter(message => message.text)
+          : []
+        const highestMessageId = restoredMessages.reduce((maxId, message) => Math.max(maxId, message.id), 1)
+        const restoredCounter = Number(parsedSession?.messageIdCounter)
+        const question = String(parsedSession?.pendingClarification?.question || '').trim()
+        const missingFields = Array.isArray(parsedSession?.pendingClarification?.missingFields)
+          ? parsedSession.pendingClarification.missingFields
+              .map(field => String(field || '').trim())
+              .filter(Boolean)
+          : []
+        const normalizedStatus = String(parsedSession?.status || '').trim()
+
+        this.agentChatConversationId = parsedSession?.conversationId || null
+        this.agentChatLastQuery = parsedSession?.lastQuery || null
+        this.agentChatPendingClarification = question
+          ? { question, missingFields }
+          : null
+        this.agentChatStatus = normalizedStatus === 'loading'
+          ? (this.agentChatPendingClarification ? 'needs_clarification' : this.agentChatLastQuery ? 'ready' : 'idle')
+          : (normalizedStatus || (this.agentChatPendingClarification ? 'needs_clarification' : 'idle'))
+        this.agentChatPanels = this.mapAgentChatPanels(
+          parsedSession?.panels,
+          Number.isFinite(restoredResponseKey) ? restoredResponseKey : 0
+        )
+        this.agentChatResponseKey = Number.isFinite(restoredResponseKey) ? restoredResponseKey : 0
+        this.agentChatMessages = restoredMessages.length ? restoredMessages : createInitialAgentChatMessages()
+        this.agentChatMessageIdCounter = Math.max(
+          Number.isFinite(restoredCounter) ? restoredCounter : 2,
+          highestMessageId + 1,
+          2
+        )
+      } catch (error) {
+        console.warn('Unable to restore agent chat session:', error)
+        window.sessionStorage.removeItem(AGENT_CHAT_SESSION_STORAGE_KEY)
+      }
+    },
+
+    setAgentChatReadyState(payload, responseKey) {
+      this.agentChatConversationId = payload?.conversation_id || this.agentChatConversationId
+      this.agentChatStatus = 'ready'
+      this.agentChatLastQuery = payload?.query || null
+      this.agentChatPendingClarification = null
+      this.destroyAgentChatCharts()
+      this.agentChatPanels = this.mapAgentChatPanels(payload?.panels, responseKey)
+      this.pushAgentChatMessage(
+        'assistant',
+        payload?.assistant_message || this.buildAgentChartResponseMessage(payload)
+      )
+    },
+
+    setAgentChatClarificationState(payload) {
+      const question = String(
+        payload?.clarifying_question ||
+        payload?.assistant_message ||
+        'I need a bit more detail to build that chart.'
+      ).trim()
+      const missingFields = Array.isArray(payload?.clarification?.missing_fields)
+        ? payload.clarification.missing_fields
+            .map(field => String(field || '').trim())
+            .filter(Boolean)
+        : []
+
+      this.agentChatConversationId = payload?.conversation_id || this.agentChatConversationId
+      this.agentChatStatus = 'needs_clarification'
+      this.agentChatPendingClarification = { question, missingFields }
+      this.pushAgentChatMessage('assistant', question)
+    },
+
+    async sendAgentPrompt(prompt) {
+      if (this.agentChatTyping) return
+      this.agentChatInput = prompt
+      await this.sendAgentChatMessage()
+    },
+
+    async sendAgentChatMessage() {
+      const prompt = (this.agentChatInput || '').trim()
+      if (!prompt || this.agentChatTyping) return
+
+      const wasAwaitingClarification = this.agentChatAwaitingClarification
+
+      this.pushAgentChatMessage('user', prompt)
+      this.agentChatInput = ''
+      this.agentChatTyping = true
+      this.agentChatStatus = 'loading'
+      const responseKey = this.agentChatResponseKey + 1
+      this.agentChatResponseKey = responseKey
+      this.persistAgentChatSession()
+      await nextTick()
+      this.scrollAgentChatToBottom()
+
+      try {
+        const requestBody = { message: prompt }
+        if (this.agentChatConversationId) {
+          requestBody.conversation_id = this.agentChatConversationId
+        }
+
+        const { data } = await axios.post(AGENT_CHART_QUERY_URL, requestBody)
+
+        if (responseKey !== this.agentChatResponseKey) return
+
+        if (data?.status === 'ready') {
+          this.setAgentChatReadyState(data, responseKey)
+        } else if (data?.status === 'needs_clarification') {
+          this.setAgentChatClarificationState(data)
+        } else {
+          throw new Error(
+            data?.detail ||
+            data?.assistant_message ||
+            'Unexpected chart-query response.'
+          )
+        }
+      } catch (error) {
+        if (responseKey !== this.agentChatResponseKey) return
+
+        const errorMessage =
+          error?.response?.data?.detail ||
+          error?.response?.data?.message ||
+          error?.message ||
+          'Unable to fetch chart query results.'
+
+        this.agentChatStatus = wasAwaitingClarification && this.agentChatPendingClarification
+          ? 'needs_clarification'
+          : 'error'
+        this.pushAgentChatMessage('assistant', `Chart query failed: ${errorMessage}`)
+      } finally {
+        if (responseKey !== this.agentChatResponseKey) return
+
+        this.agentChatTyping = false
+        this.persistAgentChatSession()
+        await nextTick()
+        if (this.showAgentChat && this.agentChatPanels.length) {
+          this.renderAgentChatCharts()
+        }
+        this.scrollAgentChatToBottom()
+        this.focusAgentChatInput()
+      }
+    },
+
+    buildAgentChartResponseMessage(payload) {
+      const query = payload?.query || {}
+      const panels = Array.isArray(payload?.panels) ? payload.panels : []
+      const country = this.getAgentChartCountryLabel(query) || 'the requested country'
+      const timePhrase = query.time_phrase || 'the requested time range'
+
+      if (!panels.length) {
+        return `No chart panels were returned for ${country} over ${timePhrase}.`
+      }
+
+      const panelTitles = panels
+        .map(panel => panel?.title)
+        .filter(Boolean)
+        .join(', ')
+
+      return `Loaded ${panels.length} chart ${panels.length === 1 ? 'panel' : 'panels'} for ${country} over ${timePhrase}${panelTitles ? `: ${panelTitles}.` : '.'}`
+    },
+
+    getAgentChartCountryLabel(query) {
+      const countries = Array.isArray(query?.countries)
+        ? query.countries.map(country => String(country || '').trim()).filter(Boolean)
+        : []
+
+      if (countries.length > 1) {
+        return countries.join(' vs ')
+      }
+
+      if (countries.length === 1) {
+        return countries[0]
+      }
+
+      return query?.country || ''
+    },
+
+    formatAgentResolutionLabel(resolution) {
+      const labels = {
+        h: 'Hourly',
+        d: 'Daily',
+        w: 'Weekly',
+        m: 'Monthly',
+        y: 'Yearly'
+      }
+
+      return labels[resolution] || String(resolution || '').toUpperCase()
+    },
+
+    destroyAgentChatCharts() {
+      this.agentChatCharts.forEach(chart => chart?.destroy?.())
+      this.agentChatCharts = []
+    },
+
+    renderAgentChatCharts() {
+      this.destroyAgentChatCharts()
+      if (!this.agentChatPanels.length) return
+
+      this.agentChatPanels.forEach((panel, panelIndex) => {
+        const canvas = document.getElementById(panel._canvasId)
+        const context = canvas?.getContext?.('2d')
+        if (!context) return
+
+        const chart = markRaw(new Chart(context, this.buildAgentChartConfig(panel, panelIndex)))
+        this.agentChatCharts.push(chart)
+      })
+    },
+
+    buildAgentChartConfig(panel, panelIndex) {
+      const chartType = panel?.type === 'bar' ? 'bar' : 'line'
+      const xKey = panel?.x_key || 'datetime_utc'
+      const datasets = (panel?.series || []).map((series, seriesIndex) => {
+        const color = this.getAgentChartSeriesColor(series, panelIndex, seriesIndex)
+        const data = (series?.data || [])
+          .map(point => ({
+            x: Date.parse(point?.[xKey]),
+            y: Number(point?.value) || 0
+          }))
+          .filter(point => Number.isFinite(point.x))
+          .sort((a, b) => a.x - b.x)
+
+        return {
+          label: series?.name || series?.id || `Series ${seriesIndex + 1}`,
+          data,
+          borderColor: color.border,
+          backgroundColor: color.fill,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 3,
+          pointHitRadius: 14,
+          tension: 0.25,
+          fill: chartType === 'line' && (panel?.series?.length || 0) === 1,
+          spanGaps: true
+        }
+      })
+
+      const startUtc = Date.parse(this.agentChatLastQuery?.start_utc)
+      const endUtc = Date.parse(this.agentChatLastQuery?.end_utc)
+      const timeUnit = this.getAgentChartTimeUnit(this.agentChatLastQuery?.resolution)
+
+      return {
+        type: chartType,
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false,
+          normalized: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: datasets.length > 1,
+              position: 'bottom',
+              labels: {
+                color: '#e2e8f0',
+                usePointStyle: true,
+                pointStyle: 'circle',
+                boxWidth: 8,
+                boxHeight: 8
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(15, 23, 42, 0.92)',
+              titleColor: '#f8fafc',
+              bodyColor: '#e2e8f0',
+              borderColor: 'rgba(148, 163, 184, 0.35)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: timeUnit,
+                tooltipFormat: timeUnit === 'hour' ? 'dd/MM HH:mm' : 'dd/MM/yyyy'
+              },
+              min: Number.isFinite(startUtc) ? startUtc : undefined,
+              max: Number.isFinite(endUtc) ? endUtc : undefined,
+              grid: {
+                color: 'rgba(148, 163, 184, 0.14)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#cbd5f5'
+              }
+            },
+            y: {
+              beginAtZero: this.shouldAgentChartStartAtZero(panel),
+              title: {
+                display: Boolean(panel?.unit),
+                text: panel?.unit || 'Value',
+                color: '#f8fafc',
+                font: { size: 12, weight: 600 }
+              },
+              grid: {
+                color: 'rgba(148, 163, 184, 0.12)',
+                drawBorder: false
+              },
+              ticks: {
+                callback: value => Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value),
+                color: '#cbd5f5'
+              }
+            }
+          }
+        }
+      }
+    },
+
+    shouldAgentChartStartAtZero(panel) {
+      const unit = String(panel?.unit || '').toLowerCase()
+      return unit === 'mw' || unit === 'mwh'
+    },
+
+    getAgentChartTimeUnit(resolution) {
+      const unitByResolution = {
+        h: 'hour',
+        d: 'day',
+        w: 'week',
+        m: 'month',
+        y: 'year'
+      }
+
+      return unitByResolution[resolution] || 'day'
+    },
+
+    getAgentChartSeriesColor(series, panelIndex, seriesIndex) {
+      const seriesKey = String(series?.id || series?.name || '').trim().toLowerCase()
+
+      if (AGENT_SERIES_COLOR_HINTS[seriesKey]) {
+        return AGENT_SERIES_COLOR_HINTS[seriesKey]
+      }
+
+      if (seriesKey.includes('solar')) {
+        return AGENT_SERIES_COLOR_HINTS.solar
+      }
+
+      if (seriesKey.includes('wind')) {
+        return AGENT_SERIES_COLOR_HINTS.wind
+      }
+
+      if (seriesKey.includes('price')) {
+        return AGENT_SERIES_COLOR_HINTS.price
+      }
+
+      return AGENT_CHART_PALETTE[(panelIndex + seriesIndex) % AGENT_CHART_PALETTE.length]
+    },
+
+    handleAgentChatPointerDown(event) {
+      if (!this.showAgentChat) return
+      const buttonContainer = this.$refs.agentChatMenu
+      const popover = this.$refs.agentChatPopover
+      if (buttonContainer?.contains?.(event.target) || popover?.contains?.(event.target)) return
+      this.closeAgentChat()
+    },
+
     async selectTimeRange(range) {
       const isSameRange = this.selectedTimeRange === range
       this.pauseAnimation()
@@ -5889,6 +6585,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     onKeydown(e) {
+      if (e.key === 'Escape' && this.showAgentChat) {
+        this.closeAgentChat()
+        return
+      }
       if (e.key === 'Escape' && this.isModalOpen) this.closePanel()
     },
 
@@ -6474,6 +7174,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.updateMobileState()
       window.addEventListener('resize', this.handleWindowResize)
       window.addEventListener('keydown', this.onKeydown)
+      window.addEventListener('pointerdown', this.handleAgentChatPointerDown)
+      this.restoreAgentChatSession()
     this.initialLoading = true
     try {
       await this.loadCountriesData()
@@ -6493,12 +7195,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     
   },
 
-  beforeUnmount() {
-    this.stopWindLayer()
-    window.removeEventListener('resize', this.handleWindowResize)
-    window.removeEventListener('keydown', this.onKeydown)
-    this.destroyCapacityChart()
-    this.destroyGenerationChart()
+    beforeUnmount() {
+      this.persistAgentChatSession()
+      this.stopWindLayer()
+      this.destroyAgentChatCharts()
+      window.removeEventListener('resize', this.handleWindowResize)
+      window.removeEventListener('keydown', this.onKeydown)
+      window.removeEventListener('pointerdown', this.handleAgentChatPointerDown)
+      this.destroyCapacityChart()
+      this.destroyGenerationChart()
 
     // Clean up separate modal charts
     this.separateModals.forEach(modal => {
@@ -6639,6 +7344,368 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 12px;
   margin-left: auto;
   justify-content: flex-end;
+}
+
+.agent-chat-menu {
+  position: relative;
+}
+
+.agent-chat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(178, 128, 233, 0.4);
+  background: linear-gradient(135deg, rgba(38, 25, 61, 0.94), rgba(79, 47, 121, 0.92));
+  color: #f8f3ff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(16, 10, 28, 0.28);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.agent-chat-toggle__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.18);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.agent-chat-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(16, 10, 28, 0.34);
+  border-color: rgba(205, 175, 255, 0.58);
+}
+
+.agent-chat-toggle--active {
+  border-color: rgba(225, 210, 255, 0.76);
+  box-shadow: 0 14px 30px rgba(80, 47, 121, 0.38);
+}
+
+.agent-chat-popover {
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(14, 17, 30, 0.98), rgba(21, 28, 49, 0.96));
+  border: 1px solid rgba(178, 128, 233, 0.24);
+  box-shadow: 0 22px 44px rgba(2, 6, 23, 0.48);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.agent-chat-popover--map {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  width: auto;
+  max-width: none;
+  max-height: calc(100% - 28px);
+  display: flex;
+  flex-direction: column;
+  z-index: 1270;
+  overflow: hidden;
+}
+
+.agent-chat-popover__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.agent-chat-popover__header strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.agent-chat-popover__header p {
+  margin: 4px 0 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 11px;
+}
+
+.agent-chat-popover__status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.agent-chat-popover__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-chat-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.34);
+  color: #fde68a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-chat-status-badge--muted {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #cbd5f5;
+}
+
+.agent-chat-popover__clear {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.88);
+  color: #dbeafe;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agent-chat-popover__close {
+  border: none;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.72);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.agent-chat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.agent-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-chat-message {
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.agent-chat-message--assistant {
+  align-self: flex-start;
+  background: rgba(30, 41, 59, 0.92);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.agent-chat-message--user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, rgba(140, 92, 230, 0.96), rgba(105, 64, 180, 0.96));
+  color: #fff;
+}
+
+.agent-chat-message--typing {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.agent-chat-results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.agent-chat-clarification {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(42, 31, 8, 0.54);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.agent-chat-clarification__label {
+  color: #fde68a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agent-chat-clarification p {
+  margin: 0;
+  color: #fef3c7;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agent-chat-clarification__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-chat-clarification__field {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  color: #fde68a;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.agent-chat-quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-chat-quick-replies button {
+  border: 1px solid rgba(251, 191, 36, 0.26);
+  background: rgba(54, 40, 12, 0.92);
+  color: #fef3c7;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agent-chat-quick-replies button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-chat-query-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-chat-query-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: #dbeafe;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.agent-chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-chat-panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-chat-panel__header h4 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.agent-chat-panel__header p {
+  margin: 4px 0 0;
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 11px;
+}
+
+.agent-chat-panel__unit {
+  color: #cbd5f5;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agent-chat-chart-container {
+  height: 240px;
+  min-height: 240px;
+}
+
+.agent-chat-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agent-chat-form__input {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(8, 15, 32, 0.9);
+  color: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.agent-chat-form__input::placeholder {
+  color: rgba(226, 232, 240, 0.42);
+}
+
+.agent-chat-form__submit {
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #b280e9, #7c4ed8);
+  color: #fff;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agent-chat-form__submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-chat-pop-enter-active,
+.agent-chat-pop-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  transform-origin: top right;
+}
+
+.agent-chat-pop-enter-from,
+.agent-chat-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
 }
 .header h1 {
   margin: 0;
@@ -7983,6 +9050,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     margin-left: 0;
   }
 
+  .agent-chat-popover {
+    padding: 12px;
+  }
+
+  .agent-chat-popover--map {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+  }
+
+  .agent-chat-chart-container {
+    height: 210px;
+    min-height: 210px;
+  }
+
   .header-clock {
     font-size: 12px;
     width: auto;
@@ -8062,6 +9144,31 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .header-logo {
     font-size: 15px;
+  }
+
+  .agent-chat-toggle {
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+
+  .agent-chat-popover {
+    padding: 12px;
+  }
+
+  .agent-chat-popover--map {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+  }
+
+  .agent-chat-panel__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .agent-chat-chart-container {
+    height: 180px;
+    min-height: 180px;
   }
 
   .logo-highlight {
