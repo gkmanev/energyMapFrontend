@@ -9,93 +9,19 @@
     </div>
     <div class="layout-shell" :class="{ 'layout-shell--floating-header': shouldFloatHeader }">
       <div class="content-shell">
-        <div :class="['header', { 'header--floating': shouldFloatHeader }]">
-          <div class="controls">
-            <!-- Add toggle for heatmap type -->
-            <label class="radio-pill">
-              <input type="radio" v-model="heatmapType" value="prices">
-              <span>Price</span>
-            </label>
-            <label class="radio-pill">
-              <input type="radio" v-model="heatmapType" value="capacity">
-              <span>Capacity</span>
-            </label>
-            <label class="radio-pill">
-              <input type="radio" v-model="heatmapType" value="generation">
-              <span>Generation</span>
-            </label>
-            <label
-              :class="[
-                'cloud-switch',
-                {
-                  'cloud-switch--active': showIrradianceLayer,
-                  'cloud-switch--loading': irradianceLayerLoading
-                }
-              ]"
-              :title="irradianceLayerToggleTitle"
-            >
-              <input
-                v-model="showIrradianceLayer"
-                type="checkbox"
-                class="cloud-switch__input"
-                aria-label="Toggle tilted irradiance overlay"
-              >
-              <span class="cloud-switch__track" aria-hidden="true">
-                <span class="cloud-switch__thumb"></span>
-              </span>
-              <span class="cloud-switch__text">
-                <span class="cloud-switch__label">Irradiance</span>
-                <span class="cloud-switch__status">{{ irradianceLayerToggleStateLabel }}</span>
-              </span>
-            </label>
-            <label
-              :class="[
-                'cloud-switch',
-                {
-                  'cloud-switch--active': showWindLayer,
-                  'cloud-switch--loading': windLayerLoading
-                }
-              ]"
-              :title="windLayerTitle"
-            >
-              <input
-                v-model="showWindLayer"
-                type="checkbox"
-                class="cloud-switch__input"
-                aria-label="Toggle wind particle layer"
-              >
-              <span class="cloud-switch__track" aria-hidden="true">
-                <span class="cloud-switch__thumb"></span>
-              </span>
-              <span class="cloud-switch__text">
-                <span class="cloud-switch__label">Wind</span>
-                <span class="cloud-switch__status">{{ windLayerStateLabel }}</span>
-              </span>
-            </label>
-          </div>
-          <div class="header-logo" aria-label="visualize.energy">
-            <span class="logo-primary">visualize</span>
-            <span class="logo-dot">.</span>
-            <span class="logo-highlight">energy</span>
-          </div>
-          <div class="header-top">
-            <div class="header-clock">
-              <LocalClock :timestamp="headerClockTimestamp" :show-date="selectedTimeRange === 'days'" />
-            </div>
-            <div ref="agentChatMenu" class="agent-chat-menu">
-              <button
-                type="button"
-                class="agent-chat-toggle"
-                :class="{ 'agent-chat-toggle--active': showAgentChat }"
-                aria-haspopup="dialog"
-                :aria-expanded="showAgentChat ? 'true' : 'false'"
-                @click.stop="toggleAgentChat"
-              >
-                AI Agent
-                <span v-if="agentChatAwaitingClarification" class="agent-chat-toggle__badge">Clarify</span>
-              </button>
-            </div>
-          </div>
+        <div
+          ref="agentChatMenu"
+          :class="['header-shell', { 'header-shell--floating': shouldFloatHeader }]"
+        >
+          <AppHeader
+            v-model="headerActiveView"
+            :legend-unit="legendUnit"
+            :legend-min="headerLegendMin"
+            :legend-max="headerLegendMax"
+            :layers-value="{ irradiance: showIrradianceLayer, wind: showWindLayer }"
+            @layer-change="onHeaderLayerChange"
+            @open-agent="openAgentChat"
+          />
         </div>
 
         <!-- FLEX ROW: sidebar + map -->
@@ -124,11 +50,8 @@
                     <strong>Energy Agent</strong>
                     <p>Quick map context and chart queries.</p>
                     <div class="agent-chat-popover__status-row">
-                      <span v-if="agentChatAwaitingClarification" class="agent-chat-status-badge">
-                        Waiting for clarification
-                      </span>
                       <span
-                        v-else-if="agentChatConversationId"
+                        v-if="agentChatConversationId"
                         class="agent-chat-status-badge agent-chat-status-badge--muted"
                       >
                         Conversation active
@@ -171,57 +94,27 @@
                     </div>
                   </div>
 
-                  <div v-if="agentChatPendingClarification" class="agent-chat-clarification">
-                    <div class="agent-chat-clarification__label">Need more detail</div>
-                    <p>{{ agentChatPendingClarification.question }}</p>
-                    <div v-if="agentChatPendingClarification.missingFields.length" class="agent-chat-clarification__fields">
-                      <span
-                        v-for="field in agentChatPendingClarification.missingFields"
-                        :key="field"
-                        class="agent-chat-clarification__field"
-                      >
-                        {{ field }}
-                      </span>
+                  <div v-if="agentChatChartSpecs.length" class="agent-chat-results">
+                    <div v-if="agentChatChartsLoading" class="agent-chat-message agent-chat-message--assistant agent-chat-message--typing">
+                      Loading charts...
                     </div>
-                  </div>
-
-                  <div v-if="agentChatQuickReplies.length" class="agent-chat-quick-replies">
-                    <button
-                      v-for="reply in agentChatQuickReplies"
-                      :key="reply.prompt"
-                      type="button"
-                      :disabled="agentChatTyping"
-                      @click="sendAgentPrompt(reply.prompt)"
-                    >
-                      {{ reply.label }}
-                    </button>
-                  </div>
-
-                  <div v-if="agentChatPanels.length" class="agent-chat-results">
-                    <div v-if="agentChatLastQuery" class="agent-chat-query-summary">
-                      <span v-if="getAgentChartCountryLabel(agentChatLastQuery)" class="agent-chat-query-pill">
-                        {{ getAgentChartCountryLabel(agentChatLastQuery) }}
-                      </span>
-                      <span v-if="agentChatLastQuery.time_phrase" class="agent-chat-query-pill">{{ agentChatLastQuery.time_phrase }}</span>
-                      <span v-if="agentChatLastQuery.resolution" class="agent-chat-query-pill">
-                        {{ formatAgentResolutionLabel(agentChatLastQuery.resolution) }}
-                      </span>
-                    </div>
-
                     <section
-                      v-for="panel in agentChatPanels"
-                      :key="panel._canvasId"
+                      v-for="chartSpec in agentChatChartSpecs"
+                      :key="chartSpec._canvasId"
                       class="agent-chat-panel"
                     >
                       <div class="agent-chat-panel__header">
                         <div>
-                          <h4>{{ panel.title || panel.id }}</h4>
-                          <p>{{ panel.series?.length || 0 }} series</p>
+                          <h4>{{ chartSpec.title || buildAgentChartFallbackTitle(chartSpec) }}</h4>
+                          <p>{{ formatAgentChartSpecSummary(chartSpec) }}</p>
                         </div>
-                        <span class="agent-chat-panel__unit">{{ panel.unit || 'Value' }}</span>
+                        <span class="agent-chat-panel__unit">{{ getAgentChartUnit(chartSpec) }}</span>
                       </div>
-                      <div class="chart-container agent-chat-chart-container">
-                        <canvas :id="panel._canvasId"></canvas>
+                      <div v-if="chartSpec._renderError" class="agent-chat-panel__error">
+                        {{ chartSpec._renderError }}
+                      </div>
+                      <div v-else class="chart-container agent-chat-chart-container">
+                        <canvas :id="chartSpec._canvasId"></canvas>
                       </div>
                     </section>
                   </div>
@@ -880,7 +773,7 @@ const WIND_REFRESH_MS = 15 * 60 * 1000
 
 import { defineAsyncComponent } from 'vue'
 const PowerFlow = defineAsyncComponent(() => import("@/components/PowerFlow.vue"));
-import LocalClock from "@/components/LocalClock.vue"
+import AppHeader from "@/components/AppHeader.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import {
@@ -1002,7 +895,16 @@ const generationCursorPlugin = {
 
 const AGENT_CHAT_WELCOME_MESSAGE = 'Ask about the energy data for different countries.'
 const AGENT_CHAT_SESSION_STORAGE_KEY = 'energy-map-agent-chat-session'
-const AGENT_CHART_QUERY_URL = 'https://api.visualize.energy/api/chart-query/'
+const VISUALIZE_ENERGY_API_BASE_URL = 'https://api.visualize.energy/api'
+const AGENT_CHART_QUERY_URL = `${VISUALIZE_ENERGY_API_BASE_URL}/chart-query/`
+const AGENT_CHART_STATUS_VALUES = new Set(['chart', 'text'])
+const AGENT_CHART_DATA_UNITS = Object.freeze({
+  capacity: 'MW',
+  flows: 'MW',
+  generation: 'MW',
+  generation_res: 'MW',
+  prices: 'EUR/MWh'
+})
 
 function createInitialAgentChatMessages() {
   return [
@@ -1014,9 +916,32 @@ function createInitialAgentChatMessages() {
   ]
 }
 
+/**
+ * @typedef {Object} ChartSpec
+ * @property {string | null | undefined} [title]
+ * @property {string} data_type
+ * @property {string[]} countries
+ * @property {string[]} series
+ * @property {boolean} include_prices
+ * @property {string} start_utc
+ * @property {string} end_utc
+ * @property {string} resolution
+ * @property {string} chart_type
+ * @property {string | undefined} [country_from]
+ * @property {string | undefined} [country_to]
+ */
+
+/**
+ * @typedef {Object} EnergyChatResponse
+ * @property {string} conversation_id
+ * @property {'chart' | 'text'} status
+ * @property {string} text
+ * @property {ChartSpec[]} charts
+ */
+
 export default {
   name: 'EnergyMap',
-  components: { LMap, LTileLayer, LGeoJson, LocalClock, PowerFlow },
+  components: { AppHeader, LMap, LTileLayer, LGeoJson, PowerFlow },
 
   data() {
     return {
@@ -1086,11 +1011,10 @@ export default {
       agentChatInput: '',
       agentChatTyping: false,
       agentChatCharts: [],
+      agentChatChartsLoading: false,
       agentChatConversationId: null,
-      agentChatLastQuery: null,
       agentChatStatus: 'idle',
-      agentChatPendingClarification: null,
-      agentChatPanels: [],
+      agentChatChartSpecs: [],
       agentChatResponseKey: 0,
       agentChatMessageIdCounter: 2,
       agentChatMessages: createInitialAgentChatMessages(),
@@ -1273,47 +1197,10 @@ export default {
       return this.isMobileViewport && this.sliderFloatingEnabled
     },
 
-    agentChatAwaitingClarification() {
-      return this.agentChatStatus === 'needs_clarification' && Boolean(this.agentChatPendingClarification?.question)
-    },
-
     agentChatInputPlaceholder() {
-      return this.agentChatAwaitingClarification
-        ? 'Answer the clarification...'
+      return this.agentChatConversationId
+        ? 'Reply or ask for another chart...'
         : 'Ask for a chart...'
-    },
-
-    agentChatQuickReplies() {
-      const replies = []
-      const seen = new Set()
-      const missingFields = new Set(
-        (this.agentChatPendingClarification?.missingFields || [])
-          .map(field => String(field || '').trim().toLowerCase())
-          .filter(Boolean)
-      )
-
-      const addReply = (label, prompt = label) => {
-        const key = `${label}|${prompt}`.toLowerCase()
-        if (seen.has(key)) return
-        seen.add(key)
-        replies.push({ label, prompt })
-      }
-
-      const hasMissingField = (...values) => values.some(value => missingFields.has(value))
-
-      if (hasMissingField('metric', 'metrics')) {
-        ;['RES', 'wind', 'solar', 'prices'].forEach(label => addReply(label))
-      }
-
-      if (hasMissingField('country', 'countries')) {
-        ;['Bulgaria', 'Germany', 'France', 'Spain'].forEach(label => addReply(label))
-      }
-
-      if (hasMissingField('timeframe', 'period', 'date', 'date_range')) {
-        ;['today', 'last month', 'April'].forEach(label => addReply(label))
-      }
-
-      return replies
     },
     
     hasTimeData() {
@@ -1387,6 +1274,15 @@ export default {
           return 'Last 5 Years'
         default:
           return 'Last 48 Hours'
+      }
+    },
+
+    headerActiveView: {
+      get() {
+        return this.heatmapType === 'prices' ? 'price' : this.heatmapType
+      },
+      set(value) {
+        this.heatmapType = value === 'price' ? 'prices' : value
       }
     },
     
@@ -1572,6 +1468,18 @@ export default {
       if (this.heatmapType === 'generation') return 'MW'
       return 'MW'
     },
+
+    headerLegendMin() {
+      if (!Number.isFinite(this.minValue)) return 0
+      return Math.floor(this.minValue)
+    },
+
+    headerLegendMax() {
+      if (!Number.isFinite(this.maxValue)) {
+        return this.heatmapType === 'prices' ? 100 : 10000
+      }
+      return Math.ceil(this.maxValue)
+    },
     
     minValue() {
       const values = Object.values(this.currentDataByISO2)
@@ -1698,6 +1606,11 @@ export default {
   },
 
   methods: {
+    onHeaderLayerChange(layers) {
+      this.showIrradianceLayer = Boolean(layers?.irradiance)
+      this.showWindLayer = Boolean(layers?.wind)
+    },
+
     toggleAgentChat() {
       if (this.showAgentChat) {
         this.closeAgentChat()
@@ -1710,8 +1623,8 @@ export default {
     async openAgentChat() {
       this.showAgentChat = true
       await nextTick()
-      if (this.agentChatPanels.length) {
-        this.renderAgentChatCharts()
+      if (this.agentChatChartSpecs.length) {
+        await this.renderAgentChatCharts()
       }
       this.focusAgentChatInput()
       this.scrollAgentChatToBottom()
@@ -1727,12 +1640,11 @@ export default {
       this.agentChatResponseKey += 1
       this.agentChatInput = ''
       this.agentChatTyping = false
+      this.agentChatChartsLoading = false
       this.agentChatConversationId = null
-      this.agentChatLastQuery = null
       this.agentChatStatus = 'idle'
-      this.agentChatPendingClarification = null
       this.destroyAgentChatCharts()
-      this.agentChatPanels = []
+      this.agentChatChartSpecs = []
       this.agentChatMessageIdCounter = 2
       this.agentChatMessages = createInitialAgentChatMessages()
       if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -1765,13 +1677,57 @@ export default {
       })
     },
 
-    mapAgentChatPanels(panels, responseKey = this.agentChatResponseKey) {
-      return (Array.isArray(panels) ? panels : [])
-        .filter(panel => panel && typeof panel === 'object')
-        .map((panel, index) => ({
-          ...panel,
-          _canvasId: panel._canvasId || `agent-chat-chart-${responseKey}-${index}`
+    mapAgentChatChartSpecs(charts, responseKey = this.agentChatResponseKey) {
+      return (Array.isArray(charts) ? charts : [])
+        .filter(chart => chart && typeof chart === 'object')
+        .map((chart, index) => ({
+          title: chart.title == null ? null : String(chart.title).trim(),
+          data_type: String(chart.data_type || '').trim().toLowerCase(),
+          countries: Array.isArray(chart.countries)
+            ? chart.countries.map(country => String(country || '').trim().toUpperCase()).filter(Boolean)
+            : [],
+          series: Array.isArray(chart.series)
+            ? chart.series.map(series => String(series || '').trim().toLowerCase()).filter(Boolean)
+            : [],
+          include_prices: Boolean(chart.include_prices),
+          start_utc: String(chart.start_utc || '').trim(),
+          end_utc: String(chart.end_utc || '').trim(),
+          resolution: String(chart.resolution || '').trim().toLowerCase(),
+          chart_type: String(chart.chart_type || '').trim().toLowerCase() === 'bar' ? 'bar' : 'line',
+          country_from: String(chart.country_from || '').trim().toUpperCase(),
+          country_to: String(chart.country_to || '').trim().toUpperCase(),
+          _canvasId: chart._canvasId || `agent-chat-chart-${responseKey}-${index}`,
+          _renderError: null
         }))
+    },
+
+    parseEnergyChatResponse(payload, responseKey = this.agentChatResponseKey) {
+      if (!payload || typeof payload !== 'object') {
+        throw new Error('Unexpected chart-query response.')
+      }
+
+      if (typeof payload.conversation_id !== 'string') {
+        throw new Error('Unexpected chart-query response.')
+      }
+
+      if (!AGENT_CHART_STATUS_VALUES.has(payload.status)) {
+        throw new Error('Unexpected chart-query response.')
+      }
+
+      if (typeof payload.text !== 'string') {
+        throw new Error('Unexpected chart-query response.')
+      }
+
+      if (!Array.isArray(payload.charts)) {
+        throw new Error('Unexpected chart-query response.')
+      }
+
+      return /** @type {EnergyChatResponse} */ ({
+        conversation_id: payload.conversation_id,
+        status: payload.status,
+        text: payload.text,
+        charts: this.mapAgentChatChartSpecs(payload.charts, responseKey)
+      })
     },
 
     persistAgentChatSession() {
@@ -1782,10 +1738,8 @@ export default {
         JSON.stringify({
           conversationId: this.agentChatConversationId,
           messages: this.agentChatMessages,
-          lastQuery: this.agentChatLastQuery,
           status: this.agentChatStatus,
-          pendingClarification: this.agentChatPendingClarification,
-          panels: this.agentChatPanels,
+          chartSpecs: this.agentChatChartSpecs,
           responseKey: this.agentChatResponseKey,
           messageIdCounter: this.agentChatMessageIdCounter
         })
@@ -1813,24 +1767,14 @@ export default {
           : []
         const highestMessageId = restoredMessages.reduce((maxId, message) => Math.max(maxId, message.id), 1)
         const restoredCounter = Number(parsedSession?.messageIdCounter)
-        const question = String(parsedSession?.pendingClarification?.question || '').trim()
-        const missingFields = Array.isArray(parsedSession?.pendingClarification?.missingFields)
-          ? parsedSession.pendingClarification.missingFields
-              .map(field => String(field || '').trim())
-              .filter(Boolean)
-          : []
         const normalizedStatus = String(parsedSession?.status || '').trim()
 
         this.agentChatConversationId = parsedSession?.conversationId || null
-        this.agentChatLastQuery = parsedSession?.lastQuery || null
-        this.agentChatPendingClarification = question
-          ? { question, missingFields }
-          : null
         this.agentChatStatus = normalizedStatus === 'loading'
-          ? (this.agentChatPendingClarification ? 'needs_clarification' : this.agentChatLastQuery ? 'ready' : 'idle')
-          : (normalizedStatus || (this.agentChatPendingClarification ? 'needs_clarification' : 'idle'))
-        this.agentChatPanels = this.mapAgentChatPanels(
-          parsedSession?.panels,
+          ? 'idle'
+          : (normalizedStatus || 'idle')
+        this.agentChatChartSpecs = this.mapAgentChatChartSpecs(
+          parsedSession?.chartSpecs,
           Number.isFinite(restoredResponseKey) ? restoredResponseKey : 0
         )
         this.agentChatResponseKey = Number.isFinite(restoredResponseKey) ? restoredResponseKey : 0
@@ -1846,35 +1790,12 @@ export default {
       }
     },
 
-    setAgentChatReadyState(payload, responseKey) {
-      this.agentChatConversationId = payload?.conversation_id || this.agentChatConversationId
-      this.agentChatStatus = 'ready'
-      this.agentChatLastQuery = payload?.query || null
-      this.agentChatPendingClarification = null
+    applyAgentChatResponse(payload, responseKey) {
+      this.agentChatConversationId = payload.conversation_id || this.agentChatConversationId
+      this.agentChatStatus = payload.status
       this.destroyAgentChatCharts()
-      this.agentChatPanels = this.mapAgentChatPanels(payload?.panels, responseKey)
-      this.pushAgentChatMessage(
-        'assistant',
-        payload?.assistant_message || this.buildAgentChartResponseMessage(payload)
-      )
-    },
-
-    setAgentChatClarificationState(payload) {
-      const question = String(
-        payload?.clarifying_question ||
-        payload?.assistant_message ||
-        'I need a bit more detail to build that chart.'
-      ).trim()
-      const missingFields = Array.isArray(payload?.clarification?.missing_fields)
-        ? payload.clarification.missing_fields
-            .map(field => String(field || '').trim())
-            .filter(Boolean)
-        : []
-
-      this.agentChatConversationId = payload?.conversation_id || this.agentChatConversationId
-      this.agentChatStatus = 'needs_clarification'
-      this.agentChatPendingClarification = { question, missingFields }
-      this.pushAgentChatMessage('assistant', question)
+      this.agentChatChartSpecs = this.mapAgentChatChartSpecs(payload.charts, responseKey)
+      this.pushAgentChatMessage('assistant', payload.text)
     },
 
     async sendAgentPrompt(prompt) {
@@ -1887,11 +1808,10 @@ export default {
       const prompt = (this.agentChatInput || '').trim()
       if (!prompt || this.agentChatTyping) return
 
-      const wasAwaitingClarification = this.agentChatAwaitingClarification
-
       this.pushAgentChatMessage('user', prompt)
       this.agentChatInput = ''
       this.agentChatTyping = true
+      this.agentChatChartsLoading = false
       this.agentChatStatus = 'loading'
       const responseKey = this.agentChatResponseKey + 1
       this.agentChatResponseKey = responseKey
@@ -1906,32 +1826,22 @@ export default {
         }
 
         const { data } = await axios.post(AGENT_CHART_QUERY_URL, requestBody)
+        const response = this.parseEnergyChatResponse(data, responseKey)
 
         if (responseKey !== this.agentChatResponseKey) return
 
-        if (data?.status === 'ready') {
-          this.setAgentChatReadyState(data, responseKey)
-        } else if (data?.status === 'needs_clarification') {
-          this.setAgentChatClarificationState(data)
-        } else {
-          throw new Error(
-            data?.detail ||
-            data?.assistant_message ||
-            'Unexpected chart-query response.'
-          )
-        }
+        this.applyAgentChatResponse(response, responseKey)
       } catch (error) {
         if (responseKey !== this.agentChatResponseKey) return
 
         const errorMessage =
+          error?.response?.data?.error ||
           error?.response?.data?.detail ||
           error?.response?.data?.message ||
           error?.message ||
           'Unable to fetch chart query results.'
 
-        this.agentChatStatus = wasAwaitingClarification && this.agentChatPendingClarification
-          ? 'needs_clarification'
-          : 'error'
+        this.agentChatStatus = 'error'
         this.pushAgentChatMessage('assistant', `Chart query failed: ${errorMessage}`)
       } finally {
         if (responseKey !== this.agentChatResponseKey) return
@@ -1939,46 +1849,67 @@ export default {
         this.agentChatTyping = false
         this.persistAgentChatSession()
         await nextTick()
-        if (this.showAgentChat && this.agentChatPanels.length) {
-          this.renderAgentChatCharts()
+        if (this.showAgentChat && this.agentChatChartSpecs.length) {
+          await this.renderAgentChatCharts()
         }
         this.scrollAgentChatToBottom()
         this.focusAgentChatInput()
       }
     },
 
-    buildAgentChartResponseMessage(payload) {
-      const query = payload?.query || {}
-      const panels = Array.isArray(payload?.panels) ? payload.panels : []
-      const country = this.getAgentChartCountryLabel(query) || 'the requested country'
-      const timePhrase = query.time_phrase || 'the requested time range'
+    buildAgentChartFallbackTitle(chartSpec) {
+      const countryLabel = chartSpec.data_type === 'flows'
+        ? [chartSpec.country_from || chartSpec.countries[0], chartSpec.country_to || chartSpec.countries[1]]
+            .filter(Boolean)
+            .join(' -> ')
+        : chartSpec.countries.join(' vs ')
 
-      if (!panels.length) {
-        return `No chart panels were returned for ${country} over ${timePhrase}.`
+      switch (chartSpec.data_type) {
+        case 'prices':
+          return `${countryLabel || 'Requested'} day-ahead prices`
+        case 'capacity':
+          return `${countryLabel || 'Requested'} installed capacity`
+        case 'flows':
+          return `${countryLabel || 'Requested'} physical flows`
+        case 'generation_res':
+          return `${countryLabel || 'Requested'} renewable generation`
+        default:
+          return `${countryLabel || 'Requested'} generation`
       }
-
-      const panelTitles = panels
-        .map(panel => panel?.title)
-        .filter(Boolean)
-        .join(', ')
-
-      return `Loaded ${panels.length} chart ${panels.length === 1 ? 'panel' : 'panels'} for ${country} over ${timePhrase}${panelTitles ? `: ${panelTitles}.` : '.'}`
     },
 
-    getAgentChartCountryLabel(query) {
-      const countries = Array.isArray(query?.countries)
-        ? query.countries.map(country => String(country || '').trim()).filter(Boolean)
-        : []
-
-      if (countries.length > 1) {
-        return countries.join(' vs ')
+    formatAgentChartSpecSummary(chartSpec) {
+      const parts = []
+      const dataTypeLabels = {
+        capacity: 'Capacity',
+        flows: 'Flows',
+        generation: 'Generation',
+        generation_res: 'RES generation',
+        prices: 'Prices'
       }
+      const primaryLabel = chartSpec.data_type === 'flows'
+        ? [chartSpec.country_from || chartSpec.countries[0], chartSpec.country_to || chartSpec.countries[1]]
+            .filter(Boolean)
+            .join(' -> ')
+        : chartSpec.countries.join(', ')
 
-      if (countries.length === 1) {
-        return countries[0]
+      if (primaryLabel) parts.push(primaryLabel)
+      if (dataTypeLabels[chartSpec.data_type]) parts.push(dataTypeLabels[chartSpec.data_type])
+      if (chartSpec.series.length) {
+        parts.push(chartSpec.series.map(series => this.formatAgentSeriesLabel(series)).join(', '))
       }
+      if (chartSpec.resolution) parts.push(this.formatAgentResolutionLabel(chartSpec.resolution))
+      if (chartSpec.include_prices && chartSpec.data_type !== 'prices') parts.push('with prices')
 
-      return query?.country || ''
+      return parts.join(' | ')
+    },
+
+    getAgentChartUnit(chartSpec) {
+      const primaryUnit = AGENT_CHART_DATA_UNITS[chartSpec.data_type] || 'Value'
+      if (chartSpec.include_prices && chartSpec.data_type !== 'prices') {
+        return `${primaryUnit} + EUR/MWh`
+      }
+      return primaryUnit
     },
 
     formatAgentResolutionLabel(resolution) {
@@ -1998,55 +1929,148 @@ export default {
       this.agentChatCharts = []
     },
 
-    renderAgentChatCharts() {
+    async renderAgentChatCharts() {
       this.destroyAgentChatCharts()
-      if (!this.agentChatPanels.length) return
+      if (!this.agentChatChartSpecs.length) return
 
-      this.agentChatPanels.forEach((panel, panelIndex) => {
-        const canvas = document.getElementById(panel._canvasId)
-        const context = canvas?.getContext?.('2d')
-        if (!context) return
+      this.agentChatChartsLoading = true
+      const renderKey = this.agentChatResponseKey
 
-        const chart = markRaw(new Chart(context, this.buildAgentChartConfig(panel, panelIndex)))
-        this.agentChatCharts.push(chart)
-      })
+      try {
+        await nextTick()
+
+        const chartEntries = await Promise.all(
+          this.agentChatChartSpecs.map(async (chartSpec, panelIndex) => {
+            chartSpec._renderError = null
+
+            try {
+              const canvas = document.getElementById(chartSpec._canvasId)
+              const context = canvas?.getContext?.('2d')
+              if (!context) return null
+
+              const config = await this.buildAgentChartConfig(chartSpec, panelIndex)
+              return { config, context }
+            } catch (error) {
+              chartSpec._renderError = error?.message || 'Unable to render this chart.'
+              return null
+            }
+          })
+        )
+
+        if (renderKey !== this.agentChatResponseKey) return
+
+        chartEntries.forEach(entry => {
+          if (!entry?.context || !entry?.config) return
+          this.agentChatCharts.push(markRaw(new Chart(entry.context, entry.config)))
+        })
+      } finally {
+        if (renderKey === this.agentChatResponseKey) {
+          this.agentChatChartsLoading = false
+        }
+      }
     },
 
-    buildAgentChartConfig(panel, panelIndex) {
-      const chartType = panel?.type === 'bar' ? 'bar' : 'line'
-      const xKey = panel?.x_key || 'datetime_utc'
-      const datasets = (panel?.series || []).map((series, seriesIndex) => {
-        const color = this.getAgentChartSeriesColor(series, panelIndex, seriesIndex)
-        const data = (series?.data || [])
-          .map(point => ({
-            x: Date.parse(point?.[xKey]),
-            y: Number(point?.value) || 0
-          }))
-          .filter(point => Number.isFinite(point.x))
-          .sort((a, b) => a.x - b.x)
+    async buildAgentChartConfig(chartSpec, panelIndex) {
+      const model = await this.buildAgentChartModel(chartSpec, panelIndex)
+      const isCategoryChart = model.axisType === 'category'
+      const startUtc = Date.parse(chartSpec.start_utc)
+      const endUtc = Date.parse(chartSpec.end_utc)
+      const timeUnit = this.getAgentChartTimeUnit(chartSpec.resolution)
+      const scales = isCategoryChart
+        ? {
+            x: {
+              type: 'category',
+              grid: {
+                color: 'rgba(148, 163, 184, 0.14)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#cbd5f5',
+                autoSkip: false,
+                maxRotation: 45,
+                minRotation: 0
+              }
+            },
+            y: {
+              beginAtZero: model.beginAtZero,
+              title: {
+                display: Boolean(model.primaryUnit),
+                text: model.primaryUnit || 'Value',
+                color: '#f8fafc',
+                font: { size: 12, weight: 600 }
+              },
+              grid: {
+                color: 'rgba(148, 163, 184, 0.12)',
+                drawBorder: false
+              },
+              ticks: {
+                callback: value => Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value),
+                color: '#cbd5f5'
+              }
+            }
+          }
+        : {
+            x: {
+              type: 'time',
+              time: {
+                unit: timeUnit,
+                tooltipFormat: timeUnit === 'hour' ? 'dd/MM HH:mm' : 'dd/MM/yyyy'
+              },
+              min: Number.isFinite(startUtc) ? startUtc : undefined,
+              max: Number.isFinite(endUtc) ? endUtc : undefined,
+              grid: {
+                color: 'rgba(148, 163, 184, 0.14)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#cbd5f5'
+              }
+            },
+            y: {
+              beginAtZero: model.beginAtZero,
+              title: {
+                display: Boolean(model.primaryUnit),
+                text: model.primaryUnit || 'Value',
+                color: '#f8fafc',
+                font: { size: 12, weight: 600 }
+              },
+              grid: {
+                color: 'rgba(148, 163, 184, 0.12)',
+                drawBorder: false
+              },
+              ticks: {
+                callback: value => Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value),
+                color: '#cbd5f5'
+              }
+            }
+          }
 
-        return {
-          label: series?.name || series?.id || `Series ${seriesIndex + 1}`,
-          data,
-          borderColor: color.border,
-          backgroundColor: color.fill,
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 3,
-          pointHitRadius: 14,
-          tension: 0.25,
-          fill: chartType === 'line' && (panel?.series?.length || 0) === 1,
-          spanGaps: true
+      if (model.secondaryUnit) {
+        scales.yPrices = {
+          position: 'right',
+          beginAtZero: false,
+          title: {
+            display: true,
+            text: model.secondaryUnit,
+            color: '#f8fafc',
+            font: { size: 12, weight: 600 }
+          },
+          grid: {
+            drawOnChartArea: false,
+            drawBorder: false
+          },
+          ticks: {
+            callback: value => Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value),
+            color: '#93c5fd'
+          }
         }
-      })
-
-      const startUtc = Date.parse(this.agentChatLastQuery?.start_utc)
-      const endUtc = Date.parse(this.agentChatLastQuery?.end_utc)
-      const timeUnit = this.getAgentChartTimeUnit(this.agentChatLastQuery?.resolution)
+      }
 
       return {
-        type: chartType,
-        data: { datasets },
+        type: model.chartType,
+        data: isCategoryChart
+          ? { labels: model.labels || [], datasets: model.datasets }
+          : { datasets: model.datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
@@ -2055,7 +2079,7 @@ export default {
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: {
-              display: datasets.length > 1,
+              display: model.datasets.length > 1,
               position: 'bottom',
               labels: {
                 color: '#e2e8f0',
@@ -2075,48 +2099,410 @@ export default {
               borderWidth: 1
             }
           },
-          scales: {
-            x: {
-              type: 'time',
-              time: {
-                unit: timeUnit,
-                tooltipFormat: timeUnit === 'hour' ? 'dd/MM HH:mm' : 'dd/MM/yyyy'
-              },
-              min: Number.isFinite(startUtc) ? startUtc : undefined,
-              max: Number.isFinite(endUtc) ? endUtc : undefined,
-              grid: {
-                color: 'rgba(148, 163, 184, 0.14)',
-                drawBorder: false
-              },
-              ticks: {
-                color: '#cbd5f5'
-              }
-            },
-            y: {
-              beginAtZero: this.shouldAgentChartStartAtZero(panel),
-              title: {
-                display: Boolean(panel?.unit),
-                text: panel?.unit || 'Value',
-                color: '#f8fafc',
-                font: { size: 12, weight: 600 }
-              },
-              grid: {
-                color: 'rgba(148, 163, 184, 0.12)',
-                drawBorder: false
-              },
-              ticks: {
-                callback: value => Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value),
-                color: '#cbd5f5'
-              }
-            }
-          }
+          scales
         }
       }
     },
 
-    shouldAgentChartStartAtZero(panel) {
-      const unit = String(panel?.unit || '').toLowerCase()
-      return unit === 'mw' || unit === 'mwh'
+    async buildAgentChartModel(chartSpec, panelIndex) {
+      switch (chartSpec.data_type) {
+        case 'capacity':
+          return this.buildAgentCapacityChartModel(chartSpec, panelIndex)
+        case 'flows':
+          return this.buildAgentFlowChartModel(chartSpec, panelIndex)
+        case 'prices':
+          return this.buildAgentPriceChartModel(chartSpec, panelIndex)
+        case 'generation_res':
+          return this.buildAgentGenerationChartModel(chartSpec, panelIndex, true)
+        case 'generation':
+        default:
+          return this.buildAgentGenerationChartModel(chartSpec, panelIndex, false)
+      }
+    },
+
+    async buildAgentPriceChartModel(chartSpec, panelIndex) {
+      const countries = chartSpec.countries.filter(Boolean)
+      const datasets = (
+        await Promise.all(
+          countries.map(async (country, seriesIndex) => {
+            const items = await this.fetchAgentPriceItems(chartSpec, country)
+            const points = this.aggregateSeriesPointsByResolution(
+              items
+                .map(item => ({
+                  timestamp: Date.parse(item.datetime_utc),
+                  value: Number(item.price)
+                }))
+                .filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.value)),
+              chartSpec.resolution,
+              'average'
+            ).map(point => ({ x: point.timestamp, y: point.value }))
+            const color = this.getAgentChartSeriesColor({ id: country, name: country }, panelIndex, seriesIndex)
+            return this.createAgentTimeSeriesDataset(country, points, color)
+          })
+        )
+      ).filter(dataset => dataset.data.length)
+
+      if (!datasets.length) {
+        throw new Error('No price data was returned for this chart.')
+      }
+
+      return {
+        axisType: 'time',
+        beginAtZero: false,
+        chartType: chartSpec.chart_type,
+        datasets,
+        primaryUnit: AGENT_CHART_DATA_UNITS.prices
+      }
+    },
+
+    async buildAgentGenerationChartModel(chartSpec, panelIndex, renewableOnly = false) {
+      const countries = chartSpec.countries.filter(Boolean)
+      const requestedSeries = chartSpec.series.length
+        ? chartSpec.series
+        : [renewableOnly ? 'res' : 'generation']
+
+      const generationDatasets = (
+        await Promise.all(
+          countries.map(async (country, countryIndex) => {
+            const items = renewableOnly
+              ? await this.fetchAgentResGenerationItems(chartSpec, country)
+              : await this.fetchAgentGenerationItems(chartSpec, country)
+
+            return requestedSeries
+              .map((seriesKey, seriesIndex) => {
+                const groupedValues = new Map()
+
+                items.forEach(item => {
+                  if (!this.agentChartSeriesMatches(item, seriesKey)) return
+
+                  const timestamp = Date.parse(item.datetime_utc)
+                  const value = Number(item.generation_mw)
+                  if (!Number.isFinite(timestamp) || !Number.isFinite(value)) return
+
+                  const current = groupedValues.get(timestamp) || 0
+                  groupedValues.set(timestamp, current + value)
+                })
+
+                const points = this.aggregateSeriesPointsByResolution(
+                  Array.from(groupedValues.entries()).map(([timestamp, value]) => ({ timestamp, value })),
+                  chartSpec.resolution,
+                  'average'
+                ).map(point => ({ x: point.timestamp, y: point.value }))
+
+                const label = countries.length > 1 && requestedSeries.length > 1
+                  ? `${country} ${this.formatAgentSeriesLabel(seriesKey)}`
+                  : countries.length > 1
+                    ? country
+                    : this.formatAgentSeriesLabel(seriesKey)
+                const color = this.getAgentChartSeriesColor(
+                  { id: `${country}_${seriesKey}`, name: label },
+                  panelIndex,
+                  countryIndex + seriesIndex
+                )
+
+                return this.createAgentTimeSeriesDataset(label, points, color, {
+                  fill: chartSpec.chart_type === 'line' && requestedSeries.length === 1 && countries.length === 1
+                })
+              })
+              .filter(dataset => dataset.data.length)
+          })
+        )
+      ).flat()
+
+      const priceDatasets = chartSpec.include_prices
+        ? await this.buildAgentPriceOverlayDatasets(chartSpec, panelIndex, generationDatasets.length)
+        : []
+      const datasets = [...generationDatasets, ...priceDatasets]
+
+      if (!datasets.length) {
+        throw new Error('No generation data was returned for this chart.')
+      }
+
+      return {
+        axisType: 'time',
+        beginAtZero: true,
+        chartType: chartSpec.chart_type,
+        datasets,
+        primaryUnit: AGENT_CHART_DATA_UNITS[chartSpec.data_type] || AGENT_CHART_DATA_UNITS.generation,
+        secondaryUnit: priceDatasets.length ? AGENT_CHART_DATA_UNITS.prices : null
+      }
+    },
+
+    async buildAgentCapacityChartModel(chartSpec, panelIndex) {
+      const responses = await Promise.all(
+        chartSpec.countries
+          .filter(Boolean)
+          .map(async country => ({
+            country,
+            payload: await this.fetchAgentCapacityItems(country)
+          }))
+      )
+      const labels = []
+      const labelSet = new Set()
+
+      responses.forEach(({ payload }) => {
+        const items = this.applyCapacityModalOverrides(payload?.items)
+        items.forEach(item => {
+          const name = String(item?.psr_name || item?.psr_type || '').trim()
+          if (!name || labelSet.has(name)) return
+          labelSet.add(name)
+          labels.push(name)
+        })
+      })
+
+      const datasets = responses.map(({ country, payload }, seriesIndex) => {
+        const items = this.applyCapacityModalOverrides(payload?.items)
+        const valueByLabel = new Map(
+          items.map(item => [
+            String(item?.psr_name || item?.psr_type || '').trim(),
+            Number(item?.installed_capacity_mw) || 0
+          ])
+        )
+        const color = this.getAgentChartSeriesColor({ id: country, name: country }, panelIndex, seriesIndex)
+        return {
+          label: country,
+          data: labels.map(label => valueByLabel.get(label) || 0),
+          borderColor: color.border,
+          backgroundColor: color.fill,
+          borderWidth: 1.5
+        }
+      }).filter(dataset => dataset.data.some(value => Number.isFinite(value) && value !== 0))
+
+      if (!datasets.length || !labels.length) {
+        throw new Error('No capacity data was returned for this chart.')
+      }
+
+      return {
+        axisType: 'category',
+        beginAtZero: true,
+        chartType: chartSpec.chart_type === 'line' ? 'line' : 'bar',
+        datasets,
+        labels,
+        primaryUnit: AGENT_CHART_DATA_UNITS.capacity
+      }
+    },
+
+    async buildAgentFlowChartModel(chartSpec, panelIndex) {
+      const source = chartSpec.country_from || chartSpec.countries[0] || ''
+      const target = chartSpec.country_to || chartSpec.countries[1] || ''
+      const payload = await this.fetchAgentFlowItems(chartSpec, source, target)
+      const points = this.aggregateSeriesPointsByResolution(
+        (Array.isArray(payload?.items) ? payload.items : [])
+          .map(item => ({
+            timestamp: Date.parse(item.datetime_utc),
+            value: Number(item.quantity_mw)
+          }))
+          .filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.value)),
+        chartSpec.resolution,
+        'average'
+      ).map(point => ({ x: point.timestamp, y: point.value }))
+
+      if (!points.length) {
+        throw new Error('No flow data was returned for this chart.')
+      }
+
+      const label = [source, target].filter(Boolean).join(' -> ') || 'Flow'
+      return {
+        axisType: 'time',
+        beginAtZero: true,
+        chartType: chartSpec.chart_type,
+        datasets: [
+          this.createAgentTimeSeriesDataset(
+            label,
+            points,
+            this.getAgentChartSeriesColor({ id: label, name: label }, panelIndex, 0),
+            { fill: chartSpec.chart_type === 'line' }
+          )
+        ],
+        primaryUnit: AGENT_CHART_DATA_UNITS.flows
+      }
+    },
+
+    async buildAgentPriceOverlayDatasets(chartSpec, panelIndex, offset = 0) {
+      const countries = chartSpec.countries.filter(Boolean)
+      const datasets = (
+        await Promise.all(
+          countries.map(async (country, seriesIndex) => {
+            const items = await this.fetchAgentPriceItems(chartSpec, country)
+            const points = this.aggregateSeriesPointsByResolution(
+              items
+                .map(item => ({
+                  timestamp: Date.parse(item.datetime_utc),
+                  value: Number(item.price)
+                }))
+                .filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.value)),
+              chartSpec.resolution,
+              'average'
+            ).map(point => ({ x: point.timestamp, y: point.value }))
+            const label = `${country} price`
+            const color = this.getAgentChartSeriesColor({ id: label, name: label }, panelIndex, offset + seriesIndex)
+
+            return this.createAgentTimeSeriesDataset(label, points, color, {
+              borderDash: [6, 4],
+              fill: false,
+              yAxisID: 'yPrices'
+            })
+          })
+        )
+      ).filter(dataset => dataset.data.length)
+
+      return datasets
+    },
+
+    createAgentTimeSeriesDataset(label, data, color, options = {}) {
+      return {
+        label,
+        data,
+        borderColor: color.border,
+        backgroundColor: color.fill,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        pointHitRadius: 14,
+        tension: 0.25,
+        fill: Boolean(options.fill),
+        spanGaps: true,
+        yAxisID: options.yAxisID || 'y',
+        borderDash: options.borderDash || undefined
+      }
+    },
+
+    async fetchAgentPriceItems(chartSpec, country) {
+      const resolutionQuery = this.getAgentChartResolutionQuery(chartSpec.resolution, { allowWeeklyClientAggregation: true })
+      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/prices/range/?country=${encodeURIComponent(country)}&contract=A01&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}${resolutionQuery}`
+      const { data } = await axios.get(url)
+      return Array.isArray(data?.items) ? data.items : []
+    },
+
+    async fetchAgentGenerationItems(chartSpec, country) {
+      const resolutionQuery = this.getAgentChartResolutionQuery(chartSpec.resolution, { allowWeeklyClientAggregation: true })
+      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/generation/range?country=${encodeURIComponent(country)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}${resolutionQuery}`
+      const { data } = await axios.get(url)
+      return this.applyGenerationPsrOverrides(data?.items)
+    },
+
+    async fetchAgentResGenerationItems(chartSpec, country) {
+      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/generation-res/range/?country=${encodeURIComponent(country)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}`
+      const { data } = await axios.get(url)
+      return this.applyGenerationPsrOverrides(data?.items)
+    },
+
+    async fetchAgentCapacityItems(country) {
+      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/capacity/latest/?country=${encodeURIComponent(country)}`
+      const { data } = await axios.get(url)
+      return data
+    },
+
+    async fetchAgentFlowItems(chartSpec, source, target) {
+      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/flows/range/?from=${encodeURIComponent(source)}&to=${encodeURIComponent(target)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}`
+      const { data } = await axios.get(url)
+      return data
+    },
+
+    getAgentChartResolutionQuery(resolution, options = {}) {
+      const normalizedResolution = String(resolution || '').trim().toLowerCase()
+      if (normalizedResolution === 'd' || normalizedResolution === 'm' || normalizedResolution === 'y') {
+        return `&resolution=${normalizedResolution}`
+      }
+      if (!options.allowWeeklyClientAggregation && normalizedResolution === 'h') {
+        return '&resolution=h'
+      }
+      return ''
+    },
+
+    aggregateSeriesPointsByResolution(points, resolution, mode = 'average') {
+      const normalizedResolution = String(resolution || '').trim().toLowerCase()
+      const aggregated = new Map()
+
+      points.forEach(point => {
+        const timestamp = this.bucketAgentChartTimestamp(point.timestamp, normalizedResolution)
+        if (!Number.isFinite(timestamp) || !Number.isFinite(point.value)) return
+
+        if (!aggregated.has(timestamp)) {
+          aggregated.set(timestamp, { sum: 0, count: 0 })
+        }
+
+        const entry = aggregated.get(timestamp)
+        entry.sum += point.value
+        entry.count += 1
+      })
+
+      return Array.from(aggregated.entries())
+        .map(([timestamp, entry]) => ({
+          timestamp,
+          value: mode === 'sum'
+            ? entry.sum
+            : entry.count > 0
+              ? entry.sum / entry.count
+              : entry.sum
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp)
+    },
+
+    bucketAgentChartTimestamp(timestamp, resolution) {
+      if (!Number.isFinite(timestamp)) return NaN
+
+      const date = new Date(timestamp)
+      switch (resolution) {
+        case 'y':
+          return Date.UTC(date.getUTCFullYear(), 0, 1, 0, 0, 0, 0)
+        case 'm':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0)
+        case 'w': {
+          const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0))
+          const day = utcDate.getUTCDay() || 7
+          utcDate.setUTCDate(utcDate.getUTCDate() - day + 1)
+          return utcDate.getTime()
+        }
+        case 'd':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0)
+        case 'h':
+        default:
+          return Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth(),
+            date.getUTCDate(),
+            date.getUTCHours(),
+            0,
+            0,
+            0
+          )
+      }
+    },
+
+    agentChartSeriesMatches(item, seriesKey) {
+      const normalizedSeries = this.normalizeTechnologyKey(seriesKey)
+      const normalizedName = this.normalizeTechnologyKey(item?.psr_name)
+      const normalizedType = this.getPsrTypeKey(item?.psr_type).toLowerCase()
+
+      if (!normalizedSeries || normalizedSeries === 'generation' || normalizedSeries === 'total') {
+        return true
+      }
+      if (normalizedSeries === 'res') {
+        return true
+      }
+      if (normalizedSeries === 'solar') {
+        return normalizedName.includes('solar') || normalizedType === 'b16'
+      }
+      if (normalizedSeries === 'wind') {
+        return normalizedName.includes('wind')
+      }
+
+      return normalizedName === normalizedSeries
+        || normalizedName.includes(normalizedSeries)
+        || normalizedType === normalizedSeries
+    },
+
+    formatAgentSeriesLabel(seriesKey) {
+      const labels = {
+        generation: 'Generation',
+        prices: 'Prices',
+        res: 'RES',
+        solar: 'Solar',
+        total: 'Total',
+        wind: 'Wind'
+      }
+      return labels[seriesKey] || String(seriesKey || '').replace(/_/g, ' ')
     },
 
     getAgentChartTimeUnit(resolution) {
@@ -7274,7 +7660,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .layout-shell--floating-header {
-  padding-top: 76px;
+  padding-top: 126px;
 }
 
 .content-shell {
@@ -7286,21 +7672,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   width: 100%;
 }
 
-/* Compact header */
-.header {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  padding: 10px 12px;
-  color: #0f172a;
+.header-shell {
+  width: 100%;
   flex-shrink: 0;
-  gap: 12px;
-  border-radius: 11px;
-  border: 1px solid #fff;
-  background: rgba(255, 255, 255, 0.02);
 }
 
-.header--floating {
+.header-shell--floating {
   position: fixed;
   top: 12px;
   left: 50%;
@@ -7652,6 +8029,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.agent-chat-panel__error {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(68, 17, 32, 0.52);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .agent-chat-chart-container {
@@ -9006,48 +9393,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 @media (max-width: 768px) {
   .layout-shell--floating-header {
-    padding-top: 92px;
+    padding-top: 154px;
   }
 
-  .header--floating {
+  .header-shell--floating {
     width: min(720px, calc(100% - 18px));
     top: 8px;
-  }
-
-  .header {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "logo logo"
-      "controls clock";
-    padding: 6px 10px;
-    column-gap: 8px;
-    row-gap: 6px;
-    align-items: center;
-  }
-
-  .header-logo {
-    grid-area: logo;
-    justify-self: center;
-    font-size: 17px;
-  }
-
-  .header h1 {
-    font-size: 1.05rem;
-  }
-
-  .controls {
-    grid-area: controls;
-    gap: 6px;
-    justify-content: flex-start;
-    margin-left: 0;
-  }
-
-  .header-top {
-    grid-area: clock;
-    justify-content: flex-end;
-    gap: 6px;
-    margin-left: 0;
   }
 
   .agent-chat-popover {
@@ -9063,12 +9414,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .agent-chat-chart-container {
     height: 210px;
     min-height: 210px;
-  }
-
-  .header-clock {
-    font-size: 12px;
-    width: auto;
-    padding: 0 4px;
   }
 
   .irradiance-legend {
@@ -9130,25 +9475,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 @media (max-width: 600px) {
   .layout-shell--floating-header {
-    padding-top: 86px;
+    padding-top: 148px;
   }
 
-  .header--floating {
+  .header-shell--floating {
     width: min(520px, calc(100% - 14px));
-  }
-
-  .header {
-    padding: 6px 8px;
-    column-gap: 6px;
-  }
-
-  .header-logo {
-    font-size: 15px;
-  }
-
-  .agent-chat-toggle {
-    padding: 7px 10px;
-    font-size: 11px;
   }
 
   .agent-chat-popover {
@@ -9169,55 +9500,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .agent-chat-chart-container {
     height: 180px;
     min-height: 180px;
-  }
-
-  .logo-highlight {
-    font-size: 0.92em;
-  }
-
-  .header h1 {
-    font-size: 0.95rem;
-    margin-bottom: 4px;
-  }
-
-  .controls {
-    gap: 6px;
-    flex-wrap: nowrap;
-    justify-content: center;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 6px;
-    margin-left: 0;
-  }
-  
-  .controls label, .controls button {
-    font-size: 11px;
-  }
-
-  .cloud-switch {
-    gap: 8px;
-  }
-
-  .cloud-switch__track {
-    width: 38px;
-    height: 22px;
-  }
-
-  .cloud-switch__thumb {
-    width: 16px;
-    height: 16px;
-  }
-
-  .cloud-switch--active .cloud-switch__thumb {
-    transform: translateX(16px);
-  }
-
-  .cloud-switch__label {
-    font-size: 13px;
-  }
-
-  .cloud-switch__status {
-    font-size: 10px;
   }
 
   .irradiance-legend {
