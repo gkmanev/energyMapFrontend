@@ -95,6 +95,7 @@
 
 <script>
 import { FLOW_EIC_BY_ISO, FLOW_ISO_BY_EIC } from '@/utils/flowDomains'
+import { API_ROOT_URL } from '@/config/api'
 
 const COUNTRY_NEIGHBOURS = {
   AD: ['FR', 'ES'],
@@ -201,7 +202,7 @@ export default {
   name: 'PowerFlow',
   props: {
     countryIso: { type: String, default: 'BG' },
-    apiBaseUrl: { type: String, default: 'https://api.visualize.energy' },
+    apiBaseUrl: { type: String, default: API_ROOT_URL },
   },
 
   data() {

@@ -797,6 +797,7 @@ Chart.register(
 )
 import 'chartjs-adapter-date-fns'
 import axios from '@/services/axiosClient'
+import { buildApiUrl } from '@/config/api'
 import { FLOW_EIC_BY_ISO, FLOW_ISO_BY_EIC } from '@/utils/flowDomains'
 import { scaleSequential } from 'd3-scale'
 import {
@@ -895,8 +896,7 @@ const generationCursorPlugin = {
 
 const AGENT_CHAT_WELCOME_MESSAGE = 'Ask about the energy data for different countries.'
 const AGENT_CHAT_SESSION_STORAGE_KEY = 'energy-map-agent-chat-session'
-const VISUALIZE_ENERGY_API_BASE_URL = 'https://api.visualize.energy/api'
-const AGENT_CHART_QUERY_URL = `${VISUALIZE_ENERGY_API_BASE_URL}/chart-query/`
+const AGENT_CHART_QUERY_URL = buildApiUrl('chart-query/')
 const AGENT_CHART_STATUS_VALUES = new Set(['chart', 'text'])
 const AGENT_CHART_DATA_UNITS = Object.freeze({
   capacity: 'MW',
@@ -2369,32 +2369,32 @@ export default {
 
     async fetchAgentPriceItems(chartSpec, country) {
       const resolutionQuery = this.getAgentChartResolutionQuery(chartSpec.resolution, { allowWeeklyClientAggregation: true })
-      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/prices/range/?country=${encodeURIComponent(country)}&contract=A01&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}${resolutionQuery}`
+      const url = buildApiUrl(`prices/range/?country=${encodeURIComponent(country)}&contract=A01&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}${resolutionQuery}`)
       const { data } = await axios.get(url)
       return Array.isArray(data?.items) ? data.items : []
     },
 
     async fetchAgentGenerationItems(chartSpec, country) {
       const resolutionQuery = this.getAgentChartResolutionQuery(chartSpec.resolution, { allowWeeklyClientAggregation: true })
-      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/generation/range?country=${encodeURIComponent(country)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}${resolutionQuery}`
+      const url = buildApiUrl(`generation/range?country=${encodeURIComponent(country)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}${resolutionQuery}`)
       const { data } = await axios.get(url)
       return this.applyGenerationPsrOverrides(data?.items)
     },
 
     async fetchAgentResGenerationItems(chartSpec, country) {
-      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/generation-res/range/?country=${encodeURIComponent(country)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}`
+      const url = buildApiUrl(`generation-res/range/?country=${encodeURIComponent(country)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}`)
       const { data } = await axios.get(url)
       return this.applyGenerationPsrOverrides(data?.items)
     },
 
     async fetchAgentCapacityItems(country) {
-      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/capacity/latest/?country=${encodeURIComponent(country)}`
+      const url = buildApiUrl(`capacity/latest/?country=${encodeURIComponent(country)}`)
       const { data } = await axios.get(url)
       return data
     },
 
     async fetchAgentFlowItems(chartSpec, source, target) {
-      const url = `${VISUALIZE_ENERGY_API_BASE_URL}/flows/range/?from=${encodeURIComponent(source)}&to=${encodeURIComponent(target)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}`
+      const url = buildApiUrl(`flows/range/?from=${encodeURIComponent(source)}&to=${encodeURIComponent(target)}&start=${encodeURIComponent(chartSpec.start_utc)}&end=${encodeURIComponent(chartSpec.end_utc)}`)
       const { data } = await axios.get(url)
       return data
     },
@@ -3173,7 +3173,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const latestByEdge = {}
       const responses = await Promise.allSettled(
         countries.map(async (iso2) => {
-          const url = `https://api.visualize.energy/api/flows/latest/?country=${encodeURIComponent(iso2)}&neighbors=1`
+          const url = buildApiUrl(`flows/latest/?country=${encodeURIComponent(iso2)}&neighbors=1`)
           const { data } = await axios.get(url, { timeout: 20000 })
           const items = Array.isArray(data?.items)
             ? data.items
@@ -4183,7 +4183,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
           
-          const url = `https://api.visualize.energy/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
+          const url = buildApiUrl(`capacity/latest/?country=${encodeURIComponent(iso2)}`)
           const { data: response } = await axios.get(url)
           data = this.applyCapacityModalOverrides(response.items)
         } else if (type === 'generation') {
@@ -4196,7 +4196,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const endDate = encodeURIComponent(end.toISOString())
           const resolutionParam = this.getGenerationResolutionParam()
 
-          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
+          const url = buildApiUrl(`generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`)
           const todayForecastRange = this.getTodayRangeDates()
           const modalForecastRange = this.selectedTimeRange === 'hours'
             ? { ...todayForecastRange, resolutionParam: '' }
@@ -5608,7 +5608,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { start, end } = this.getPriceRangeDates()
 
         const resolutionParam = this.getPriceResolutionParam()
-        const url = `https://api.visualize.energy/api/prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
+        const url = buildApiUrl(`prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`)
         console.log('[Price] range endpoint:', url)
         const { data } = await axios.get(url, {
           timeout: 10000,
@@ -5738,7 +5738,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { start, end } = this.getPriceRangeDates()
 
         const resolutionParam = this.getPriceResolutionParam()
-        const url = `https://api.visualize.energy/api/prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`
+        const url = buildApiUrl(`prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`)
         console.log('[Price] bulk-range endpoint:', url)
         const { data } = await axios.get(url, {
           timeout: this.getBulkPriceTimeoutMs(),
@@ -5782,7 +5782,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { start, end } = this.getGenerationRangeDates()
 
         const resolutionParam = this.getGenerationResolutionParam()
-        const url = `https://api.visualize.energy/api/generation/bulk-range/` +
+        const url = buildApiUrl('generation/bulk-range/') +
                     `?countries=${countries.join(',')}` +
                     `&start=${start.toISOString()}` +
                     `&end=${end.toISOString()}${resolutionParam}`
@@ -5834,7 +5834,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const end = new Date(start)
         end.setDate(end.getDate() + 1)
 
-        const url = `https://api.visualize.energy/api/generation-forecast/bulk-range/` +
+        const url = buildApiUrl('generation-forecast/bulk-range/') +
                     `?countries=${countries.join(',')}` +
                     `&start=${start.toISOString()}` +
                     `&end=${end.toISOString()}`
@@ -5972,7 +5972,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const startDate = start.toISOString().split('T')[0]
         const endDate = end.toISOString().split('T')[0]
         
-        const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+        const url = buildApiUrl(`generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`)
        
         const { data } = await axios.get(url, { 
           timeout: 10000,
@@ -6069,7 +6069,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!this.capacitySupported(iso2)) return null
 
       try {
-        const url = `https://api.visualize.energy/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
+        const url = buildApiUrl(`capacity/latest/?country=${encodeURIComponent(iso2)}`)
         const { data } = await axios.get(url)
         
         const totalMW = Array.isArray(data.items) 
@@ -6101,7 +6101,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
       const updates = {}
       try {
-        const url = `https://api.visualize.energy/api/capacity/bulk-latest/?countries=${supportedCountries.join(',')}`
+        const url = buildApiUrl(`capacity/bulk-latest/?countries=${supportedCountries.join(',')}`)
         const { data } = await axios.get(url, { timeout: 30000 })
 
         for (const [iso2, countryData] of Object.entries(data.data || {})) {
@@ -6170,7 +6170,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.destroyCapacityChart()
 
       try {
-        const url = `https://api.visualize.energy/api/capacity/latest/?country=${encodeURIComponent(iso2)}`
+        const url = buildApiUrl(`capacity/latest/?country=${encodeURIComponent(iso2)}`)
         const { data } = await axios.get(url)
         this.capacityYear = data.year
         this.capacityItems = Array.isArray(data.items) ? data.items : []
@@ -6536,7 +6536,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.irradianceLayerError = null
 
       try {
-        const url = 'https://api.visualize.energy/api/generation-irradiance/bulk-range/?period=today'
+        const url = buildApiUrl('generation-irradiance/bulk-range/?period=today')
         const { data } = await axios.get(url, { timeout: 20000 })
 
         if (requestId !== this.irradianceLayerRequestId || !this.showIrradianceLayer) return
@@ -6786,7 +6786,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const startDate = encodeURIComponent(start.toISOString())
           const endDate = encodeURIComponent(end.toISOString())
 
-          const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`
+          const url = buildApiUrl(`generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}${resolutionParam}`)
           const { data } = await axios.get(url)
 
           const items = this.applyGenerationPsrOverrides(data.items)
@@ -6842,7 +6842,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { start, end } = rangeOptions || this.getGenerationRangeDates()
         const resolutionParam = rangeOptions?.resolutionParam ?? this.getGenerationResolutionParam()
 
-        const url = `https://api.visualize.energy/api/generation-forecast/range/?country=${encodeURIComponent(iso2)}&start=${start.toISOString()}&end=${end.toISOString()}${resolutionParam}`
+        const url = buildApiUrl(`generation-forecast/range/?country=${encodeURIComponent(iso2)}&start=${start.toISOString()}&end=${end.toISOString()}${resolutionParam}`)
         const { data } = await axios.get(url)
 
         if (!data || !Array.isArray(data.items)) {
@@ -6860,7 +6860,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!iso2) return []
 
       try {
-        const url = `https://api.visualize.energy/api/generation-res/range/?country=${encodeURIComponent(iso2)}&period=today`
+        const url = buildApiUrl(`generation-res/range/?country=${encodeURIComponent(iso2)}&period=today`)
         const { data } = await axios.get(url)
 
         if (!data || !Array.isArray(data.items)) {
@@ -6991,7 +6991,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const startDate = encodeURIComponent(start.toISOString())
         const endDate = encodeURIComponent(end.toISOString())
 
-        const url = `https://api.visualize.energy/api/generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`
+        const url = buildApiUrl(`generation/range?country=${encodeURIComponent(iso2)}&start=${startDate}&end=${endDate}`)
         const { data } = await axios.get(url)
         this.generationItems = this.applyGenerationPsrOverrides(data.items)
       } catch (e) {

@@ -21,7 +21,8 @@
     "d3-scale-chromatic": "^3.1.0",
     "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",
-    "vue": "^3.5.18"
+    "vue": "^3.5.18",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@types/d3-scale": "^4.0.9",

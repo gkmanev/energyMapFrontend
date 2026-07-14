@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { API_BASE_URL } from '@/config/api'
 
 const getServerElapsedMs = (response) => {
   if (!response) {
@@ -24,15 +25,96 @@ const logServerElapsedMs = (response) => {
   }
 }
 
-axios.interceptors.response.use(
+const attachResponseLogging = (client) => {
+  client.interceptors.response.use(
+    (response) => {
+      logServerElapsedMs(response)
+      return response
+    },
+    (error) => {
+      logServerElapsedMs(error?.response)
+      return Promise.reject(error)
+    }
+  )
+}
+
+const httpClient = axios.create()
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL
+})
+
+let getAccessToken = () => ''
+let getRefreshToken = () => ''
+let refreshAccessToken = null
+let logout = null
+
+const shouldSkipRefresh = (config = {}) => {
+  const url = String(config.url || '')
+  return (
+    config._retry ||
+    url.includes('auth/login/') ||
+    url.includes('auth/register/') ||
+    url.includes('auth/refresh/')
+  )
+}
+
+export function setApiClientAuthHandlers(handlers = {}) {
+  getAccessToken = handlers.getAccessToken || (() => '')
+  getRefreshToken = handlers.getRefreshToken || (() => '')
+  refreshAccessToken = handlers.refreshAccessToken || null
+  logout = handlers.logout || null
+}
+
+apiClient.interceptors.request.use((config) => {
+  const accessToken = getAccessToken()
+  if (accessToken) {
+    config.headers = config.headers || {}
+    config.headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  return config
+})
+
+apiClient.interceptors.response.use(
   (response) => {
     logServerElapsedMs(response)
     return response
   },
-  (error) => {
+  async (error) => {
     logServerElapsedMs(error?.response)
-    return Promise.reject(error)
+
+    const originalRequest = error?.config
+    const status = error?.response?.status
+
+    if (
+      status !== 401 ||
+      !originalRequest ||
+      shouldSkipRefresh(originalRequest) ||
+      !getRefreshToken() ||
+      typeof refreshAccessToken !== 'function'
+    ) {
+      return Promise.reject(error)
+    }
+
+    originalRequest._retry = true
+
+    try {
+      const nextAccessToken = await refreshAccessToken()
+      originalRequest.headers = originalRequest.headers || {}
+      originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`
+      return apiClient(originalRequest)
+    } catch (refreshError) {
+      if (typeof logout === 'function') {
+        await logout({
+          redirect: false
+        })
+      }
+
+      return Promise.reject(refreshError)
+    }
   }
 )
 
-export default axios
+attachResponseLogging(httpClient)
+
+export default httpClient
