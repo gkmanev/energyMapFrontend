@@ -1003,6 +1003,9 @@ export default {
       windGridSource: [],
       windRefreshTimer: null,
       windRequestId: 0,
+      mapResizeObserver: null,
+      mapLayoutRefreshRaf: null,
+      mapLayoutRefreshTimeoutId: null,
       isRefreshing: false,
       initialLoading: true,
       isMapUpdating: false,
@@ -1602,6 +1605,12 @@ export default {
         this.stopWindLayer()
       }
     },
+
+    initialLoading(isLoading) {
+      if (!isLoading) {
+        this.queueMapLayoutRefresh()
+      }
+    }
 
   },
 
@@ -6283,6 +6292,53 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.updateFlowsOverlay()
     },
 
+    refreshMapLayout() {
+      if (!this.map) return
+      this.map.invalidateSize({ pan: false, debounceMoveend: true })
+      this.handleMapViewportChange()
+      if (this.showWindLayer) void this.onWindMapViewportChange()
+    },
+
+    queueMapLayoutRefresh() {
+      if (!this.map) return
+
+      if (this.mapLayoutRefreshRaf) {
+        cancelAnimationFrame(this.mapLayoutRefreshRaf)
+      }
+      if (this.mapLayoutRefreshTimeoutId) {
+        clearTimeout(this.mapLayoutRefreshTimeoutId)
+      }
+
+      this.mapLayoutRefreshRaf = requestAnimationFrame(() => {
+        this.mapLayoutRefreshRaf = null
+        this.refreshMapLayout()
+
+        // WebKit can settle flex/aspect-ratio layout one tick later on first paint.
+        this.mapLayoutRefreshTimeoutId = window.setTimeout(() => {
+          this.mapLayoutRefreshTimeoutId = null
+          this.refreshMapLayout()
+        }, 180)
+      })
+    },
+
+    bindMapResizeObserver() {
+      if (!this.map || this.mapResizeObserver || typeof ResizeObserver === 'undefined') return
+      const container = this.map.getContainer()
+      if (!container) return
+
+      this.mapResizeObserver = new ResizeObserver(() => {
+        this.queueMapLayoutRefresh()
+      })
+      this.mapResizeObserver.observe(container)
+    },
+
+    unbindMapResizeObserver() {
+      if (this.mapResizeObserver) {
+        this.mapResizeObserver.disconnect()
+        this.mapResizeObserver = null
+      }
+    },
+
     onMapReady(mapObject) {
       this.map = mapObject
       if (!this.map.getPane('flowsPane')) {
@@ -6291,12 +6347,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         this.map.getPane('flowsPane').style.pointerEvents = 'none'
       }
       this.ensureIrradiancePane()
+      this.bindMapResizeObserver()
 
       this.updateResponsiveZoom()
       this.updateMapBadges()
       this.map.on('zoomend moveend', this.handleMapViewportChange)
       this.map.on('moveend zoomend', this.onWindMapViewportChange)
       void this.redrawFlowsWhenReady()
+      this.queueMapLayoutRefresh()
 
       if (this.showIrradianceLayer) {
         this.startIrradianceLayerRefresh()
@@ -7088,6 +7146,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.updateMobileState()
       this.syncSeparateModalModes()
       this.repositionSeparateModals()
+      this.queueMapLayoutRefresh()
       if (this.showWindLayer) void this.onWindMapViewportChange()
 
     },
@@ -7585,6 +7644,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.persistAgentChatSession()
       this.stopWindLayer()
       this.destroyAgentChatCharts()
+      this.unbindMapResizeObserver()
+      if (this.mapLayoutRefreshRaf) {
+        cancelAnimationFrame(this.mapLayoutRefreshRaf)
+        this.mapLayoutRefreshRaf = null
+      }
+      if (this.mapLayoutRefreshTimeoutId) {
+        clearTimeout(this.mapLayoutRefreshTimeoutId)
+        this.mapLayoutRefreshTimeoutId = null
+      }
       window.removeEventListener('resize', this.handleWindowResize)
       window.removeEventListener('keydown', this.onKeydown)
       window.removeEventListener('pointerdown', this.handleAgentChatPointerDown)
