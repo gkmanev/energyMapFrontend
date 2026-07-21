@@ -16,32 +16,6 @@
       </div>
 
       <form class="auth-form" @submit.prevent="handleSubmit">
-        <div class="auth-grid">
-          <label class="auth-field">
-            <span>First name</span>
-            <input
-              v-model.trim="form.first_name"
-              type="text"
-              autocomplete="given-name"
-              placeholder="Ada"
-              :disabled="auth.isLoading || !authEnabled"
-            />
-            <small v-if="firstNameError">{{ firstNameError }}</small>
-          </label>
-
-          <label class="auth-field">
-            <span>Last name</span>
-            <input
-              v-model.trim="form.last_name"
-              type="text"
-              autocomplete="family-name"
-              placeholder="Lovelace"
-              :disabled="auth.isLoading || !authEnabled"
-            />
-            <small v-if="lastNameError">{{ lastNameError }}</small>
-          </label>
-        </div>
-
         <label class="auth-field">
           <span>Email</span>
           <input
@@ -106,9 +80,7 @@ const authEnabled = AUTH_ENABLED
 const form = reactive({
   email: '',
   password: '',
-  password_confirmation: '',
-  first_name: '',
-  last_name: ''
+  password_confirmation: ''
 })
 
 const fieldErrors = ref({})
@@ -117,19 +89,9 @@ const submitError = ref('')
 const emailError = computed(() => firstFieldError(fieldErrors.value, 'email'))
 const passwordError = computed(() => firstFieldError(fieldErrors.value, 'password'))
 const passwordConfirmationError = computed(() => firstFieldError(fieldErrors.value, 'password_confirmation'))
-const firstNameError = computed(() => firstFieldError(fieldErrors.value, 'first_name'))
-const lastNameError = computed(() => firstFieldError(fieldErrors.value, 'last_name'))
 
 function validateForm() {
   const errors = {}
-
-  if (!form.first_name) {
-    errors.first_name = ['First name is required.']
-  }
-
-  if (!form.last_name) {
-    errors.last_name = ['Last name is required.']
-  }
 
   if (!form.email) {
     errors.email = ['Email is required.']
@@ -174,9 +136,7 @@ async function handleSubmit() {
   try {
     await auth.register({
       email: form.email,
-      password: form.password,
-      first_name: form.first_name,
-      last_name: form.last_name
+      password: form.password
     })
 
     await router.push(resolveRedirectTarget())
@@ -254,12 +214,6 @@ async function handleSubmit() {
   margin-top: 22px;
 }
 
-.auth-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .auth-field {
   display: grid;
   gap: 8px;
@@ -323,9 +277,4 @@ async function handleSubmit() {
   font-weight: 700;
 }
 
-@media (max-width: 640px) {
-  .auth-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>
