@@ -160,8 +160,10 @@ export const authStore = {
   async register(payload) {
     return runAuthAction(async () => {
       const { data } = await authService.register(payload)
-      applyAuthPayload(data)
-      return data.user
+      // Registration requires email activation, so a successful response must
+      // never establish a session from any tokens the API may include.
+      clearAuthState()
+      return data
     }, 'Unable to create your account.')
   },
 

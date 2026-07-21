@@ -15,7 +15,11 @@
         Authentication is not enabled on this backend yet. Anonymous access is currently allowed.
       </div>
 
-      <form class="auth-form" @submit.prevent="handleSubmit">
+      <div v-if="registrationComplete" class="auth-banner auth-banner--success">
+        We sent an activation link to <strong>{{ form.email }}</strong>. Activate your account from that email, then log in.
+      </div>
+
+      <form v-else class="auth-form" @submit.prevent="handleSubmit">
         <label class="auth-field">
           <span>Email</span>
           <input
@@ -57,9 +61,12 @@
         </button>
       </form>
 
-      <p class="auth-card__footer">
+      <p v-if="!registrationComplete" class="auth-card__footer">
         Already registered?
         <RouterLink to="/login">Log in</RouterLink>
+      </p>
+      <p v-else class="auth-card__footer">
+        <RouterLink to="/login">Go to log in</RouterLink>
       </p>
     </div>
   </section>
@@ -67,14 +74,12 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import { AUTH_ENABLED } from '@/config/api'
 import { useAuthStore } from '@/stores/authStore'
 import { firstFieldError, normalizeApiError } from '@/utils/apiErrors'
 
 const auth = useAuthStore()
-const route = useRoute()
-const router = useRouter()
 const authEnabled = AUTH_ENABLED
 
 const form = reactive({
@@ -85,6 +90,7 @@ const form = reactive({
 
 const fieldErrors = ref({})
 const submitError = ref('')
+const registrationComplete = ref(false)
 
 const emailError = computed(() => firstFieldError(fieldErrors.value, 'email'))
 const passwordError = computed(() => firstFieldError(fieldErrors.value, 'password'))
@@ -114,11 +120,6 @@ function validateForm() {
   return errors
 }
 
-function resolveRedirectTarget() {
-  const redirect = route.query.redirect
-  return typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/'
-}
-
 async function handleSubmit() {
   if (!authEnabled) {
     submitError.value = 'Authentication is not available on this backend yet.'
@@ -138,8 +139,7 @@ async function handleSubmit() {
       email: form.email,
       password: form.password
     })
-
-    await router.push(resolveRedirectTarget())
+    registrationComplete.value = true
   } catch (error) {
     const normalized = normalizeApiError(error, 'Unable to create your account.')
     fieldErrors.value = normalized.fieldErrors
@@ -206,6 +206,13 @@ async function handleSubmit() {
   background: rgba(250, 204, 21, 0.12);
   border: 1px solid rgba(250, 204, 21, 0.28);
   color: #fde68a;
+}
+
+.auth-banner--success {
+  background: rgba(94, 234, 212, 0.12);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  color: #ccfbf1;
+  line-height: 1.5;
 }
 
 .auth-form {
