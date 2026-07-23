@@ -79,9 +79,20 @@
 
                 <div ref="agentChatBody" class="agent-chat-body">
                   <div ref="agentChatMessages" class="agent-chat-messages">
-                    <div
+                    <template
                       v-for="message in agentChatMessages"
                       :key="message.id"
+                    >
+                    <div
+                      v-if="message.role === 'assistant'"
+                      :class="[
+                        'agent-chat-message',
+                        `agent-chat-message--${message.role}`
+                      ]"
+                      v-html="renderAgentChatMarkdown(message.text)"
+                    ></div>
+                    <div
+                      v-else
                       :class="[
                         'agent-chat-message',
                         `agent-chat-message--${message.role}`
@@ -89,6 +100,7 @@
                     >
                       {{ message.text }}
                     </div>
+                    </template>
                     <div v-if="agentChatTyping" class="agent-chat-message agent-chat-message--assistant agent-chat-message--typing">
                       Thinking...
                     </div>
@@ -798,6 +810,8 @@ Chart.register(
 import 'chartjs-adapter-date-fns'
 import axios, { apiClient } from '@/services/axiosClient'
 import { buildApiUrl } from '@/config/api'
+import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import { FLOW_EIC_BY_ISO, FLOW_ISO_BY_EIC } from '@/utils/flowDomains'
 import { scaleSequential } from 'd3-scale'
 import {
@@ -897,6 +911,13 @@ const generationCursorPlugin = {
 const AGENT_CHAT_WELCOME_MESSAGE = 'Ask about the energy data for different countries.'
 const AGENT_CHAT_SESSION_STORAGE_KEY = 'energy-map-agent-chat-session'
 const AGENT_CHART_QUERY_URL = buildApiUrl('chart-query/')
+const agentChatMarkdown = new MarkdownIt({ html: false, linkify: true, breaks: true })
+const defaultLinkOpen = agentChatMarkdown.renderer.rules.link_open || ((tokens, index, options, _env, self) => self.renderToken(tokens, index, options))
+agentChatMarkdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
+  tokens[index].attrSet('target', '_blank')
+  tokens[index].attrSet('rel', 'noopener noreferrer')
+  return defaultLinkOpen(tokens, index, options, env, self)
+}
 const AGENT_CHART_STATUS_VALUES = new Set(['chart', 'text'])
 const AGENT_CHART_DATA_UNITS = Object.freeze({
   capacity: 'MW',
@@ -1615,6 +1636,12 @@ export default {
   },
 
   methods: {
+    renderAgentChatMarkdown(text) {
+      return DOMPurify.sanitize(agentChatMarkdown.render(String(text || '')), {
+        USE_PROFILES: { html: true }
+      })
+    },
+
     onHeaderLayerChange(layers) {
       this.showIrradianceLayer = Boolean(layers?.irradiance)
       this.showWindLayer = Boolean(layers?.wind)
@@ -7968,6 +7995,53 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   background: rgba(30, 41, 59, 0.92);
   color: #e2e8f0;
   border: 1px solid rgba(148, 163, 184, 0.14);
+  white-space: normal;
+}
+
+.agent-chat-message--assistant > :first-child {
+  margin-top: 0;
+}
+
+.agent-chat-message--assistant > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-chat-message--assistant p,
+.agent-chat-message--assistant ul,
+.agent-chat-message--assistant ol,
+.agent-chat-message--assistant pre,
+.agent-chat-message--assistant blockquote {
+  margin: 0 0 8px;
+}
+
+.agent-chat-message--assistant ul,
+.agent-chat-message--assistant ol {
+  padding-left: 18px;
+}
+
+.agent-chat-message--assistant a {
+  color: #c4b5fd;
+  text-decoration: underline;
+}
+
+.agent-chat-message--assistant code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.16);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.agent-chat-message--assistant pre {
+  overflow-x: auto;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.agent-chat-message--assistant pre code {
+  padding: 0;
+  background: transparent;
 }
 
 .agent-chat-message--user {
