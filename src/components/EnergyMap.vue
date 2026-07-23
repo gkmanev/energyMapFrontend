@@ -796,7 +796,7 @@ Chart.register(
   LinearScale, TimeScale, CategoryScale, Tooltip, Legend, Filler
 )
 import 'chartjs-adapter-date-fns'
-import axios from '@/services/axiosClient'
+import axios, { apiClient } from '@/services/axiosClient'
 import { buildApiUrl } from '@/config/api'
 import { FLOW_EIC_BY_ISO, FLOW_ISO_BY_EIC } from '@/utils/flowDomains'
 import { scaleSequential } from 'd3-scale'
@@ -1834,7 +1834,11 @@ export default {
           requestBody.conversation_id = this.agentChatConversationId
         }
 
-        const { data } = await axios.post(AGENT_CHART_QUERY_URL, requestBody)
+        const { data } = await apiClient.post(AGENT_CHART_QUERY_URL, requestBody, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
         const response = this.parseEnergyChatResponse(data, responseKey)
 
         if (responseKey !== this.agentChatResponseKey) return
