@@ -198,7 +198,7 @@
         <div v-if="isMobileViewport && mobilePanelVisible" class="mobile-bottom-panel">
           <div class="mobile-panel-header">
             <div class="mobile-panel-titles">
-              <p class="mobile-panel-label">Energy Prices (48h)</p>
+              <p class="mobile-panel-label">Energy Prices (24h)</p>
               <h4 class="mobile-panel-country">{{ mobilePanelCountry }}</h4>
               <span class="chart-brand-signature">visualize.energy</span>
             </div>
@@ -226,7 +226,6 @@
           :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
-            <h3>Historical Prices - {{ timeRangeHeading }} [EUR/MWh]</h3>
             <div class="time-range-buttons">
               <button
                 v-for="option in timeRangeOptions"
@@ -377,7 +376,7 @@
           :class="['time-slider-overlay', { 'time-slider-overlay--floating': shouldFloatTimeSlider }]"
         >
           <div class="overlay-header">
-            <h3>Generation Data - Last 48 Hours</h3>
+            <h3>Generation Data - {{ timeRangeHeading }}</h3>
             <div class="time-range-buttons">
               <button
                 v-for="option in timeRangeOptions"
@@ -582,25 +581,6 @@
               <div v-if="modal.meta" class="generation-total">
                 <span class="generation-total-label">Total output</span>
                 <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
-              </div>
-              <div
-                v-if="
-                  modal.meta &&
-                  modal.meta.todayForecastTotal !== undefined &&
-                  modal.meta.todayForecastTotal !== null
-                "
-                class="generation-forecast"
-              >
-                <div class="generation-forecast-header">
-                  <span class="generation-forecast-label">Today's forecast</span>
-                  <span class="generation-forecast-value">{{ formatMegawatts(modal.meta.todayForecastTotal) }} MW</span>
-                </div>
-                <div
-                  v-if="modal.meta.todayForecastLabel"
-                  class="generation-forecast-subtext"
-                >
-                  {{ modal.meta.todayForecastLabel }}
-                </div>
               </div>
               <div
                 v-if="modal.meta && modal.meta.topTechnologies.length"
@@ -1057,7 +1037,7 @@ export default {
       availableTimestamps: [],
       historicalPriceData: {},
       
-      // Generation time-series data for heatmap (48 hours)
+      // Generation time-series data for heatmap (24 hours at hourly resolution)
       availableGenerationTimestamps: [],
       historicalGenerationData: {},
       generationForecastData: {},
@@ -1132,7 +1112,7 @@ export default {
       })(),
       center: [54, 20],
       selectedColorScheme: 'ylOrRd',
-      tileUrl: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',     
+      tileUrl: 'https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_2g9o_1_4e9c0a1468e366798277b488',
       mapOptions: {
         zoomSnap: 0.5,
         preferCanvas: true,
@@ -1297,7 +1277,7 @@ export default {
         case 'years':
           return 'Last 5 Years'
         default:
-          return 'Last 48 Hours'
+          return 'Last 24 Hours'
       }
     },
 
@@ -4857,7 +4837,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
           if (forecastSeries.length) {
             datasets.push({
-              label: "Today's forecast",
+              label: 'Forecast',
               data: forecastSeries,
               type: 'line',
               borderColor: '#facc15',
@@ -5338,12 +5318,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.onSliderChange()
     },
     
-    generateLast48HoursTimestamps() {
+    generateLast24HoursTimestamps() {
       const timestamps = []
       const now = new Date()
       const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0)
       
-      for (let i = 47; i >= 0; i--) {
+      for (let i = 23; i >= 0; i--) {
         const timestamp = new Date(currentHour.getTime() - (i * 60 * 60 * 1000))
         timestamps.push(timestamp.getTime())
       }
@@ -5403,7 +5383,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.selectedTimeRange === 'years') {
         return this.generateLastNYearsTimestamps(5)
       }
-      return this.generateLast48HoursTimestamps()
+      return this.generateLast24HoursTimestamps()
     },
 
     getPriceRangeDates() {
@@ -5417,7 +5397,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       } else if (this.selectedTimeRange === 'years') {
         start = new Date(now.getFullYear() - 5, 0, 1)
       } else {
-        start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+        start = new Date(now.getTime() - (24 * 60 * 60 * 1000))
       }
 
       const end = this.selectedTimeRange === 'months'
@@ -5448,10 +5428,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.selectedTimeRange === 'days') {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
       }
-      if (this.selectedTimeRange === 'hours' && this.currentTimeIndex === this.maxTimeIndex) {
-        const quarterMs = 15 * 60 * 1000
-        return Math.floor(timestampMs / quarterMs) * quarterMs
-      }
       return Math.floor(timestampMs / (60 * 60 * 1000)) * (60 * 60 * 1000)
     },
 
@@ -5468,7 +5444,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return ''
     },
     
-    generateLast48HoursGenerationTimestamps() {
+    generateLast24HoursGenerationTimestamps() {
       const timestamps = []
       const now = new Date()
       const currentHourUTC = Date.UTC(
@@ -5481,7 +5457,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         0
       )
 
-      for (let i = 47; i >= 0; i--) {
+      for (let i = 23; i >= 0; i--) {
         const timestamp = currentHourUTC - i * 60 * 60 * 1000
         timestamps.push(timestamp)
       }
@@ -5539,7 +5515,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.selectedTimeRange === 'years') {
         return this.generateLastNYearsGenerationTimestamps(5)
       }
-      return this.generateLast48HoursGenerationTimestamps()
+      return this.generateLast24HoursGenerationTimestamps()
     },
 
     getGenerationRangeDates() {
@@ -5553,7 +5529,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       } else if (this.selectedTimeRange === 'years') {
         start = new Date(Date.UTC(now.getUTCFullYear() - 5, 0, 1, 0, 0, 0, 0))
       } else {
-        start = new Date(now.getTime() - (48 * 60 * 60 * 1000))
+        start = new Date(now.getTime() - (24 * 60 * 60 * 1000))
       }
 
       const end = this.selectedTimeRange === 'months'
@@ -5603,7 +5579,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
     getGenerationChartTimeConfig(forceHour = false) {
       if (forceHour) {
-        return { unit: 'hour', tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm' } }
+        return { unit: 'hour', stepSize: 3, tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm' } }
       }
       if (this.selectedTimeRange === 'years') {
         return { unit: 'year', tooltipFormat: 'yyyy', displayFormats: { year: 'yyyy' } }
@@ -5614,7 +5590,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.selectedTimeRange === 'days') {
         return { unit: 'day', tooltipFormat: 'MMM d', displayFormats: { day: 'MMM d' } }
       }
-      return { unit: 'hour', tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm' } }
+      return { unit: 'hour', stepSize: 3, tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm' } }
     },
 
     getPriceChartTimeConfig() {
@@ -5627,7 +5603,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (this.selectedTimeRange === 'days') {
         return { unit: 'day', tooltipFormat: 'MMM d', displayFormats: { day: 'MMM d' } }
       }
-      return { unit: 'hour', tooltipFormat: 'dd/MM HH:mm', displayFormats: { hour: 'dd/MM HH:mm' } }
+      return { unit: 'hour', stepSize: 3, tooltipFormat: 'HH:mm', displayFormats: { hour: 'HH:mm' } }
     },
     
 
@@ -6277,15 +6253,35 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 if (vm.generationChartInstance?.resize) vm.generationChartInstance.resize()
                 if (vm.generationChartInstance?.update) vm.generationChartInstance.update()
 
-                // UPDATED: Create BOTH capacity and generation modals for each click
-                const capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
-                vm.createSeparateModal(name, 'generation', 'Energy Generation')
-                vm.createSeparateModal(name, 'prices', 'Energy Prices (48h)')
+                // Put the selected map view's chart first for the stacked
+                // laptop/mobile layout.
+                let priceModalId
+                let capacityModalId
+                let generationModalId
+
+                if (vm.heatmapType === 'generation') {
+                  generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
+                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices (24h)')
+                  capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
+                } else if (vm.heatmapType === 'prices') {
+                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices (24h)')
+                  capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
+                  generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
+                } else {
+                  capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
+                  generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
+                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices (24h)')
+                }
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
                 vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
 
-                if (!vm.isLargeModalViewport && capacityModalId !== undefined) {
-                  vm.scrollToModal(capacityModalId)
+                if (!vm.isLargeModalViewport) {
+                  const activeModalId = vm.heatmapType === 'prices'
+                    ? priceModalId
+                    : vm.heatmapType === 'generation'
+                      ? generationModalId
+                      : capacityModalId
+                  if (activeModalId !== undefined) vm.scrollToModal(activeModalId)
                 }
               } else {
                 vm.capacityError = 'Missing ISO-2 code for this feature'
@@ -7763,12 +7759,50 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .content-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-areas:
+    "header"
+    "slider"
+    "map"
+    "layers"
+    "modals"
+    "footer";
+  gap: 0;
   position: relative;
   z-index: 1;
   width: 100%;
+}
+
+/* Split the header's main row and Layers strip into the page layout so the
+   timeline can sit above the map and the Layers strip below it. */
+.header-shell:not(.header-shell--floating),
+.header-shell:not(.header-shell--floating) .app-header {
+  display: contents;
+}
+
+.header-main {
+  grid-area: header;
+  margin-bottom: 12px;
+}
+
+.header-sub {
+  grid-area: layers;
+  margin-bottom: 12px;
+}
+
+/* Join the Layers strip to the map instead of leaving a grid gap between them. */
+.header-shell:not(.header-shell--floating) .header-sub {
+  position: relative;
+  z-index: 2;
+  margin-top: 0;
+  transform: none;
+  border-radius: 0 0 18px 18px;
+  border: 1px solid var(--hdr-border);
+  border-top: 1px solid var(--hdr-border);
+}
+
+.header-shell:not(.header-shell--floating) ~ .map-row .map {
+  border-radius: 18px 18px 0 0;
 }
 
 .header-shell {
@@ -8419,6 +8453,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 /* Map layout */
 .map-row {
+  grid-area: map;
   position: relative;
   display: flex;
   gap: 16px;
@@ -8584,7 +8619,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   justify-content: center;
 }
 
-.separate-modal--mobile .price-chart canvas,
+.separate-modal--mobile .price-chart canvas {
+  width: 100% !important;
+  max-width: none;
+  margin: 0 auto;
+}
+
 .separate-modal--mobile .netflow-modal .chart-container canvas {
   width: 100% !important;
   max-width: 540px;
@@ -9046,6 +9086,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 /* Time slider positioned above footer (overlay style) */
 .time-slider-overlay {
+  grid-area: slider;
   background: rgba(255, 255, 255, 0.25);
   backdrop-filter: blur(10px);
   border-radius: 8px;
@@ -9058,8 +9099,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   gap: 5px;
   width: min(860px, 92vw);
   align-self: center;
-  margin-top: 18px;
-  margin-bottom: 50px;
+  margin-top: 0;
+  margin-bottom: 12px;
 }
 
 .time-slider-overlay--floating {
@@ -9606,11 +9647,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     bottom: calc(22px + 10px);
   }
 
-  .separate-modal-stack {
+.separate-modal-stack {
+  grid-area: modals;
     padding-bottom: 170px;
   }
 
-  .app-footer {
+.app-footer {
+  grid-area: footer;
     height: 22px;
   }
 
