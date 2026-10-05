@@ -1,0 +1,118 @@
+.auth-card__header h1 {
+  margin: 0;
+  padding-right: 32px;
+  font-size: 22px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.auth-banner {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.auth-banner--error {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+}
+
+.auth-banner--warning {
+  background: rgba(250, 204, 21, 0.1);
+  border-color: rgba(250, 204, 21, 0.28);
+  color: #fde68a;
+}
+
+.auth-banner--success {
+  background: rgba(94, 234, 212, 0.1);
+  border-color: rgba(94, 234, 212, 0.28);
+  color: #ccfbf1;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 5px;
+}
+
+.auth-field span {
+  font-size: 13px;
+  color: #d7cfea;
+}
+
+.auth-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid rgba(182, 169, 213, 0.25);
+  border-radius: 8px;
+  background: #211936;
+  color: #f8fafc;
+  font-family: inherit;
+  font-size: 16px;
+}
+
+.auth-field input::placeholder {
+  color: #9d90b8;
+  font-size: 14px;
+}
+
+.auth-field input:focus-visible,
+.auth-submit:focus-visible,
+.auth-card__footer a:focus-visible {
+  outline: 2px solid #9c8cf5;
+  outline-offset: 2px;
+}
+
+.auth-field small {
+  color: #fda4af;
+}
+
+.auth-submit {
+  min-height: 44px;
+  margin-top: 2px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #7c6cf0;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: #8f80f4;
+}
+
+.auth-field input:disabled,
+.auth-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.auth-card__footer {
+  margin: 14px 0 0;
+  color: #b6a9d5;
+  font-size: 13px;
+  text-align: center;
+}
+
+.auth-card__footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #c4b5fd;
+  font-weight: 600;
+}

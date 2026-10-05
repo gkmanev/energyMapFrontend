@@ -1,12 +1,7 @@
 <template>
   <div id="app" class="app-shell">
     <header class="topbar">
-      <RouterLink class="brand" to="/">
-        <span class="brand__mark">visualize</span>
-        <span class="brand__accent">.energy</span>
-      </RouterLink>
-
-      <nav class="topbar__nav">
+      <nav class="topbar__nav" aria-label="Account">
         <RouterLink
           v-if="auth.isAuthenticated"
           class="topbar__link"
@@ -36,7 +31,7 @@
       </nav>
     </header>
 
-    <main class="app-main" :class="{ 'app-main--auth': isAuthRoute }">
+    <main class="app-main">
       <RouterView />
     </main>
   </div>
@@ -44,13 +39,10 @@
 
 <script setup>
 import { computed } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 
 const auth = useAuthStore()
-const route = useRoute()
-
-const isAuthRoute = computed(() => ['login', 'signup'].includes(String(route.name || '')))
 const displayIdentity = computed(() => {
   const user = auth.user
   if (!user) {
@@ -92,6 +84,8 @@ a {
 
 <style scoped>
 .app-shell {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
@@ -101,34 +95,41 @@ a {
   z-index: 1400;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
+  justify-content: flex-end;
+  padding: 4px 20px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
   backdrop-filter: blur(18px);
   background: rgba(10, 12, 24, 0.68);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.brand {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-  color: #f8fafc;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-
-.brand__accent {
-  color: #5eead4;
-}
-
 .topbar__nav {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
   justify-content: flex-end;
+}
+
+.topbar__link,
+.topbar__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font: inherit;
+}
+
+.topbar__link:focus-visible,
+.topbar__button:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
 }
 
 .topbar__link {
@@ -139,10 +140,8 @@ a {
 .topbar__identity {
   display: grid;
   gap: 2px;
-  padding: 8px 12px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  min-width: 0;
+  padding: 0 8px;
 }
 
 .topbar__identity-label {
@@ -153,6 +152,9 @@ a {
 }
 
 .topbar__identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #f8fafc;
   font-size: 14px;
 }
@@ -161,9 +163,8 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
   color: #f8fafc;
-  border-radius: 999px;
-  padding: 10px 14px;
-  font-weight: 700;
+  border-radius: 8px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -174,22 +175,25 @@ a {
 }
 
 .app-main {
-  min-height: calc(100vh - 78px);
+  flex: 1;
 }
 
-.app-main--auth {
-  display: flex;
-}
-
-@media (max-width: 720px) {
+@media (max-width: 1024px) {
   .topbar {
-    align-items: flex-start;
-    flex-direction: column;
+    padding-inline: 12px;
   }
 
   .topbar__nav {
-    width: 100%;
-    justify-content: flex-start;
+    gap: 4px;
+    max-width: 100%;
+  }
+
+  .topbar__identity {
+    padding-inline: 4px;
+  }
+
+  .topbar__identity-label {
+    display: none;
   }
 }
 </style>

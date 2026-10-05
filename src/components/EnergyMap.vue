@@ -702,6 +702,10 @@ const SUPPORTED_PRICE_ISO2 = new Set([
   'PT','RO','RS','SE','SI','SK','TR','UA'
 ])
 
+// The deployed latest-flows endpoint rejects TR. Its BG response already includes
+// the BG-TR border, so querying TR separately only creates a client-visible 400.
+const FLOW_LATEST_UNSUPPORTED_ISO2 = new Set(['TR'])
+
 const SUPPORTED_CAPACITY_ISO2 = new Set([
   'AL','AT','BA','BE','BG','CH','CZ','DE','DK','EE','ES','FI','FR','GB',
   'GR','HR','HU','IE','IT','LT','LU','LV','NL','NO','PL','PT','RO','SE','SI','SK'
@@ -3187,13 +3191,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
     async refreshLatestRealFlows() {
-      const countries = [...new Set(this.flowEdges.flat())].filter((iso2) => FLOW_EIC_BY_ISO[iso2])
+      const countries = [...new Set(this.flowEdges.flat())].filter(
+        (iso2) => FLOW_EIC_BY_ISO[iso2] && !FLOW_LATEST_UNSUPPORTED_ISO2.has(iso2)
+      )
       if (!countries.length) return
 
       const latestByEdge = {}
       const responses = await Promise.allSettled(
         countries.map(async (iso2) => {
-          const url = buildApiUrl(`flows/latest/?country=${encodeURIComponent(iso2)}&neighbors=1`)
+          const url = buildApiUrl(`flows/latest/?country=${encodeURIComponent(iso2)}`)
           const { data } = await axios.get(url, { timeout: 20000 })
           const items = Array.isArray(data?.items)
             ? data.items
@@ -5754,36 +5760,44 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const { start, end } = this.getPriceRangeDates()
 
         const resolutionParam = this.getPriceResolutionParam()
-        const url = buildApiUrl(`prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${start.toISOString().split('T')[0]}&end=${end.toISOString()}${resolutionParam}`)
-        console.log('[Price] bulk-range endpoint:', url)
-        const { data } = await axios.get(url, {
-          timeout: this.getBulkPriceTimeoutMs(),
-          signal: this.currentAbortController?.signal
-        })
-        
-        const historicalData = {}
-        
-        if (data.data) {
-          for (const [iso2, countryData] of Object.entries(data.data)) {
-            if (countryData.items && Array.isArray(countryData.items)) {
-              const timeData = {}
-              
-              for (const item of countryData.items) {
-                const timestamp = new Date(item.datetime_utc).getTime()
-                if (Number.isFinite(item.price)) {
-                  const normalizedTimestamp = this.normalizePriceTimestamp(timestamp)
-                  timeData[normalizedTimestamp] = item.price
-                }
-              }
-              
-              if (Object.keys(timeData).length > 0) {
-                historicalData[iso2] = timeData
+        const fetchRange = async (rangeStart, rangeEnd) => {
+          const url = buildApiUrl(`prices/bulk-range/?countries=${countries.join(',')}&contract=A01&start=${rangeStart.toISOString().split('T')[0]}&end=${rangeEnd.toISOString()}${resolutionParam}`)
+          console.log('[Price] bulk-range endpoint:', url)
+          const { data } = await axios.get(url, {
+            timeout: this.getBulkPriceTimeoutMs(),
+            signal: this.currentAbortController?.signal
+          })
+
+          const historicalData = {}
+          for (const [iso2, countryData] of Object.entries(data?.data || {})) {
+            if (!Array.isArray(countryData?.items)) continue
+
+            const timeData = {}
+            for (const item of countryData.items) {
+              const timestamp = new Date(item.datetime_utc).getTime()
+              if (Number.isFinite(item.price)) {
+                const normalizedTimestamp = this.normalizePriceTimestamp(timestamp)
+                timeData[normalizedTimestamp] = item.price
               }
             }
+
+            if (Object.keys(timeData).length > 0) {
+              historicalData[iso2] = timeData
+            }
           }
+          return historicalData
         }
-        
-        return historicalData
+
+        const historicalData = await fetchRange(start, end)
+        if (Object.keys(historicalData).length > 0 || this.currentAbortController?.signal?.aborted) {
+          return historicalData
+        }
+
+        // Price publication may lag by a few days. Preserve a useful heatmap
+        // instead of rendering an empty map while the upstream import catches up.
+        const fallbackStart = new Date(start.getTime() - (7 * 24 * 60 * 60 * 1000))
+        console.warn('[Price] No data in the requested range; loading the latest available data window.')
+        return fetchRange(fallbackStart, end)
         
       } catch (error) {
         console.error(`Bulk API request failed for ${countries.length} countries:`, error)

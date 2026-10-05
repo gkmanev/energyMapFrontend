@@ -10,23 +10,25 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomeView
+      component: HomeView,
+      children: [
+        {
+          path: 'login',
+          name: 'login',
+          component: LoginView,
+          meta: { guestOnly: true }
+        },
+        {
+          path: 'signup',
+          name: 'signup',
+          component: SignupView,
+          meta: { guestOnly: true }
+        }
+      ]
     },
     {
       path: '/dashboard',
       redirect: { name: 'home' }
-    },
-    {
-      path: '/login',
-      name: 'login',
-      component: LoginView,
-      meta: { guestOnly: true }
-    },
-    {
-      path: '/signup',
-      name: 'signup',
-      component: SignupView,
-      meta: { guestOnly: true }
     },
     {
       path: '/:pathMatch(.*)*',
