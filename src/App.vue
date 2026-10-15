@@ -196,4 +196,11 @@ a {
     display: none;
   }
 }
+
+/* On small screens the account links live in the map header's menu. */
+@media (max-width: 768px) {
+  .topbar {
+    display: none;
+  }
+}
 </style>

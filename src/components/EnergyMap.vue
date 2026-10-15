@@ -247,8 +247,10 @@
                 @click="togglePlay"
                 :disabled="!hasTimeData || isRefreshing"
                 class="play-button"
+                :aria-label="isPlaying ? 'Pause' : 'Play'"
               >
-                {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+                <span class="play-button__icon" aria-hidden="true">{{ isPlaying ? '⏸' : '▶' }}</span>
+                <span class="play-button__label">{{ isPlaying ? 'Pause' : 'Play' }}</span>
               </button>
             </div>
 
@@ -322,8 +324,10 @@
                 @click="togglePlay"
                 :disabled="!hasTimeData || isRefreshing"
                 class="play-button"
+                :aria-label="isPlaying ? 'Pause' : 'Play'"
               >
-                {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+                <span class="play-button__icon" aria-hidden="true">{{ isPlaying ? '⏸' : '▶' }}</span>
+                <span class="play-button__label">{{ isPlaying ? 'Pause' : 'Play' }}</span>
               </button>
             </div>
 
@@ -399,8 +403,10 @@
                 @click="togglePlay"
                 :disabled="!hasTimeData || isRefreshing"
                 class="play-button"
+                :aria-label="isPlaying ? 'Pause' : 'Play'"
               >
-                {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+                <span class="play-button__icon" aria-hidden="true">{{ isPlaying ? '⏸' : '▶' }}</span>
+                <span class="play-button__label">{{ isPlaying ? 'Pause' : 'Play' }}</span>
               </button>
             </div>
 
@@ -9521,6 +9527,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .play-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 10px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -9625,7 +9634,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .content-shell {
-    padding-bottom: 140px;
+    padding-bottom: 0;
+  }
+
+  .layout-shell {
+    gap: 0;
+  }
+
+  .separate-modal--mobile {
+    margin-top: 8px;
   }
 
   .slider-wrapper {
@@ -10407,6 +10424,186 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   font-size: 9px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.52);
+}
+
+/* Mobile timeline card: matches the header palette, with clear rows for
+   title + range, current readout, and play + slider. */
+@media (max-width: 768px) {
+  .time-slider-overlay,
+  .time-slider-overlay--floating {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 10px;
+    padding: 10px 12px 8px;
+    gap: 8px;
+    border-radius: 12px;
+    background: #1f1638;
+    border: 1px solid #3a2f5c;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .time-slider-overlay--floating {
+    width: calc(100% - 16px);
+    max-width: calc(100% - 16px);
+    margin: 0;
+    bottom: calc(22px + 8px + env(safe-area-inset-bottom, 0px));
+    background: rgba(31, 22, 56, 0.96);
+    box-shadow: 0 12px 30px rgba(5, 3, 15, 0.45);
+  }
+
+  .overlay-header {
+    gap: 8px 10px;
+  }
+
+  .time-slider-overlay h3 {
+    font-size: 13px;
+    color: #ffffff;
+    white-space: normal;
+    min-width: 0;
+  }
+
+  .time-range-buttons {
+    margin-left: auto;
+    background: #241a42;
+    border-radius: 8px;
+    gap: 2px;
+  }
+
+  .time-range-button {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: #b6a9e8;
+  }
+
+  .time-range-button.active {
+    background: #7c6cf0;
+    color: #ffffff;
+    box-shadow: none;
+  }
+
+  .time-range-button:hover:not(.active) {
+    background: transparent;
+    color: #cfc4f2;
+  }
+
+  .slider-info {
+    flex-basis: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .time-display {
+    color: #ffffff;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .generation-display,
+  .capacity-display {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(72, 187, 120, 0.14);
+    color: #6ee7a8;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .slider-row,
+  .slider-row--full {
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+
+  .play-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    background: #7c6cf0;
+    box-shadow: none;
+    font-size: 13px;
+  }
+
+  .play-button:disabled {
+    background: #3a2f5c;
+  }
+
+  .play-button__label {
+    display: none;
+  }
+
+  .slider-wrapper {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+    height: 36px;
+    margin: 0 10px 0 4px;
+  }
+
+  .custom-slider {
+    height: 20px;
+  }
+
+  .smooth-range-slider {
+    height: 20px;
+  }
+
+  .smooth-range-slider::-webkit-slider-thumb {
+    width: 20px;
+    height: 20px;
+    background: #7c6cf0;
+    border: 3px solid #ffffff;
+  }
+
+  .smooth-range-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #7c6cf0;
+    border: 3px solid #ffffff;
+  }
+
+  .slider-track {
+    height: 4px;
+    background: #3a2f5c;
+  }
+
+  .slider-progress {
+    background: linear-gradient(90deg, #5b4bd6 0%, #8f80f4 100%);
+  }
+
+  .time-ticks-below {
+    top: 20px;
+  }
+
+  .tick-mark-below {
+    height: 4px;
+    background: #4a3e72;
+  }
+
+  .tick-label-below {
+    font-size: 10px;
+    color: #8677b8;
+  }
+
+  /* Every other label so they don't collide on narrow screens. */
+  .time-tick-below:nth-child(even) .tick-label-below {
+    visibility: hidden;
+  }
+
+  .no-data-message {
+    color: #b6a9e8;
+  }
 }
 
 </style>

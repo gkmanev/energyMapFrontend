@@ -55,6 +55,80 @@
           </svg>
           AI agent
         </button>
+
+        <button
+          type="button"
+          class="menu-toggle"
+          :aria-expanded="menuOpen"
+          aria-controls="app-header-menu"
+          :aria-label="menuOpen ? 'Close menu' : 'Open menu'"
+          @click="menuOpen = !menuOpen"
+        >
+          <svg
+            class="icon icon--menu"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path v-if="menuOpen" d="M6 6l12 12M18 6L6 18" />
+            <path v-else d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </div>
+
+      <div v-if="menuOpen" id="app-header-menu" class="menu-panel">
+        <span class="strip-label">Map view</span>
+        <div class="menu-tabs" role="tablist" aria-label="Map view">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            type="button"
+            role="tab"
+            class="tab"
+            :class="{ active: modelValue === tab.id }"
+            :aria-selected="modelValue === tab.id"
+            @click="selectTab(tab.id)"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <button type="button" class="btn-agent menu-agent" @click="openAgent">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 3l1.9 5.7a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z" />
+          </svg>
+          AI agent
+        </button>
+
+        <div class="menu-account">
+          <template v-if="auth.isAuthenticated">
+            <span class="menu-identity">{{ displayIdentity }}</span>
+            <button type="button" class="menu-link" @click="handleLogout">
+              Logout
+            </button>
+          </template>
+          <template v-else>
+            <RouterLink class="menu-link" to="/login" @click="menuOpen = false">
+              Login
+            </RouterLink>
+            <RouterLink class="menu-link menu-link--primary" to="/signup" @click="menuOpen = false">
+              Sign up
+            </RouterLink>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -120,6 +194,8 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 
 const props = defineProps({
   modelValue: { type: String, default: 'price' },
@@ -156,6 +232,40 @@ watch(
   { deep: true }
 )
 
+const auth = useAuthStore()
+const menuOpen = ref(false)
+
+const displayIdentity = computed(() => {
+  const user = auth.user
+  if (!user) {
+    return 'Unknown user'
+  }
+
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+  return fullName || user.email || 'Unknown user'
+})
+
+function selectTab(id) {
+  emit('update:modelValue', id)
+  menuOpen.value = false
+}
+
+function openAgent() {
+  menuOpen.value = false
+  emit('open-agent')
+}
+
+async function handleLogout() {
+  menuOpen.value = false
+  await auth.logout()
+}
+
+function onKeydown(event) {
+  if (event.key === 'Escape') {
+    menuOpen.value = false
+  }
+}
+
 function toggleLayer(name) {
   layers.value = {
     ...layers.value,
@@ -187,9 +297,13 @@ onMounted(() => {
   timer = setInterval(() => {
     now.value = new Date()
   }, 60_000)
+  window.addEventListener('keydown', onKeydown)
 })
 
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  clearInterval(timer)
+  window.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <style scoped>
@@ -409,6 +523,130 @@ onUnmounted(() => clearInterval(timer))
   height: 8px;
   border-radius: 4px;
   background: linear-gradient(to right, #f2e8c9, #f0a04b, #d63a2f, #6b0d24);
+}
+
+.menu-toggle,
+.menu-panel {
+  display: none;
+}
+
+.menu-toggle {
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--hdr-border);
+  border-radius: 8px;
+  background: var(--hdr-pill-bg);
+  color: var(--hdr-text);
+  cursor: pointer;
+}
+
+.menu-toggle:focus-visible,
+.menu-link:focus-visible,
+.btn-agent:focus-visible {
+  outline: 2px solid var(--hdr-accent-hover);
+  outline-offset: 1px;
+}
+
+.icon--menu {
+  width: 20px;
+  height: 20px;
+}
+
+.menu-panel {
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hdr-border);
+}
+
+.menu-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--hdr-pill-bg);
+  border-radius: 8px;
+}
+
+.menu-tabs .tab {
+  flex: 1;
+  padding: 8px 6px;
+}
+
+.menu-agent {
+  justify-content: center;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.menu-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-identity {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--hdr-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-link {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--hdr-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--hdr-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.menu-account .menu-identity + .menu-link {
+  flex: 0 0 auto;
+}
+
+.menu-link--primary {
+  background: linear-gradient(135deg, #5eead4, #93c5fd);
+  border-color: transparent;
+  color: #042f2e;
+}
+
+@media (max-width: 768px) {
+  .header-main {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+
+  .view-tabs,
+  .header-right .btn-agent {
+    display: none;
+  }
+
+  .header-right {
+    gap: 10px;
+  }
+
+  .menu-toggle {
+    display: inline-flex;
+  }
+
+  .menu-panel {
+    display: flex;
+  }
 }
 
 @media (max-width: 560px) {
