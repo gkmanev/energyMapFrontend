@@ -200,7 +200,6 @@
             <div class="mobile-panel-titles">
               <p class="mobile-panel-label">Energy Prices (24h)</p>
               <h4 class="mobile-panel-country">{{ mobilePanelCountry }}</h4>
-              <span class="chart-brand-signature">visualize.energy</span>
             </div>
             <button class="mobile-panel-close" @click="closeMobilePanel">Hide</button>
           </div>
@@ -480,56 +479,38 @@
           :style="{ cursor: usesStackedModalLayout ? 'default' : 'move' }"
         >
           <div class="separate-modal-title">
-            <h4>{{ modal.country }} - {{ modal.title }}</h4>
-            <span class="chart-brand-signature">visualize.energy</span>
-            <div
-              v-if="modal.type === 'generation' && !modal.thumbnail"
-              class="generation-mode-toggle"
-              @pointerdown.stop
-              @click.stop
+            <h4>{{ modal.country }} · {{ modal.title }}</h4>
+            <span v-if="!modal.thumbnail" class="separate-modal-window">{{ getSeparateModalTimeWindow(modal) }}</span>
+          </div>
+          <div
+            v-if="!modal.thumbnail && modal.type === 'capacity'"
+            class="generation-mode-toggle"
+            @pointerdown.stop
+            @dblclick.stop
+          >
+            <button
+              class="generation-mode-button"
+              :class="{ active: modal.capacityView === 'bar' }"
+              @click="setCapacityModalView(modal.id, 'bar')"
             >
-              <button
-                class="generation-mode-button"
-                :class="{ active: modal.generationView === 'all' }"
-                @click="setGenerationModalView(modal.id, 'all')"
-              >
-                All
-              </button>
-              <button
-                class="generation-mode-button"
-                :class="{ active: modal.generationView === 'res' }"
-                @click="setGenerationModalView(modal.id, 'res')"
-              >
-                RES Forecast
-              </button>
-            </div>
-            <div
-              v-if="modal.type === 'capacity' && !modal.thumbnail"
-              class="generation-mode-toggle"
-              @pointerdown.stop
-              @click.stop
+              Bar
+            </button>
+            <button
+              class="generation-mode-button"
+              :class="{ active: modal.capacityView === 'pie' }"
+              @click="setCapacityModalView(modal.id, 'pie')"
             >
-              <button
-                class="generation-mode-button"
-                :class="{ active: modal.capacityView === 'bar' }"
-                @click="setCapacityModalView(modal.id, 'bar')"
-              >
-                Bar
-              </button>
-              <button
-                class="generation-mode-button"
-                :class="{ active: modal.capacityView === 'pie' }"
-                @click="setCapacityModalView(modal.id, 'pie')"
-              >
-                Pie
-              </button>
-            </div>
+              Pie
+            </button>
           </div>
           <button
             @click="closeSeparateModal(modal.id)"
             class="separate-modal-close"
+            aria-label="Close chart"
           >
-            ×
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
           </button>
         </div>
 
@@ -3892,9 +3873,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         chart: null,
         data: null,
         forecastData: null,
-        resForecastData: null,
         meta: null,
-        generationView: 'all',
         capacityView: 'bar',
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
@@ -4387,12 +4366,13 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     async retrySeparateModalData(modalId) {
       const modal = this.separateModals.find(m => m.id === modalId)
       if (modal) {
-        if (modal.type === 'generation' && modal.generationView === 'res') {
-          await this.setGenerationModalView(modalId, 'res', { force: true })
-          return
-        }
         await this.loadSeparateModalData(modalId, modal.country, modal.type)
       }
+    },
+
+    getSeparateModalTimeWindow(modal) {
+      if (modal.type === 'capacity') return this.currentTimeDisplay
+      return this.timeRangeHeading
     },
 
     buildCapacityPieData(labels, generationMapped, totalCapacity) {
@@ -4410,34 +4390,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       modal.capacityView = view
       await nextTick()
       await this.createSeparateModalChart(modalId)
-    },
-
-    async setGenerationModalView(modalId, view, { force = false } = {}) {
-      const modal = this.separateModals.find(m => m.id === modalId)
-      if (!modal || modal.type !== 'generation') return
-      if (!force && modal.generationView === view) return
-
-      modal.generationView = view
-
-      if (view === 'res') {
-        if (force || modal.resForecastData === null) {
-          modal.loading = true
-          modal.error = null
-          try {
-            const iso2 = this.getCountryISO2ByName(modal.country)
-            if (!iso2) throw new Error('Country not found')
-            modal.resForecastData = await this.fetchGenerationResRange(iso2)
-          } catch (error) {
-            console.error(`Failed to load RES forecast for ${modal.country}:`, error)
-            modal.error = error.message || 'Failed to load RES forecast data'
-          } finally {
-            modal.loading = false
-          }
-        }
-      }
-
-      await nextTick()
-      this.createSeparateModalChart(modalId)
     },
 
     async createSeparateModalChart(modalId) {
@@ -4543,7 +4495,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
         if (modal.capacityView === 'pie') {
           if (chartContainer) {
-            chartContainer.style.setProperty('--capacity-chart-min-height', '320px')
+            chartContainer.style.setProperty('--capacity-chart-min-height', '380px')
             chartContainer.style.removeProperty('--capacity-chart-height')
             chartContainer.style.removeProperty('height')
           }
@@ -4624,7 +4576,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         }
 
         if (chartContainer) {
-          const recommendedHeight = Math.max(220, Math.min(520, items.length * 40))
+          const recommendedHeight = Math.max(280, Math.min(600, items.length * 44))
           chartContainer.style.setProperty('--capacity-chart-min-height', `${recommendedHeight}px`)
           chartContainer.style.removeProperty('--capacity-chart-height')
           chartContainer.style.removeProperty('height')
@@ -4751,162 +4703,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.chart.$generationValues = generationMapped
 
       } else if (modal.type === 'generation') {
-          if (modal.generationView === 'res') {
-            const items = Array.isArray(modal.resForecastData)
-              ? JSON.parse(JSON.stringify(modal.resForecastData))
-              : []
-
-            const resItems = items.filter(item => {
-              const tech = (item.psr_name || item.psr_type || '').toString().toLowerCase()
-              return tech.includes('wind') || tech.includes('solar')
-            })
-
-            const timestamps = Array.from(
-              new Set(resItems.map(i => Date.parse(i.datetime_utc)))
-            ).filter(Number.isFinite).sort((a, b) => a - b)
-
-            const latestTimestamp = timestamps[timestamps.length - 1] || null
-            const xMin = timestamps.length ? timestamps[0] : undefined
-            const xMax = timestamps.length ? timestamps[timestamps.length - 1] : undefined
-
-            const byTech = new Map()
-            resItems.forEach(i => {
-              const tech = i.psr_name || i.psr_type || 'Unknown'
-              const time = Date.parse(i.datetime_utc)
-              if (!Number.isFinite(time)) return
-              const value = Number(i.forecast_mw ?? i.generation_mw ?? i.total_generation_mw ?? i.value)
-              if (!Number.isFinite(value)) return
-              if (!byTech.has(tech)) byTech.set(tech, new Map())
-              byTech.get(tech).set(time, value)
-            })
-
-            const techSummaries = []
-            const datasets = []
-            byTech.forEach((series, tech) => {
-              const color = this.psrColors[tech] || { border: 'rgba(0,0,0,0.8)', fill: 'rgba(0,0,0,0.4)' }
-              const data = timestamps.map(ts => ({
-                x: ts,
-                y: series.get(ts) || 0
-              }))
-              const latestValue = latestTimestamp ? (series.get(latestTimestamp) || 0) : 0
-              techSummaries.push({
-                name: tech,
-                value: latestValue,
-                color: color.border
-              })
-              datasets.push({
-                label: tech,
-                data,
-                borderColor: color.border,
-                backgroundColor: color.fill,
-                pointRadius: 0,
-                borderWidth: 1,
-                fill: true,
-                stack: 'res',
-                tension: 0.25
-              })
-            })
-
-            const totalGeneration = techSummaries.reduce((sum, entry) => sum + (entry.value || 0), 0)
-            const sortedSummaries = techSummaries
-              .slice()
-              .sort((a, b) => (b.value || 0) - (a.value || 0))
-
-            const legendItems = sortedSummaries.map(entry => ({
-              name: entry.name,
-              value: entry.value || 0,
-              share: totalGeneration > 0 ? (entry.value / totalGeneration) * 100 : 0,
-              color: entry.color
-            }))
-
-            const timeConfig = this.getGenerationChartTimeConfig(true)
-
-            modal.meta = {
-              totalGeneration,
-              topTechnologies: legendItems.slice(0, 3),
-              legendItems,
-              updatedLabel: latestTimestamp
-                ? `RES forecast: ${new Date(latestTimestamp).toLocaleString()}`
-                : '',
-              todayForecastTotal: null,
-              todayForecastLabel: ''
-            }
-
-            const cfg = {
-              type: 'line',
-              data: { datasets },
-              plugins: [generationCursorPlugin],
-              options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                normalized: true,
-                parsing: { xAxisKey: 'x', yAxisKey: 'y' },
-                scales: {
-                  x: {
-                    type: 'time',
-                    time: timeConfig,
-                    min: xMin,
-                    max: xMax,
-                    grid: {
-                      color: 'rgba(148, 163, 184, 0.14)',
-                      drawBorder: false
-                    },
-                    ticks: {
-                      color: '#cbd5f5'
-                    }
-                  },
-                  y: {
-                    stacked: true,
-                    beginAtZero: true,
-                    title: {
-                      display: true,
-                      text: 'Generation (MW)',
-                      color: '#f8fafc',
-                      font: { size: 12, weight: 600 }
-                    },
-                    grid: {
-                      color: 'rgba(148, 163, 184, 0.12)',
-                      drawBorder: false
-                    },
-                    ticks: {
-                      callback: v => Intl.NumberFormat().format(v),
-                      color: '#cbd5f5'
-                    }
-                  }
-                },
-                plugins: {
-                  legend: { display: false },
-                  tooltip: {
-                    position: 'cursorLeft',
-                    mode: 'index',
-                    intersect: false,
-                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
-                    titleColor: '#f8fafc',
-                    bodyColor: '#e2e8f0',
-                    borderColor: 'rgba(148, 163, 184, 0.35)',
-                    borderWidth: 1,
-                    xAlign: 'right',
-                    caretPadding: 10
-                  },
-                  generationCursor: {
-                    timestamp: this.getGenerationCursorTimestamp(),
-                    color: '#fb923c',
-                    lineWidth: 1.5,
-                    dash: [5, 4]
-                  }
-                },
-                interaction: {
-                  mode: 'index',
-                  intersect: false
-                }
-              }
-            }
-
-            modal.chart = markRaw(new Chart(ctx, cfg))
-            this.updateGenerationCursorLines()
-            return
-          }
-
           // Build a stacked area chart for generation by technology
           const items = Array.isArray(modal.data)
             ? JSON.parse(JSON.stringify(modal.data))
@@ -7101,24 +6897,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
 
-    async fetchGenerationResRange(iso2) {
-      if (!iso2) return []
-
-      try {
-        const url = buildApiUrl(`generation-res/range/?country=${encodeURIComponent(iso2)}&period=today`)
-        const { data } = await axios.get(url)
-
-        if (!data || !Array.isArray(data.items)) {
-          return []
-        }
-
-        return data.items
-      } catch (error) {
-        console.error(`Failed to fetch RES generation forecast for ${iso2}`, error)
-        return []
-      }
-    },
-
     prepareForecastSeries(forecastItems, options = {}) {
       if (!Array.isArray(forecastItems) || !forecastItems.length) return []
 
@@ -8768,7 +8546,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .separate-modal--mobile .separate-modal-content {
   max-height: none;
-  padding: 16px;
+  padding: 6px 10px 10px;
 }
 
 .separate-modal--mobile .price-chart,
@@ -8871,11 +8649,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .separate-modal-header {
   position: relative;
   z-index: 1;
-  padding: 16px 18px 12px;
+  padding: 8px 10px 4px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12px;
   letter-spacing: 0.01em;
   color: #0f172a;
   background: none;
@@ -8885,45 +8664,37 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .separate-modal-header h4 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .separate-modal-title {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
   gap: 8px;
+  flex: 1;
   min-width: 0;
 }
 
-.chart-brand-signature {
-  display: inline-block;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  line-height: 1.2;
+.separate-modal-window {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(15, 23, 42, 0.5);
   white-space: nowrap;
-}
-
-.separate-modal-title .chart-brand-signature {
-  color: rgba(15, 23, 42, 0.58);
-}
-
-.mobile-panel-titles .chart-brand-signature {
-  color: rgba(148, 163, 184, 0.9);
-}
-
-.separate-modal--thumbnail .chart-brand-signature {
-  display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .generation-mode-toggle {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
+  gap: 2px;
+  padding: 2px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.08);
   border: 1px solid rgba(148, 163, 184, 0.28);
@@ -8974,23 +8745,29 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .separate-modal-close {
-  background: linear-gradient(145deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.85));
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  color: #e2e8f0;
-  font-size: 18px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: rgba(15, 23, 42, 0.5);
   cursor: pointer;
   padding: 0;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  box-shadow:
-    0 12px 28px rgba(15, 23, 42, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 0 0 1px rgba(59, 130, 246, 0.22);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.separate-modal-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.separate-modal-close:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.6);
+  outline-offset: 1px;
 }
 
 .separate-modal--thumbnail .separate-modal-close {
@@ -8999,12 +8776,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 .separate-modal-close:hover {
-  transform: translateY(-1px);
-  background: linear-gradient(145deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.85));
-  box-shadow:
-    0 18px 42px rgba(37, 99, 235, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 0 0 1px rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.07);
+  color: #0f172a;
 }
 
 @media (max-width: 1400px) {
@@ -9032,12 +8805,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 18px;
+  padding: 6px 10px 10px;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   background:none;
   box-shadow:none;
 }
@@ -10031,7 +9804,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   max-width: 100%;
   height: 100%;
   position: relative;
-  min-height: 150px;
+  min-height: 220px;
   padding: 0;
   border-radius: 16px;
   background: linear-gradient(150deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.54));
@@ -10159,7 +9932,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 .generation-chart {
   flex: 1;
-  min-height: 160px;
+  min-height: 260px;
   min-width: 0;
 }
 
@@ -10285,7 +10058,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .capacity-chart {
   flex: 1 1 auto;
   height: auto;
-  min-height: var(--capacity-chart-min-height, clamp(220px, 32vh, 360px));
+  min-height: var(--capacity-chart-min-height, clamp(260px, 40vh, 440px));
   min-width: 0;
   padding: 0;
   border-radius: 12px;
@@ -10348,7 +10121,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .netflow-chart {
   flex: 1;
-  min-height: 220px;
+  min-height: 280px;
   min-width: 0;
 }
 
