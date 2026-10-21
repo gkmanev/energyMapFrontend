@@ -503,6 +503,27 @@
                 RES Forecast
               </button>
             </div>
+            <div
+              v-if="modal.type === 'capacity' && !modal.thumbnail"
+              class="generation-mode-toggle"
+              @pointerdown.stop
+              @click.stop
+            >
+              <button
+                class="generation-mode-button"
+                :class="{ active: modal.capacityView === 'bar' }"
+                @click="setCapacityModalView(modal.id, 'bar')"
+              >
+                Bar
+              </button>
+              <button
+                class="generation-mode-button"
+                :class="{ active: modal.capacityView === 'pie' }"
+                @click="setCapacityModalView(modal.id, 'pie')"
+              >
+                Pie
+              </button>
+            </div>
           </div>
           <button
             @click="closeSeparateModal(modal.id)"
@@ -782,6 +803,8 @@ import {
   Chart,
   LineController,
   BarController,
+  PieController,
+  ArcElement,
   LineElement,
   BarElement,
   PointElement,
@@ -794,10 +817,13 @@ import {
 } from 'chart.js'
 
 Chart.register(
-  LineController, BarController, LineElement, BarElement, PointElement,
+  LineController, BarController, PieController, ArcElement, LineElement, BarElement, PointElement,
   LinearScale, TimeScale, CategoryScale, Tooltip, Legend, Filler
 )
 import 'chartjs-adapter-date-fns'
+
+const CAPACITY_PIE_UNUSED_LABEL = 'Unused capacity'
+const CAPACITY_PIE_UNUSED_COLOR = 'rgba(148, 163, 184, 0.25)'
 import axios, { apiClient } from '@/services/axiosClient'
 import { buildApiUrl } from '@/config/api'
 import MarkdownIt from 'markdown-it'
@@ -2806,6 +2832,19 @@ export default {
 
       if (!modal.chart) return
 
+      if (modal.capacityView === 'pie') {
+        const pieData = this.buildCapacityPieData(
+          items.map(i => i.psr_name),
+          generationMapped,
+          totalCapacity
+        )
+        modal.chart.data.datasets[0].data = pieData.data
+        modal.chart.$capacityValues = capacityValues
+        modal.chart.$generationValues = generationMapped
+        modal.chart.update('none')
+        return
+      }
+
       modal.chart.data.datasets[0].data = generationMapped
       modal.chart.data.datasets[1].data = remainingCapacity
       modal.chart.$capacityValues = capacityValues
@@ -3856,6 +3895,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         resForecastData: null,
         meta: null,
         generationView: 'all',
+        capacityView: 'bar',
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
         lastExpandedSize: expandedSize,
@@ -4355,6 +4395,23 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       }
     },
 
+    buildCapacityPieData(labels, generationMapped, totalCapacity) {
+      const totalGeneration = generationMapped.reduce((sum, value) => sum + (value || 0), 0)
+      return {
+        labels: [...labels, CAPACITY_PIE_UNUSED_LABEL],
+        data: [...generationMapped, Math.max(0, totalCapacity - totalGeneration)]
+      }
+    },
+
+    async setCapacityModalView(modalId, view) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal || modal.type !== 'capacity' || modal.capacityView === view) return
+
+      modal.capacityView = view
+      await nextTick()
+      await this.createSeparateModalChart(modalId)
+    },
+
     async setGenerationModalView(modalId, view, { force = false } = {}) {
       const modal = this.separateModals.find(m => m.id === modalId)
       if (!modal || modal.type !== 'generation') return
@@ -4483,6 +4540,89 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const formatPercentValue = value => this.formatPercent(value)
 
         const chartContainer = canvas.parentElement
+
+        if (modal.capacityView === 'pie') {
+          if (chartContainer) {
+            chartContainer.style.setProperty('--capacity-chart-min-height', '320px')
+            chartContainer.style.removeProperty('--capacity-chart-height')
+            chartContainer.style.removeProperty('height')
+          }
+
+          const pieData = this.buildCapacityPieData(labels, generationMapped, totalCapacity)
+
+          modal.chart = markRaw(new Chart(ctx, {
+            type: 'pie',
+            data: {
+              labels: pieData.labels,
+              datasets: [
+                {
+                  label: 'Share of installed capacity',
+                  data: pieData.data,
+                  backgroundColor: [...generationBackgroundColors, CAPACITY_PIE_UNUSED_COLOR],
+                  borderColor: 'rgba(15, 23, 42, 0.9)',
+                  borderWidth: 1.5,
+                  hoverBorderColor: [...generationBorderColors, 'rgba(148, 163, 184, 0.6)'],
+                  hoverOffset: 8
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              layout: {
+                padding: 8
+              },
+              plugins: {
+                legend: {
+                  position: 'right',
+                  labels: {
+                    // Hide technologies with no generation right now; their slices are empty
+                    filter: (item, data) =>
+                      data.labels[item.index] === CAPACITY_PIE_UNUSED_LABEL ||
+                      (Number(data.datasets[0].data[item.index]) || 0) > 0,
+                    color: '#f8fafc',
+                    usePointStyle: true,
+                    padding: 10,
+                    font: { size: 11, weight: 500 }
+                  }
+                },
+                tooltip: {
+                  padding: 12,
+                  backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                  titleColor: '#f8fafc',
+                  bodyColor: '#e2e8f0',
+                  borderColor: 'rgba(148, 163, 184, 0.35)',
+                  borderWidth: 1,
+                  callbacks: {
+                    label: context => {
+                      const index = context.dataIndex
+                      const capacities = context.chart.$capacityValues || []
+                      const total = capacities.reduce((sum, v) => sum + (Number(v) || 0), 0)
+                      const value = Number(context.parsed) || 0
+                      const share = total > 0 ? (value / total) * 100 : 0
+
+                      if (index >= capacities.length) {
+                        return `Unused: ${formatMwValue(value)} MW (${formatPercentValue(share)} of total capacity)`
+                      }
+
+                      const installed = Number(capacities[index]) || 0
+                      const utilisation = installed > 0 ? (value / installed) * 100 : 0
+                      return [
+                        `Generation: ${formatMwValue(value)} MW (${formatPercentValue(share)} of total capacity)`,
+                        `${formatPercentValue(utilisation)} of its own ${formatMwValue(installed)} MW installed`
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }))
+          modal.chart.$capacityValues = capacityValues
+          modal.chart.$generationValues = generationMapped
+          this.queueModalChartResize(modalId)
+          return
+        }
+
         if (chartContainer) {
           const recommendedHeight = Math.max(220, Math.min(520, items.length * 40))
           chartContainer.style.setProperty('--capacity-chart-min-height', `${recommendedHeight}px`)

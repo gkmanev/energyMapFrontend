@@ -81,22 +81,6 @@
       </div>
 
       <div v-if="menuOpen" id="app-header-menu" class="menu-panel">
-        <span class="strip-label">Map view</span>
-        <div class="menu-tabs" role="tablist" aria-label="Map view">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            type="button"
-            role="tab"
-            class="tab"
-            :class="{ active: modelValue === tab.id }"
-            :aria-selected="modelValue === tab.id"
-            @click="selectTab(tab.id)"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
-
         <button type="button" class="btn-agent menu-agent" @click="openAgent">
           <svg
             class="icon"
@@ -244,11 +228,6 @@ const displayIdentity = computed(() => {
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
   return fullName || user.email || 'Unknown user'
 })
-
-function selectTab(id) {
-  emit('update:modelValue', id)
-  menuOpen.value = false
-}
 
 function openAgent() {
   menuOpen.value = false
@@ -563,19 +542,6 @@ onUnmounted(() => {
   border-top: 1px solid var(--hdr-border);
 }
 
-.menu-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--hdr-pill-bg);
-  border-radius: 8px;
-}
-
-.menu-tabs .tab {
-  flex: 1;
-  padding: 8px 6px;
-}
-
 .menu-agent {
   justify-content: center;
   padding: 9px 12px;
@@ -631,13 +597,32 @@ onUnmounted(() => {
     padding: 8px 12px;
   }
 
-  .view-tabs,
   .header-right .btn-agent {
     display: none;
   }
 
+  /* Let brand, tabs and controls flow as direct rows of .header-main */
+  .header-left {
+    display: contents;
+  }
+
   .header-right {
     gap: 10px;
+    margin-left: auto;
+  }
+
+  .view-tabs {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .view-tabs .tab {
+    flex: 1;
+    padding: 8px 6px;
+  }
+
+  .menu-panel {
+    order: 2;
   }
 
   .menu-toggle {
@@ -650,11 +635,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 560px) {
-  .header-left {
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
   .header-sub {
     align-items: flex-start;
     flex-direction: column;
