@@ -503,6 +503,27 @@
               Pie
             </button>
           </div>
+          <div
+            v-if="!modal.thumbnail && modal.type === 'prices'"
+            class="generation-mode-toggle"
+            @pointerdown.stop
+            @dblclick.stop
+          >
+            <button
+              class="generation-mode-button"
+              :class="{ active: modal.priceView === 'chart' }"
+              @click="setPriceModalView(modal.id, 'chart')"
+            >
+              Chart
+            </button>
+            <button
+              class="generation-mode-button"
+              :class="{ active: modal.priceView === 'heatmap' }"
+              @click="setPriceModalView(modal.id, 'heatmap')"
+            >
+              Heatmap
+            </button>
+          </div>
           <button
             @click="closeSeparateModal(modal.id)"
             class="separate-modal-close"
@@ -536,7 +557,19 @@
 
         <!-- Modal content -->
         <div class="separate-modal-content">
-          <div v-if="modal.loading" class="separate-modal-loading">
+          <!-- Price heatmap: own loading/error states, independent of the line chart data -->
+          <PriceHeatmap
+            v-if="modal.type === 'prices' && modal.priceView === 'heatmap' && modal.priceHeatmapWindow"
+            :items="modal.priceHeatmapData || []"
+            :range="modal.priceHeatmapWindow.range"
+            :start="modal.priceHeatmapWindow.start"
+            :end="modal.priceHeatmapWindow.end"
+            :cursor="Number(currentTimestamp)"
+            :loading="modal.priceHeatmapLoading"
+            :error="modal.priceHeatmapError"
+          />
+
+          <div v-else-if="modal.loading" class="separate-modal-loading">
             <div class="loading-spinner-small"></div>
             <p>Loading {{ modal.type }} data...</p>
           </div>
@@ -777,6 +810,7 @@ const WIND_REFRESH_MS = 15 * 60 * 1000
 
 import { defineAsyncComponent } from 'vue'
 const PowerFlow = defineAsyncComponent(() => import("@/components/PowerFlow.vue"));
+const PriceHeatmap = defineAsyncComponent(() => import("@/components/PriceHeatmap.vue"));
 import AppHeader from "@/components/AppHeader.vue"
 import { markRaw, toRaw, nextTick } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
@@ -959,7 +993,7 @@ function createInitialAgentChatMessages() {
 
 export default {
   name: 'EnergyMap',
-  components: { AppHeader, LMap, LTileLayer, LGeoJson, PowerFlow },
+  components: { AppHeader, LMap, LTileLayer, LGeoJson, PowerFlow, PriceHeatmap },
 
   data() {
     return {
@@ -1087,6 +1121,7 @@ export default {
       generationItems: [],
       generationChartInstance: null,
       priceCache: new Map(),
+      priceHeatmapCache: markRaw(new Map()),
       capacityCache: new Map(),
       generationByTechCache: new Map(),
       generationByTechPending: new Map(),
@@ -3875,6 +3910,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         forecastData: null,
         meta: null,
         capacityView: 'bar',
+        priceView: 'chart',
+        priceHeatmapWindow: null,
+        priceHeatmapWindowKey: '',
+        priceHeatmapData: null,
+        priceHeatmapLoading: false,
+        priceHeatmapError: '',
         position: { x, y },
         size: { width: modalWidth, height: modalHeight },
         lastExpandedSize: expandedSize,
@@ -4271,6 +4312,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
 
+          // Keep the heatmap on the newly selected time range
+          if (modal.priceView === 'heatmap') {
+            void this.loadPriceHeatmapData(modal)
+          }
+
           // Returns object like { [hourTs]: price, ... }
           const timeData = await this.fetchHistoricalPricesForCountry(iso2)
           if (!timeData || Object.keys(timeData).length === 0) {
@@ -4373,6 +4419,79 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     getSeparateModalTimeWindow(modal) {
       if (modal.type === 'capacity') return this.currentTimeDisplay
       return this.timeRangeHeading
+    },
+
+    async setPriceModalView(modalId, view) {
+      const modal = this.separateModals.find(m => m.id === modalId)
+      if (!modal || modal.type !== 'prices' || modal.priceView === view) return
+
+      modal.priceView = view
+
+      if (view === 'heatmap') {
+        // The line chart's canvas is unmounted, so drop its Chart instance
+        if (modal.chart) {
+          modal.chart.destroy()
+          modal.chart = null
+        }
+        await this.loadPriceHeatmapData(modal)
+        return
+      }
+
+      await nextTick()
+      await this.createSeparateModalChart(modalId)
+    },
+
+    // Heatmap window follows the selected time range; the grid is aligned to whole hours/days
+    getPriceHeatmapWindow() {
+      const range = this.selectedTimeRange
+      const { start, end } = this.getPriceRangeDates()
+      const alignedStart = new Date(start)
+      if (range === 'hours') alignedStart.setMinutes(0, 0, 0)
+      else alignedStart.setHours(0, 0, 0, 0)
+      return { range, start: alignedStart.getTime(), end: end.getTime() }
+    },
+
+    async loadPriceHeatmapData(modal) {
+      const heatmapWindow = this.getPriceHeatmapWindow()
+      const windowKey = `${heatmapWindow.range}_${heatmapWindow.start}_${heatmapWindow.end}`
+      modal.priceHeatmapWindowKey = windowKey
+      modal.priceHeatmapWindow = heatmapWindow
+      modal.priceHeatmapLoading = true
+      modal.priceHeatmapError = ''
+
+      try {
+        const iso2 = this.getCountryISO2ByName(modal.country)
+        if (!iso2) throw new Error('Country not found')
+
+        const items = await this.fetchPriceHeatmapItems(iso2, heatmapWindow)
+        // A different range was selected while this one was loading
+        if (modal.priceHeatmapWindowKey !== windowKey) return
+        modal.priceHeatmapData = markRaw(items)
+      } catch (error) {
+        if (modal.priceHeatmapWindowKey !== windowKey) return
+        console.error(`Failed to load price heatmap for ${modal.country}:`, error)
+        modal.priceHeatmapData = null
+        modal.priceHeatmapError = error.message || 'Failed to load price data'
+      } finally {
+        if (modal.priceHeatmapWindowKey === windowKey) modal.priceHeatmapLoading = false
+      }
+    },
+
+    async fetchPriceHeatmapItems(iso2, { range, start, end }) {
+      const cacheKey = `${iso2}_${range}_${start}_${end}`
+      const cached = this.priceHeatmapCache.get(cacheKey)
+      if (cached && Date.now() - cached.fetchedAt < this.cacheValidityMs) return cached.items
+
+      // Raw resolution: hourly before Oct 2025, 15-min after; the heatmap buckets it
+      const url = buildApiUrl(`prices/range/?country=${encodeURIComponent(iso2)}&contract=A01&start=${encodeURIComponent(new Date(start).toISOString())}&end=${encodeURIComponent(new Date(end).toISOString())}`)
+      const { data } = await axios.get(url, { timeout: 60000 })
+
+      const items = (Array.isArray(data?.items) ? data.items : [])
+        .map(item => ({ ts: Date.parse(item.datetime_utc), price: Number(item.price) }))
+        .filter(item => Number.isFinite(item.ts) && Number.isFinite(item.price))
+
+      this.priceHeatmapCache.set(cacheKey, { items, fetchedAt: Date.now() })
+      return items
     },
 
     buildCapacityPieData(labels, generationMapped, totalCapacity) {
