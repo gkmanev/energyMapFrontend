@@ -97,6 +97,33 @@
           AI agent
         </button>
 
+        <div class="menu-layers">
+          <span class="strip-label">Layers</span>
+
+          <label v-for="layer in layerOptions" :key="layer.id" class="layer-toggle">
+            <input
+              type="checkbox"
+              :checked="layers[layer.id]"
+              @change="toggleLayer(layer.id)"
+            />
+            <span class="switch" aria-hidden="true"></span>
+            <svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle v-if="layer.circle" cx="12" cy="12" r="4" />
+              <path :d="layer.path" />
+            </svg>
+            {{ layer.label }}
+          </label>
+        </div>
+
         <div class="menu-account">
           <template v-if="auth.isAuthenticated">
             <span class="menu-identity">{{ displayIdentity }}</span>
@@ -120,11 +147,11 @@
       <div class="layers">
         <span class="strip-label">Layers</span>
 
-        <label class="layer-toggle">
+        <label v-for="layer in layerOptions" :key="layer.id" class="layer-toggle">
           <input
             type="checkbox"
-            :checked="layers.irradiance"
-            @change="toggleLayer('irradiance')"
+            :checked="layers[layer.id]"
+            @change="toggleLayer(layer.id)"
           />
           <span class="switch" aria-hidden="true"></span>
           <svg
@@ -137,40 +164,11 @@
             stroke-linejoin="round"
             aria-hidden="true"
           >
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+            <circle v-if="layer.circle" cx="12" cy="12" r="4" />
+            <path :d="layer.path" />
           </svg>
-          Irradiance
+          {{ layer.label }}
         </label>
-
-        <label class="layer-toggle">
-          <input
-            type="checkbox"
-            :checked="layers.wind"
-            @change="toggleLayer('wind')"
-          />
-          <span class="switch" aria-hidden="true"></span>
-          <svg
-            class="icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M5 8h8.5a2.5 2.5 0 1 0-2.4-3.2M3 12h15.5a2.5 2.5 0 1 1-2.4 3.2M4 16h7.5a2.5 2.5 0 1 1-2.4 3.2" />
-          </svg>
-          Wind
-        </label>
-      </div>
-
-      <div class="legend" aria-label="Price color scale">
-        <span class="legend-unit">{{ legendUnit }}</span>
-        <span class="legend-tick">{{ legendMin }}</span>
-        <span class="legend-ramp"></span>
-        <span class="legend-tick">{{ legendMax }}+</span>
       </div>
     </div>
   </header>
@@ -183,9 +181,6 @@ import { useAuthStore } from '@/stores/authStore'
 
 const props = defineProps({
   modelValue: { type: String, default: 'price' },
-  legendUnit: { type: String, default: 'EUR/MWh' },
-  legendMin: { type: [Number, String], default: 0 },
-  legendMax: { type: [Number, String], default: 120 },
   layersValue: {
     type: Object,
     default: () => ({ irradiance: false, wind: false })
@@ -198,6 +193,20 @@ const tabs = [
   { id: 'price', label: 'Price' },
   { id: 'capacity', label: 'Capacity' },
   { id: 'generation', label: 'Generation' }
+]
+
+const layerOptions = [
+  {
+    id: 'irradiance',
+    label: 'Irradiance',
+    circle: true,
+    path: 'M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'
+  },
+  {
+    id: 'wind',
+    label: 'Wind',
+    path: 'M5 8h8.5a2.5 2.5 0 1 0-2.4-3.2M3 12h15.5a2.5 2.5 0 1 1-2.4 3.2M4 16h7.5a2.5 2.5 0 1 1-2.4 3.2'
+  }
 ]
 
 const layers = ref({
@@ -480,30 +489,6 @@ onUnmounted(() => {
   outline-offset: 1px;
 }
 
-.legend {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.legend-unit {
-  font-size: 11px;
-  color: var(--hdr-text-faint);
-}
-
-.legend-tick {
-  font-size: 11px;
-  color: var(--hdr-text-dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.legend-ramp {
-  width: 90px;
-  height: 8px;
-  border-radius: 4px;
-  background: linear-gradient(to right, #f2e8c9, #f0a04b, #d63a2f, #6b0d24);
-}
-
 .menu-toggle,
 .menu-panel {
   display: none;
@@ -545,6 +530,19 @@ onUnmounted(() => {
 .menu-agent {
   justify-content: center;
   padding: 9px 12px;
+  font-size: 13px;
+}
+
+.menu-layers {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 4px 2px;
+}
+
+.menu-layers .layer-toggle {
+  min-height: 36px;
   font-size: 13px;
 }
 
@@ -632,13 +630,10 @@ onUnmounted(() => {
   .menu-panel {
     display: flex;
   }
-}
 
-@media (max-width: 560px) {
+  /* Layer toggles move into the hamburger menu */
   .header-sub {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
+    display: none;
   }
 }
 </style>

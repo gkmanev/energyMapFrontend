@@ -15,9 +15,6 @@
         >
           <AppHeader
             v-model="headerActiveView"
-            :legend-unit="legendUnit"
-            :legend-min="headerLegendMin"
-            :legend-max="headerLegendMax"
             :layers-value="{ irradiance: showIrradianceLayer, wind: showWindLayer }"
             @layer-change="onHeaderLayerChange"
             @open-agent="openAgentChat"
@@ -1518,24 +1515,6 @@ export default {
       return 'Heatmap Legend'
     },
     
-    legendUnit() {
-      if (this.heatmapType === 'prices') return 'EUR/MWh'
-      if (this.heatmapType === 'capacity') return 'MW'
-      if (this.heatmapType === 'generation') return 'MW'
-      return 'MW'
-    },
-
-    headerLegendMin() {
-      if (!Number.isFinite(this.minValue)) return 0
-      return Math.floor(this.minValue)
-    },
-
-    headerLegendMax() {
-      if (!Number.isFinite(this.maxValue)) {
-        return this.heatmapType === 'prices' ? 100 : 10000
-      }
-      return Math.ceil(this.maxValue)
-    },
     
     minValue() {
       const values = Object.values(this.currentDataByISO2)
