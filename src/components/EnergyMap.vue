@@ -722,7 +722,7 @@
     </transition-group>
 
     <!-- NEW: Actual footer positioned below the slider -->
-    <footer class="app-footer">
+    <footer ref="appFooter" class="app-footer">
       <div class="footer-content">
         <!-- <span>© 2025 Entra Energy | Energy Data Visualization</span> -->
       </div>
@@ -1599,7 +1599,11 @@ export default {
           }
         }
         this.updateColorScheme()
-        this.$nextTick(() => this.updateMapBadges())
+        this.$nextTick(() => {
+          this.updateMapBadges()
+          // Each view has its own timeline, so the space above the map changes
+          this.queueMapLayoutRefresh()
+        })
 
       },
       immediate: false
@@ -6373,8 +6377,27 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.updateFlowsOverlay()
     },
 
+    // Fit the map and its Layers strip above the fixed footer at every screen size.
+    updateMapFitHeight() {
+      const container = this.map?.getContainer()
+      if (!container) return
+
+      const top = container.getBoundingClientRect().top + window.scrollY
+      const footerHeight = this.$refs.appFooter?.getBoundingClientRect().height || 0
+      const layers = this.$el.querySelector('.header-sub')
+      const layersHeight = layers?.getBoundingClientRect().height || 0
+      const layersStyle = layersHeight ? window.getComputedStyle(layers) : null
+      const layersMargin = layersStyle
+        ? (parseFloat(layersStyle.marginTop) || 0) + (parseFloat(layersStyle.marginBottom) || 0)
+        : 0
+      const viewportHeight = Math.min(window.innerHeight, window.visualViewport?.height || window.innerHeight)
+      const available = viewportHeight - top - footerHeight - layersHeight - layersMargin - 16
+      container.style.setProperty('--map-fit-height', `${Math.round(available)}px`)
+    },
+
     refreshMapLayout() {
       if (!this.map) return
+      this.updateMapFitHeight()
       this.map.invalidateSize({ pan: false, debounceMoveend: true })
       this.handleMapViewportChange()
       if (this.showWindLayer) void this.onWindMapViewportChange()
@@ -7681,6 +7704,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.updateResponsiveZoom()
       this.updateMobileState()
       window.addEventListener('resize', this.handleWindowResize)
+      window.visualViewport?.addEventListener('resize', this.queueMapLayoutRefresh)
       window.addEventListener('keydown', this.onKeydown)
       window.addEventListener('pointerdown', this.handleAgentChatPointerDown)
       this.restoreAgentChatSession()
@@ -7717,6 +7741,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         this.mapLayoutRefreshTimeoutId = null
       }
       window.removeEventListener('resize', this.handleWindowResize)
+      window.visualViewport?.removeEventListener('resize', this.queueMapLayoutRefresh)
       window.removeEventListener('keydown', this.onKeydown)
       window.removeEventListener('pointerdown', this.handleAgentChatPointerDown)
       this.destroyCapacityChart()
@@ -7768,7 +7793,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   color: #2c3e50;
   margin: 0;
   padding: 0;
-  height: 100vh;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   max-width: 100vw;
   display: flex;
@@ -7781,7 +7808,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   width: min(900px, 100%);
   max-width: 100%;
   margin: 0 auto;
-  padding: 12px;
+  /* Reserve the fixed footer (including its border) plus a 16px gap. */
+  padding: 12px 12px 39px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -7826,19 +7854,15 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   margin-bottom: 12px;
 }
 
-/* Join the Layers strip to the map instead of leaving a grid gap between them. */
+/* Give the Layers strip its own rounded surface below the map. */
 .header-shell:not(.header-shell--floating) .header-sub {
   position: relative;
   z-index: 2;
-  margin-top: 0;
+  margin-top: 10px;
   transform: none;
-  border-radius: 0 0 18px 18px;
+  border-radius: 18px;
   border: 1px solid var(--hdr-border);
   border-top: 1px solid var(--hdr-border);
-}
-
-.header-shell:not(.header-shell--floating) ~ .map-row .map {
-  border-radius: 18px 18px 0 0;
 }
 
 .header-shell {
@@ -9053,8 +9077,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   width: 100%;
   aspect-ratio: 1 / 1;
   height: auto;
-  min-height: 480px;
-  max-height: 72vh;
+  min-height: 260px;
+  max-height: max(260px, min(72vh, var(--map-fit-height, 72vh)));
   border-radius: 18px;
   overflow: hidden;
   background: radial-gradient(
@@ -9675,8 +9699,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .map {
-    min-height: 360px;
-    max-height: 64vh;
+    min-height: 260px;
+    max-height: max(260px, var(--map-fit-height, 64vh));
   }
 
   .map-row {
@@ -9765,8 +9789,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .map {
-    min-height: 320px;
-    max-height: 60vh;
+    min-height: 260px;
+    max-height: max(260px, var(--map-fit-height, 60vh));
   }
 
   .map-row {
