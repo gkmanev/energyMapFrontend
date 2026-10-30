@@ -170,6 +170,9 @@
                 ref="geoJsonLayer"
               />
             </LMap>
+            <div v-if="showMapTouchHint" class="map-touch-hint" role="status" aria-live="polite">
+              Use two fingers to move the map
+            </div>
             <div
               v-show="showIrradianceLayer"
               class="irradiance-legend"
@@ -841,6 +844,7 @@ import { buildApiUrl } from '@/config/api'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import { FLOW_EIC_BY_ISO, FLOW_ISO_BY_EIC } from '@/utils/flowDomains'
+import { bindMapTouchGestures } from '@/utils/mapTouchGestures'
 import { scaleSequential } from 'd3-scale'
 import {
   interpolateViridis,
@@ -1053,6 +1057,8 @@ export default {
       windRefreshTimer: null,
       windRequestId: 0,
       mapResizeObserver: null,
+      unbindMapTouchGestures: null,
+      showMapTouchHint: false,
       mapLayoutRefreshRaf: null,
       mapLayoutRefreshTimeoutId: null,
       isRefreshing: false,
@@ -6444,7 +6450,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     onMapReady(mapObject) {
+      this.unbindMapTouchGestures?.()
       this.map = mapObject
+      this.unbindMapTouchGestures = bindMapTouchGestures(mapObject, (visible) => {
+        this.showMapTouchHint = visible
+      })
       if (!this.map.getPane('flowsPane')) {
         this.map.createPane('flowsPane')
         this.map.getPane('flowsPane').style.zIndex = 650 // above overlay pane
@@ -7732,6 +7742,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.stopWindLayer()
       this.destroyAgentChatCharts()
       this.unbindMapResizeObserver()
+      this.unbindMapTouchGestures?.()
+      this.unbindMapTouchGestures = null
       if (this.mapLayoutRefreshRaf) {
         cancelAnimationFrame(this.mapLayoutRefreshRaf)
         this.mapLayoutRefreshRaf = null
@@ -9024,6 +9036,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   position: relative;
   display: flex;
   justify-content: center;
+}
+
+.map.leaflet-container.map--two-finger-touch {
+  touch-action: pan-x pan-y;
+}
+
+.map-touch-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 800;
+  width: max-content;
+  max-width: calc(100% - 48px);
+  box-sizing: border-box;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(24, 14, 43, 0.9);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .irradiance-legend {
