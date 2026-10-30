@@ -1149,13 +1149,13 @@ export default {
       priceTimer: null,
       mapBadgeLayer: null,
 
-      defaultZoom: 5,
-      mobileZoomOffset: 1,
+      defaultZoom: 4,
+      mobileZoomOffset: 0,
       zoom: (() => {
         const isClient = typeof window !== 'undefined'
         const isMobileViewport = isClient && window.innerWidth < MODAL_MOBILE_BREAKPOINT
-        const defaultZoom = 5
-        const mobileZoomOffset = 1
+        const defaultZoom = 4
+        const mobileZoomOffset = 0
         const mobileZoom = Math.max(2, defaultZoom - mobileZoomOffset)
         return isMobileViewport ? mobileZoom : defaultZoom
       })(),
@@ -9089,6 +9089,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   );
 }
 
+@media (min-width: 1200px) {
+  .map {
+    aspect-ratio: auto;
+    height: 80vh;
+    height: 80dvh;
+    min-height: 480px;
+    max-height: 900px;
+  }
+}
+
 .price-badge,
 .price-badge__value {
     color: inherit; /* inherit from parent */
@@ -9699,6 +9709,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .map {
+    aspect-ratio: auto;
+    height: max(260px, var(--map-fit-height, 64vh));
     min-height: 260px;
     max-height: max(260px, var(--map-fit-height, 64vh));
   }
@@ -9789,6 +9801,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .map {
+    height: max(260px, var(--map-fit-height, 60vh));
     min-height: 260px;
     max-height: max(260px, var(--map-fit-height, 60vh));
   }
