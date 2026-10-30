@@ -153,6 +153,7 @@
               :center="center"
               :options="mapOptions"
               :use-global-leaflet="true"
+              :style="{ height: 'var(--map-height, auto)' }"
               class="map"
               @ready="onMapReady"
               ref="leafletMap"
@@ -9126,8 +9127,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 @media (min-width: 1200px) {
   .map {
     aspect-ratio: auto;
-    height: 80vh;
-    height: 80dvh;
+    --map-height: 80vh;
+    --map-height: 80dvh;
     min-height: 480px;
     max-height: 900px;
   }
@@ -9744,7 +9745,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .map {
     aspect-ratio: auto;
-    height: max(260px, var(--map-fit-height, 64vh));
+    --map-height: max(260px, var(--map-fit-height, 64vh));
     min-height: 260px;
     max-height: max(260px, var(--map-fit-height, 64vh));
   }
@@ -9835,7 +9836,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .map {
-    height: max(260px, var(--map-fit-height, 60vh));
+    --map-height: max(260px, var(--map-fit-height, 60vh));
     min-height: 260px;
     max-height: max(260px, var(--map-fit-height, 60vh));
   }
