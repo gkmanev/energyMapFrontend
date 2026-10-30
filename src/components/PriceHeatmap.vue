@@ -2,7 +2,6 @@
   <div class="ph-card">
     <div v-if="stats" class="ph-header">
       <div class="ph-avg">{{ formatPrice(stats.avg) }} <span>€/MWh avg</span></div>
-      <div class="ph-range">{{ mode.slotLabel }} range: {{ formatPrice(stats.min) }} – {{ formatPrice(stats.max) }}</div>
     </div>
 
     <div ref="plot" class="ph-plot">
@@ -42,7 +41,6 @@ const MODES = {
   hours: {
     column: 'hour',
     slotMs: 15 * MINUTE_MS,
-    slotLabel: '15-min',
     gridLabel: '15-min',
     rowTicks: [0, 1, 2, 3],
     rowLabel: row => `:${String(row * 15).padStart(2, '0')}`,
@@ -51,7 +49,6 @@ const MODES = {
   days: {
     column: 'day',
     slotMs: 60 * MINUTE_MS,
-    slotLabel: 'hourly',
     gridLabel: 'Hourly',
     rowTicks: [0, 6, 12, 18, 23],
     rowLabel: row => `${String(row).padStart(2, '0')}:00`,
@@ -60,7 +57,6 @@ const MODES = {
   months: {
     column: 'day',
     slotMs: 60 * MINUTE_MS,
-    slotLabel: 'hourly',
     gridLabel: 'Hourly',
     rowTicks: [0, 6, 12, 18, 23],
     rowLabel: row => `${String(row).padStart(2, '0')}:00`,
@@ -73,7 +69,6 @@ const MODES = {
   years: {
     column: 'day',
     slotMs: 60 * MINUTE_MS,
-    slotLabel: 'hourly',
     gridLabel: 'Hourly',
     rowTicks: [0, 6, 12, 18, 23],
     rowLabel: row => `${String(row).padStart(2, '0')}:00`,
@@ -590,12 +585,6 @@ export default {
 .ph-avg span {
   font-size: 13px;
   color: rgba(226, 232, 240, 0.8);
-}
-
-.ph-range {
-  font-size: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: rgba(203, 213, 245, 0.6);
 }
 
 .ph-plot {

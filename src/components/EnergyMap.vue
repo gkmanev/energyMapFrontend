@@ -199,7 +199,7 @@
         <div v-if="isMobileViewport && mobilePanelVisible" class="mobile-bottom-panel">
           <div class="mobile-panel-header">
             <div class="mobile-panel-titles">
-              <p class="mobile-panel-label">Energy Prices (24h)</p>
+              <p class="mobile-panel-label">Energy Prices</p>
               <h4 class="mobile-panel-country">{{ mobilePanelCountry }}</h4>
             </div>
             <button class="mobile-panel-close" @click="closeMobilePanel">Hide</button>
@@ -6326,16 +6326,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
                 if (vm.heatmapType === 'generation') {
                   generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
-                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices (24h)')
+                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices')
                   capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
                 } else if (vm.heatmapType === 'prices') {
-                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices (24h)')
+                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices')
                   capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
                   generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
                 } else {
                   capacityModalId = vm.createSeparateModal(name, 'capacity', 'Energy Capacity')
                   generationModalId = vm.createSeparateModal(name, 'generation', 'Energy Generation')
-                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices (24h)')
+                  priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices')
                 }
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
                 vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
@@ -8635,9 +8635,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   left: auto;
   top: auto;
   transform: none;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.35);
   margin-top: 10px;
 }
 
