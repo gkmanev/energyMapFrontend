@@ -757,6 +757,7 @@ const SUPPORTED_CAPACITY_ISO2 = new Set([
 const SUPPORTED_GENERATION_ISO2 = SUPPORTED_CAPACITY_ISO2
 
 const PSR_TYPE_NAME_OVERRIDES = Object.freeze({
+  B25: 'BESS',
   B99: 'BESS Charging'
 })
 const BESS_CHARGING_PSR_TYPE = 'B99'
@@ -1300,6 +1301,8 @@ export default {
       
       const timeRangeFormats = {
         hours: {
+          timeZone: 'Europe/Berlin',
+          timeZoneName: 'short',
           day: '2-digit',
           month: '2-digit',
           hour: '2-digit',
@@ -2658,16 +2661,7 @@ export default {
       const date = new Date(timestamp)
 
       if (this.selectedTimeRange === 'months') {
-        const latestDate = new Date(latestTimestamp)
-        const monthsAgo = (latestDate.getFullYear() - date.getFullYear()) * 12
-          + (latestDate.getMonth() - date.getMonth())
-        if (index === 0) {
-          return `${monthsAgo}mo ago`
-        }
-        if (index === totalTicks) {
-          return 'Now'
-        }
-        return `${monthsAgo}mo`
+        return date.toLocaleString('en-US', { month: 'short' })
       }
 
       if (this.selectedTimeRange === 'years') {
@@ -2686,6 +2680,7 @@ export default {
       }
 
       return date.toLocaleTimeString('en-GB', {
+        timeZone: 'Europe/Berlin',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
