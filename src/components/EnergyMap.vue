@@ -728,7 +728,9 @@
     <!-- NEW: Actual footer positioned below the slider -->
     <footer ref="appFooter" class="app-footer">
       <div class="footer-content">
-        <!-- <span>© 2025 Entra Energy | Energy Data Visualization</span> -->
+        <span>Created by: <a href="https://www.linkedin.com/company/entra-energy/?viewAsMember=true" target="_blank" rel="noopener noreferrer">Entra Energy</a></span>
+        <span class="footer-separator" aria-hidden="true">|</span>
+        <span>Data from ENTSO-E</span>
       </div>
     </footer>
     </div>
@@ -9481,12 +9483,28 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   height: 100%;
   padding: 0 12px;
   color: #e2e8f0;
   font-size: 10px;
   font-weight: 500;
   line-height: 1;
+}
+
+.footer-content a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.footer-content a:hover {
+  color: #fff;
+}
+
+.footer-content a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 /* Loading overlay */
