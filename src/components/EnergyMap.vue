@@ -2115,7 +2115,7 @@ export default {
       if (model.secondaryUnit) {
         scales.yPrices = {
           position: 'right',
-          beginAtZero: false,
+          beginAtZero: true,
           title: {
             display: true,
             text: model.secondaryUnit,
@@ -2215,7 +2215,7 @@ export default {
 
       return {
         axisType: 'time',
-        beginAtZero: false,
+        beginAtZero: true,
         chartType: chartSpec.chart_type,
         datasets,
         primaryUnit: AGENT_CHART_DATA_UNITS.prices
@@ -5090,7 +5090,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 }
               },
               y: {
-                beginAtZero: false,
+                beginAtZero: true,
                 title: {
                   display: true,
                   text: 'EUR/MWh',
@@ -7350,7 +7350,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               }
             },
             y: {
-              beginAtZero: false,
+              beginAtZero: true,
               title: {
                 display: true,
                 text: 'EUR/MWh',
