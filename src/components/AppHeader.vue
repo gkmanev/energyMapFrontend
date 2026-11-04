@@ -592,6 +592,7 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .header-main {
     flex-wrap: wrap;
+    row-gap: 4px;
     padding: 8px 12px;
   }
 
@@ -609,18 +610,52 @@ onUnmounted(() => {
     margin-left: auto;
   }
 
+  /* Plain text tabs on a hairline; the underline marks the active view. */
   .view-tabs {
     order: 1;
     flex-basis: 100%;
+    gap: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    border-bottom: 1px solid var(--hdr-border);
   }
 
   .view-tabs .tab {
     flex: 1;
-    padding: 8px 6px;
+    height: 44px;
+    margin-bottom: -1px;
+    padding: 0 6px;
+    font-size: 14px;
+    border-radius: 0;
+    transition: color 0.15s, box-shadow 0.15s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Hover sticks after a tap on touch screens, so only pressing changes colour. */
+  .view-tabs .tab:hover {
+    color: var(--hdr-text-dim);
+  }
+
+  .view-tabs .tab:active {
+    color: var(--hdr-text-soft);
+  }
+
+  .view-tabs .tab.active {
+    background: transparent;
+    color: var(--hdr-text);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--hdr-accent-hover);
+  }
+
+  .view-tabs .tab:focus-visible {
+    outline-offset: -2px;
   }
 
   .menu-panel {
     order: 2;
+    border-top: none;
   }
 
   .menu-toggle {
