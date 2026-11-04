@@ -231,9 +231,11 @@
                 v-for="option in timeRangeOptions"
                 :key="option.value"
                 :class="['time-range-button', { active: selectedTimeRange === option.value }]"
+                :aria-label="option.label"
                 @click="selectTimeRange(option.value)"
               >
-                {{ option.label }}
+                <span class="time-range-button__label" aria-hidden="true">{{ option.label }}</span>
+                <span class="time-range-button__short" aria-hidden="true">{{ option.shortLabel }}</span>
               </button>
             </div>
             <div class="slider-info">
@@ -246,7 +248,7 @@
               <button
                 @click="togglePlay"
                 :disabled="!hasTimeData || isRefreshing"
-                class="play-button"
+                :class="['play-button', { 'play-button--playing': isPlaying }]"
                 :aria-label="isPlaying ? 'Pause' : 'Play'"
               >
                 <span class="play-button__icon" aria-hidden="true">{{ isPlaying ? '⏸' : '▶' }}</span>
@@ -265,6 +267,8 @@
                   :max="maxTimeIndex"
                   :disabled="!hasTimeData || isRefreshing"
                   class="smooth-range-slider"
+                  aria-label="Time"
+                  :aria-valuetext="currentTimeDisplay"
                   @input="onSliderChange"
                   @change="onSliderChange"
                 />
@@ -307,9 +311,11 @@
                 v-for="option in timeRangeOptions"
                 :key="option.value"
                 :class="['time-range-button', { active: selectedTimeRange === option.value }]"
+                :aria-label="option.label"
                 @click="selectTimeRange(option.value)"
               >
-                {{ option.label }}
+                <span class="time-range-button__label" aria-hidden="true">{{ option.label }}</span>
+                <span class="time-range-button__short" aria-hidden="true">{{ option.shortLabel }}</span>
               </button>
             </div>
             <div class="slider-info">
@@ -323,7 +329,7 @@
               <button
                 @click="togglePlay"
                 :disabled="!hasTimeData || isRefreshing"
-                class="play-button"
+                :class="['play-button', { 'play-button--playing': isPlaying }]"
                 :aria-label="isPlaying ? 'Pause' : 'Play'"
               >
                 <span class="play-button__icon" aria-hidden="true">{{ isPlaying ? '⏸' : '▶' }}</span>
@@ -342,6 +348,8 @@
                   :max="maxTimeIndex"
                   :disabled="!hasTimeData || isRefreshing"
                   class="smooth-range-slider"
+                  aria-label="Time"
+                  :aria-valuetext="currentTimeDisplay"
                   @input="onSliderChange"
                   @change="onSliderChange"
                   @pointerdown="onSliderPointerDown"
@@ -386,9 +394,11 @@
                 v-for="option in timeRangeOptions"
                 :key="option.value"
                 :class="['time-range-button', { active: selectedTimeRange === option.value }]"
+                :aria-label="option.label"
                 @click="selectTimeRange(option.value)"
               >
-                {{ option.label }}
+                <span class="time-range-button__label" aria-hidden="true">{{ option.label }}</span>
+                <span class="time-range-button__short" aria-hidden="true">{{ option.shortLabel }}</span>
               </button>
             </div>
             <div class="slider-info">
@@ -402,7 +412,7 @@
               <button
                 @click="togglePlay"
                 :disabled="!hasTimeData || isRefreshing"
-                class="play-button"
+                :class="['play-button', { 'play-button--playing': isPlaying }]"
                 :aria-label="isPlaying ? 'Pause' : 'Play'"
               >
                 <span class="play-button__icon" aria-hidden="true">{{ isPlaying ? '⏸' : '▶' }}</span>
@@ -421,6 +431,8 @@
                   :max="maxTimeIndex"
                   :disabled="!hasTimeData || isRefreshing"
                   class="smooth-range-slider"
+                  aria-label="Time"
+                  :aria-valuetext="currentTimeDisplay"
                   @input="onSliderChange"
                   @change="onSliderChange"
                 />
@@ -1084,10 +1096,10 @@ export default {
       playSpeed: 500,
       selectedTimeRange: 'hours',
       timeRangeOptions: [
-        { label: 'Hours', value: 'hours' },
-        { label: 'Days', value: 'days' },
-        { label: 'Months', value: 'months' },
-        { label: 'Years', value: 'years' }
+        { label: 'Hours', shortLabel: '24H', value: 'hours' },
+        { label: 'Days', shortLabel: '30D', value: 'days' },
+        { label: 'Months', shortLabel: '12M', value: 'months' },
+        { label: 'Years', shortLabel: '5Y', value: 'years' }
       ],
       
       // Time slider data for prices
@@ -9265,6 +9277,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   transition: all 0.2s ease;
 }
 
+.time-range-button__short {
+  display: none;
+}
+
 .time-range-button.active {
   background: #3182ce;
   color: #fff;
@@ -10519,8 +10535,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   color: rgba(255, 255, 255, 0.52);
 }
 
-/* Mobile timeline card: matches the header palette, with clear rows for
-   title + range, current readout, and play + slider. */
+/* Mobile timeline: a slim card with the current time + range on one row and
+   play + slider on the next. The readout says where the thumb is, so the title
+   and tick row are dropped. */
 @media (max-width: 768px) {
   .time-slider-overlay,
   .time-slider-overlay--floating {
@@ -10528,8 +10545,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     max-width: 100%;
     box-sizing: border-box;
     margin: 0 0 10px;
-    padding: 10px 12px 8px;
-    gap: 8px;
+    padding: 8px 12px 2px;
+    gap: 2px;
     border-radius: 12px;
     background: #1f1638;
     border: 1px solid #3a2f5c;
@@ -10548,28 +10565,46 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .overlay-header {
-    gap: 8px 10px;
+    flex-wrap: nowrap;
+    gap: 8px;
   }
 
   .time-slider-overlay h3 {
-    font-size: 13px;
-    color: #ffffff;
-    white-space: normal;
-    min-width: 0;
+    display: none;
   }
 
   .time-range-buttons {
+    flex-shrink: 0;
     margin-left: auto;
-    background: #241a42;
-    border-radius: 8px;
-    gap: 2px;
+    padding: 0;
+    background: transparent;
+    gap: 0;
   }
 
   .time-range-button {
+    position: relative;
+    min-width: 36px;
+    height: 32px;
+    padding: 0 6px;
     font-size: 12px;
-    padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: 8px;
     color: #b6a9e8;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Taller touch area than the visible pill. */
+  .time-range-button::after {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+
+  .time-range-button__label {
+    display: none;
+  }
+
+  .time-range-button__short {
+    display: inline;
   }
 
   .time-range-button.active {
@@ -10580,16 +10615,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .time-range-button:hover:not(.active) {
     background: transparent;
-    color: #cfc4f2;
+    color: #b6a9e8;
   }
 
   .slider-info {
-    flex-basis: 100%;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    order: -1;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
     text-align: left;
-    gap: 8px;
+    gap: 2px;
     font-size: 13px;
   }
 
@@ -10600,11 +10636,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
   .generation-display,
   .capacity-display {
-    padding: 3px 8px;
-    border-radius: 999px;
-    background: rgba(72, 187, 120, 0.14);
     color: #6ee7a8;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
@@ -10612,58 +10645,134 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   .slider-row,
   .slider-row--full {
     flex-wrap: nowrap;
-    gap: 12px;
+    gap: 0;
+  }
+
+  /* Sits above the range input, whose touch area overhangs the track. */
+  .play-controls {
+    position: relative;
+    z-index: 4;
+  }
+
+  .play-button,
+  .play-button:hover:not(:disabled),
+  .play-button:disabled {
+    background: transparent;
+    box-shadow: none;
+    transform: none;
   }
 
   .play-button {
-    display: inline-flex;
-    align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
+    margin-left: -12px;
     padding: 0;
-    border-radius: 50%;
-    background: #7c6cf0;
-    box-shadow: none;
-    font-size: 13px;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .play-button:disabled {
-    background: #3a2f5c;
+    opacity: 0.4;
+  }
+
+  .play-button:active:not(:disabled) .play-button__icon {
+    opacity: 0.6;
   }
 
   .play-button__label {
     display: none;
   }
 
+  /* Drawn in CSS: the text glyphs render as colour emoji on phones. */
+  .play-button__icon {
+    display: block;
+    width: 14px;
+    height: 16px;
+    font-size: 0;
+    background: #ffffff;
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+  }
+
+  .play-button--playing .play-button__icon {
+    background: linear-gradient(to right, #ffffff 0 35%, transparent 35% 65%, #ffffff 65%);
+    clip-path: none;
+  }
+
   .slider-wrapper {
     flex: 1;
     min-width: 0;
     max-width: none;
-    height: 36px;
-    margin: 0 10px 0 4px;
+    height: 44px;
+    margin: 0 8px 0 12px;
   }
 
   .custom-slider {
-    height: 20px;
+    height: 44px;
   }
 
+  /* The input overhangs the track by half the thumb's width, so the thumb's
+     centre travels exactly from 0% to 100% of the track and meets the fill. */
   .smooth-range-slider {
-    height: 20px;
+    left: -20px;
+    right: auto;
+    width: calc(100% + 40px);
+    height: 44px;
+    margin: 0;
+    touch-action: pan-y;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .smooth-range-slider::-webkit-slider-thumb {
-    width: 20px;
-    height: 20px;
-    background: #7c6cf0;
-    border: 3px solid #ffffff;
+  /* The thumb is a 40x44 touch area; only the dot in its middle is painted. */
+  .smooth-range-slider::-webkit-slider-thumb,
+  .smooth-range-slider::-webkit-slider-thumb:hover {
+    width: 40px;
+    height: 44px;
+    border: 0;
+    border-radius: 0;
+    background: radial-gradient(circle, #ffffff 0 9px, transparent 9.5px);
+    box-shadow: none;
+    transform: none;
+    transition: none;
   }
 
-  .smooth-range-slider::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    background: #7c6cf0;
-    border: 3px solid #ffffff;
+  .smooth-range-slider::-moz-range-thumb,
+  .smooth-range-slider::-moz-range-thumb:hover {
+    width: 40px;
+    height: 44px;
+    border: 0;
+    border-radius: 0;
+    background: radial-gradient(circle, #ffffff 0 9px, transparent 9.5px);
+    box-shadow: none;
+    transform: none;
+    transition: none;
+  }
+
+  .smooth-range-slider::-webkit-slider-thumb:active {
+    background: radial-gradient(circle, #ffffff 0 10px, rgba(124, 108, 240, 0.45) 10.5px 19px, transparent 19.5px);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .smooth-range-slider::-moz-range-thumb:active {
+    background: radial-gradient(circle, #ffffff 0 10px, rgba(124, 108, 240, 0.45) 10.5px 19px, transparent 19.5px);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .smooth-range-slider:focus-visible::-webkit-slider-thumb {
+    background: radial-gradient(circle, #ffffff 0 9px, #b6a9e8 9.5px 12px, transparent 12.5px);
+  }
+
+  .smooth-range-slider:focus-visible::-moz-range-thumb {
+    background: radial-gradient(circle, #ffffff 0 9px, #b6a9e8 9.5px 12px, transparent 12.5px);
+  }
+
+  .smooth-range-slider:disabled::-webkit-slider-thumb {
+    background: radial-gradient(circle, #6b6190 0 9px, transparent 9.5px);
+  }
+
+  .smooth-range-slider:disabled::-moz-range-thumb {
+    background: radial-gradient(circle, #6b6190 0 9px, transparent 9.5px);
   }
 
   .slider-track {
@@ -10672,29 +10781,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   }
 
   .slider-progress {
-    background: linear-gradient(90deg, #5b4bd6 0%, #8f80f4 100%);
+    background: #7c6cf0;
+    transition: none;
   }
 
   .time-ticks-below {
-    top: 20px;
-  }
-
-  .tick-mark-below {
-    height: 4px;
-    background: #4a3e72;
-  }
-
-  .tick-label-below {
-    font-size: 10px;
-    color: #8677b8;
-  }
-
-  /* Every other label so they don't collide on narrow screens. */
-  .time-tick-below:nth-child(even) .tick-label-below {
-    visibility: hidden;
+    display: none;
   }
 
   .no-data-message {
+    margin: 0 0 6px;
     color: #b6a9e8;
   }
 }
