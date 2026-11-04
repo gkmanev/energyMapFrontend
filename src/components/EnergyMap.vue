@@ -782,6 +782,10 @@ const DEFAULT_MODAL_HEIGHT = 280
 const MODAL_MOBILE_BREAKPOINT = 1200
 const MODAL_DESKTOP_LAYOUT_BREAKPOINT = 2000
 const MIN_DESKTOP_HEIGHT = 680
+const CAPACITY_BAR_THICKNESS = 24
+const CAPACITY_BAR_ROW_HEIGHT = 36
+// Legend, x axis and padding around the bars
+const CAPACITY_CHART_AXIS_HEIGHT = 110
 
 const calculateResponsiveModalSize = () => {
   if (typeof window === 'undefined') {
@@ -2860,11 +2864,17 @@ export default {
         return
       }
 
-      modal.chart.data.datasets[0].data = generationMapped
-      modal.chart.data.datasets[1].data = remainingCapacity
-      modal.chart.$capacityValues = capacityValues
-      modal.chart.$generationValues = generationMapped
+      const barGeneration = this.withInstalledCapacity(generationMapped, capacityValues)
+      modal.chart.data.datasets[0].data = barGeneration
+      modal.chart.data.datasets[1].data = this.withInstalledCapacity(remainingCapacity, capacityValues)
+      modal.chart.$capacityValues = this.withInstalledCapacity(capacityValues, capacityValues)
+      modal.chart.$generationValues = barGeneration
       modal.chart.update('none')
+    },
+
+    // The bar chart only lists technologies with installed capacity
+    withInstalledCapacity(values, capacityValues) {
+      return values.filter((_, index) => capacityValues[index] > 0)
     },
 
     normalizeTechnologyKey(name) {
@@ -3964,7 +3974,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         if (!modalEl) return
 
         const rect = modalEl.getBoundingClientRect()
-        const scrollTarget = window.scrollY + rect.top - 18
+        // Keep the chart's title clear of the pinned mobile view bar
+        const pinnedHeight = document.querySelector('.view-bar')?.offsetHeight || 0
+        const scrollTarget = window.scrollY + rect.top - 18 - pinnedHeight
 
         window.scrollTo({
           top: Math.max(scrollTarget, 0),
@@ -4001,6 +4013,31 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         modal.size.width = baseSize.width
         modal.size.height = baseSize.height
         gridIndex += 1
+      })
+
+      visible.forEach(modal => this.fitCapacityModalHeight(modal.id))
+    },
+
+    // A floating capacity modal in bar view is only as tall as its content.
+    // Stacked modals already size to their content.
+    fitCapacityModalHeight(modalId) {
+      if (this.usesStackedModalLayout) return
+
+      this.$nextTick(() => {
+        const modal = this.separateModals.find(m => m.id === modalId)
+        if (!modal || modal.type !== 'capacity' || modal.capacityView !== 'bar') return
+        if (modal.thumbnail || modal.userModified) return
+
+        const modalEl = document.getElementById(`separate-modal-${modalId}`)
+        if (!modalEl) return
+
+        const currentHeight = modalEl.style.height
+        modalEl.style.height = 'auto'
+        const contentHeight = modalEl.offsetHeight
+        modalEl.style.height = currentHeight
+
+        const availableHeight = window.innerHeight - modal.position.y - 20
+        modal.size.height = Math.min(contentHeight, availableHeight)
       })
     },
 
@@ -4506,6 +4543,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       if (!modal || modal.type !== 'capacity' || modal.capacityView === view) return
 
       modal.capacityView = view
+      if (view === 'pie' && !this.usesStackedModalLayout) this.repositionSeparateModals()
       await nextTick()
       await this.createSeparateModalChart(modalId)
     },
@@ -4616,6 +4654,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             chartContainer.style.setProperty('--capacity-chart-min-height', '380px')
             chartContainer.style.removeProperty('--capacity-chart-height')
             chartContainer.style.removeProperty('height')
+            chartContainer.style.removeProperty('flex')
           }
 
           const pieData = this.buildCapacityPieData(labels, generationMapped, totalCapacity)
@@ -4693,23 +4732,29 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           return
         }
 
+        const installedOnly = values => this.withInstalledCapacity(values, capacityValues)
+        const barGeneration = installedOnly(generationMapped)
+        const barLabels = installedOnly(labels)
+
         if (chartContainer) {
-          const recommendedHeight = Math.max(280, Math.min(600, items.length * 44))
-          chartContainer.style.setProperty('--capacity-chart-min-height', `${recommendedHeight}px`)
+          // Bars stay the same width for every country: the chart grows with their number
+          const chartHeight = CAPACITY_CHART_AXIS_HEIGHT + Math.max(1, barLabels.length) * CAPACITY_BAR_ROW_HEIGHT
+          chartContainer.style.setProperty('--capacity-chart-min-height', `${chartHeight}px`)
           chartContainer.style.removeProperty('--capacity-chart-height')
-          chartContainer.style.removeProperty('height')
+          chartContainer.style.height = `${chartHeight}px`
+          chartContainer.style.flex = '0 0 auto'
         }
 
         modal.chart = markRaw(new Chart(ctx, {
           type: 'bar',
           data: {
-            labels,
+            labels: barLabels,
             datasets: [
               {
                 label: 'Current Generation',
-                data: generationMapped,
-                backgroundColor: generationBackgroundColors,
-                borderColor: generationBorderColors,
+                data: barGeneration,
+                backgroundColor: installedOnly(generationBackgroundColors),
+                borderColor: installedOnly(generationBorderColors),
                 borderWidth: 1.5,
                 stack: 'capacity',
                 borderRadius: {
@@ -4722,9 +4767,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               },
               {
                 label: 'Capacity',
-                data: remainingCapacity,
-                backgroundColor: capacityBackgroundColors,
-                borderColor: capacityBorderColors,
+                data: installedOnly(remainingCapacity),
+                backgroundColor: installedOnly(capacityBackgroundColors),
+                borderColor: installedOnly(capacityBorderColors),
                 borderWidth: 1,
                 stack: 'capacity',
                 borderRadius: {
@@ -4741,6 +4786,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             responsive: true,
             maintainAspectRatio: false,
             indexAxis: 'y',
+            datasets: {
+              bar: { barThickness: CAPACITY_BAR_THICKNESS }
+            },
             layout: {
               padding: { top: 8, right: 12, bottom: 0, left: 4 }
             },
@@ -4817,8 +4865,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             interaction: { mode: 'index', axis: 'y', intersect: false }
           }
         }))
-        modal.chart.$capacityValues = capacityValues
-        modal.chart.$generationValues = generationMapped
+        modal.chart.$capacityValues = installedOnly(capacityValues)
+        modal.chart.$generationValues = barGeneration
+        this.fitCapacityModalHeight(modalId)
 
       } else if (modal.type === 'generation') {
           // Build a stacked area chart for generation by technology
@@ -9708,13 +9757,36 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 @media (max-width: 768px) {
+  /* The brand row scrolls away here, and AppHeader's view bar stays pinned, so
+     the header doesn't float over the page when a chart opens. */
   .layout-shell--floating-header {
-    padding-top: 154px;
+    padding-top: 12px;
   }
 
-  .header-shell--floating {
-    width: min(720px, calc(100% - 18px));
-    top: 8px;
+  .header-shell--floating,
+  .header-shell--floating .app-header {
+    display: contents;
+  }
+
+  /* One grid for the page and the charts, so the view bar can stay pinned past
+     the map. 52px: the bar's 44px plus an 8px gap above the timeline. */
+  .layout-shell {
+    display: grid;
+    grid-template-areas:
+      "header"
+      "tabs"
+      "slider"
+      "map"
+      "layers"
+      "modals"
+      "footer";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 52px;
+    align-content: start;
+  }
+
+  .content-shell {
+    display: contents;
   }
 
   .agent-chat-popover {
@@ -9788,6 +9860,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 
 .separate-modal-stack {
   grid-area: modals;
+    box-sizing: border-box;
     padding-bottom: 170px;
   }
 
@@ -9802,14 +9875,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 }
 
 @media (max-width: 600px) {
-  .layout-shell--floating-header {
-    padding-top: 148px;
-  }
-
-  .header-shell--floating {
-    width: min(520px, calc(100% - 14px));
-  }
-
   .agent-chat-popover {
     padding: 12px;
   }

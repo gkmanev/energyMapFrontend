@@ -143,6 +143,26 @@
       </div>
     </div>
 
+    <!-- Mobile only: stays pinned while the brand row above scrolls away -->
+    <div class="view-bar">
+      <nav class="view-tabs" role="tablist" aria-label="Map view">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          class="tab"
+          :class="{ active: modelValue === tab.id }"
+          :aria-selected="modelValue === tab.id"
+          @click="emit('update:modelValue', tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+
+      <span class="clock" :title="clockFull">{{ clockShort }}</span>
+    </div>
+
     <div class="header-sub">
       <div class="layers">
         <span class="strip-label">Layers</span>
@@ -490,7 +510,8 @@ onUnmounted(() => {
 }
 
 .menu-toggle,
-.menu-panel {
+.menu-panel,
+.view-bar {
   display: none;
 }
 
@@ -592,17 +613,13 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .header-main {
     flex-wrap: wrap;
-    row-gap: 4px;
-    padding: 8px 12px;
+    padding: 8px 12px 4px;
   }
 
+  .header-left .view-tabs,
+  .header-right .clock,
   .header-right .btn-agent {
     display: none;
-  }
-
-  /* Let brand, tabs and controls flow as direct rows of .header-main */
-  .header-left {
-    display: contents;
   }
 
   .header-right {
@@ -610,23 +627,43 @@ onUnmounted(() => {
     margin-left: auto;
   }
 
-  /* Plain text tabs on a hairline; the underline marks the active view. */
-  .view-tabs {
-    order: 1;
-    flex-basis: 100%;
+  /* A grid item can only stick within its grid area, so the bar's area runs to
+     the last row. It still only paints its own height (align-self: start), and
+     the rest of the page lays out in the rows it overlaps. */
+  .view-bar {
+    grid-row: tabs / -1;
+    grid-column: 1;
+    align-self: start;
+    position: sticky;
+    top: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 -12px;
+    padding: 0 12px;
+    background: var(--hdr-bg);
+    border-bottom: 1px solid var(--hdr-border);
+  }
+
+  /* Plain text tabs; the underline marks the active view. */
+  .view-bar .view-tabs {
+    flex: 1;
+    align-self: flex-end;
+    min-width: 0;
     gap: 0;
     padding: 0;
     background: transparent;
     border-radius: 0;
-    border-bottom: 1px solid var(--hdr-border);
   }
 
-  .view-tabs .tab {
-    flex: 1;
+  .view-bar .tab {
+    flex: 1 1 auto;
     height: 44px;
     margin-bottom: -1px;
     padding: 0 6px;
     font-size: 14px;
+    white-space: nowrap;
     border-radius: 0;
     transition: color 0.15s, box-shadow 0.15s;
     touch-action: manipulation;
@@ -634,28 +671,27 @@ onUnmounted(() => {
   }
 
   /* Hover sticks after a tap on touch screens, so only pressing changes colour. */
-  .view-tabs .tab:hover {
+  .view-bar .tab:hover {
     color: var(--hdr-text-dim);
   }
 
-  .view-tabs .tab:active {
+  .view-bar .tab:active {
     color: var(--hdr-text-soft);
   }
 
-  .view-tabs .tab.active {
+  .view-bar .tab.active {
     background: transparent;
     color: var(--hdr-text);
     font-weight: 600;
     box-shadow: inset 0 -2px 0 var(--hdr-accent-hover);
   }
 
-  .view-tabs .tab:focus-visible {
+  .view-bar .tab:focus-visible {
     outline-offset: -2px;
   }
 
   .menu-panel {
-    order: 2;
-    border-top: none;
+    padding-bottom: 6px;
   }
 
   .menu-toggle {
