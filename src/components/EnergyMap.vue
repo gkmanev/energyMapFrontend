@@ -683,29 +683,6 @@
               <div v-if="modal.meta.updatedLabel" class="capacity-updated">{{ modal.meta.updatedLabel }}</div>
             </div>
 
-            <div
-              v-if="modal.meta && modal.meta.topTechnologies.length"
-              class="capacity-top-techs"
-            >
-              <div
-                v-for="tech in modal.meta.topTechnologies"
-                :key="tech.name"
-                class="capacity-tech-card"
-              >
-                <span class="capacity-tech-color" :style="{ backgroundColor: tech.color }"></span>
-                <div class="capacity-tech-content">
-                  <div class="capacity-tech-header">
-                    <span class="capacity-tech-name">{{ tech.name }}</span>
-                    <span class="capacity-tech-share">{{ formatPercent(tech.capacityShare) }} of capacity</span>
-                  </div>
-                  <div class="capacity-tech-values">
-                    <span class="capacity-tech-capacity">{{ formatMegawatts(tech.capacity) }} MW installed</span>
-                    <span class="capacity-tech-generation">{{ formatMegawatts(tech.generation) }} MW now</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
           </div>
 
           <!-- Other chart modals (capacity, prices…) -->
@@ -1024,7 +1001,7 @@ export default {
       // Separate Modal System
       separateModals: [],
       separateModalIdCounter: 0,
-      showFlows: true,
+      showFlows: false,               // cross-border flow/capacity lines on the capacity map (disabled)
       flowsLayer: null,
       flowsData: {},                  // { "BG-RO": { [ts]: mw, ... }, ... }
       latestRealFlowsByEdge: {},      // { "BG-RO": { value, timestamp } }
@@ -1635,6 +1612,12 @@ export default {
 
       },
       immediate: false
+    },
+
+    // Switching period can leave currentTimeIndex unchanged (watcher below won't fire),
+    // so refresh capacity modals explicitly to pick up the new aggregation and labels.
+    selectedTimeRange() {
+      this.$nextTick(() => { void this.updateCapacityModalGenerationValues() })
     },
 
     currentTimeIndex: {
@@ -2841,9 +2824,7 @@ export default {
         utilization,
         topTechnologies,
         legendItems,
-        generationTimestampLabel: Number.isFinite(timestamp)
-          ? `Generation at ${new Date(timestamp).toLocaleString()}`
-          : '',
+        generationTimestampLabel: this.formatCapacityGenerationLabel(timestamp),
         updatedLabel: Number.isFinite(lastUpdatedTs) && lastUpdatedTs > 0
           ? `Last updated ${new Date(lastUpdatedTs).toLocaleString()}`
           : ''
@@ -4453,8 +4434,24 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     getSeparateModalTimeWindow(modal) {
-      if (modal.type === 'capacity') return this.currentTimeDisplay
+      if (modal.type === 'capacity') return this.formatCapacityPeriodHeading(Number(this.currentTimestamp))
       return this.timeRangeHeading
+    },
+
+    // Header for the capacity modal: name the aggregated period rather than a clock time
+    formatCapacityPeriodHeading(timestamp) {
+      if (!this.hasTimeData || !Number.isFinite(timestamp)) return this.currentTimeDisplay
+      const date = new Date(timestamp)
+      switch (this.selectedTimeRange) {
+        case 'days':
+          return `${date.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · daily avg`
+        case 'months':
+          return `${date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })} · monthly avg`
+        case 'years':
+          return `${date.getFullYear()} · yearly avg`
+        default:
+          return this.currentTimeDisplay
+      }
     },
 
     async setPriceModalView(modalId, view) {
@@ -4636,9 +4633,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           utilization,
           topTechnologies,
           legendItems,
-          generationTimestampLabel: Number.isFinite(this.currentTimestamp)
-            ? `Generation at ${new Date(this.currentTimestamp).toLocaleString()}`
-            : '',
+          generationTimestampLabel: this.formatCapacityGenerationLabel(Number(this.currentTimestamp)),
           updatedLabel: Number.isFinite(lastUpdatedTs) && lastUpdatedTs > 0
             ? `Last updated ${new Date(lastUpdatedTs).toLocaleString()}`
             : ''
@@ -5131,7 +5126,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             datasets
           },
           plugins: [generationCursorPlugin],
-          plugins: [generationCursorPlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -5173,7 +5167,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 display: false
               },
               tooltip: {
-                mode: 'index',
+                // Past and future prices are separate datasets with different lengths,
+                // so 'index' mode would pair points at the same array index (e.g. 20:00
+                // forecast shown under the 08:00 past title). Match by x position instead.
+                mode: 'nearest',
+                axis: 'x',
                 intersect: false,
                 backgroundColor: 'rgba(15, 23, 42, 0.92)',
                 titleColor: '#f8fafc',
@@ -5188,7 +5186,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 dash: [5, 4]
               }
             },
-            interaction: { mode: 'index', intersect: false }
+            interaction: { mode: 'nearest', axis: 'x', intersect: false }
           }
         }
 
@@ -6396,7 +6394,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                   priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices')
                 }
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
-                vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
+                // Net Imports vs Exports chart hidden; re-enable with:
+                // vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
 
                 if (!vm.isLargeModalViewport) {
                   const activeModalId = vm.heatmapType === 'prices'
@@ -6973,6 +6972,33 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return undefined
     },
 
+    // Slider steps for days/months/years are local midnights (e.g. 1 Nov 00:00 in UTC+2 is
+    // 31 Oct 22:00 UTC), while aggregated generation buckets are keyed at UTC midnight.
+    // Map the local calendar period onto its UTC bucket key so the lookup hits the right bucket
+    // instead of falling back to the previous one.
+    toGenerationBucketTimestamp(timestamp, range = this.selectedTimeRange) {
+      const date = new Date(timestamp)
+      if (range === 'days') return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+      if (range === 'months') return Date.UTC(date.getFullYear(), date.getMonth(), 1)
+      if (range === 'years') return Date.UTC(date.getFullYear(), 0, 1)
+      return timestamp
+    },
+
+    formatCapacityGenerationLabel(timestamp) {
+      if (!Number.isFinite(timestamp)) return ''
+      const date = new Date(timestamp)
+      switch (this.selectedTimeRange) {
+        case 'days':
+          return `Average generation on ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+        case 'months':
+          return `Average generation in ${date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`
+        case 'years':
+          return `Average generation in ${date.getFullYear()}`
+        default:
+          return `Generation at ${date.toLocaleString()}`
+      }
+    },
+
     async getGenerationByTechnologyAt(iso2, timestamp) {
       if (!iso2 || !Number.isFinite(timestamp)) return {}
 
@@ -6989,9 +7015,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       const entry = this.generationByTechCache.get(cacheKey)
       if (!entry || !entry.byTech) return {}
 
+      const lookupTs = this.toGenerationBucketTimestamp(timestamp, range)
       const byTech = {}
       entry.byTech.forEach((seriesEntry, key) => {
-        const value = this.findNearestSeriesValue(seriesEntry, timestamp)
+        const value = this.findNearestSeriesValue(seriesEntry, lookupTs)
         if (value !== undefined) {
           byTech[key] = value
         }
