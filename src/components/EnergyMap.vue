@@ -3463,6 +3463,139 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       return polygons.some(rings => this.pointInPolygon(point, rings))
     },
 
+    // Interior point of a polygon that reads as its middle on screen: the point farthest
+    // from any border (polylabel), worked out in Web Mercator so it matches what the map
+    // draws, and pulled a little toward the centroid so long shapes like Italy or Norway
+    // don't get their label shoved into one wide end.
+    findVisualCenter(rings, centroidPull = 0.25) {
+      const outer = rings?.[0]
+      if (!Array.isArray(outer) || outer.length < 3) return null
+
+      const projection = L.Projection.SphericalMercator
+      const projected = rings
+        .filter(ring => Array.isArray(ring) && ring.length >= 3)
+        .map(ring => ring.map(pt => {
+          const p = projection.project(L.latLng(pt.lat, pt.lng))
+          return [p.x, p.y]
+        }))
+      const outerProjected = projected[0]
+
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      outerProjected.forEach(([x, y]) => {
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+      })
+      const width = maxX - minX
+      const height = maxY - minY
+      const cellSize = Math.min(width, height)
+      if (!(cellSize > 0)) return null
+
+      // Area centroid in projected space
+      let area = 0
+      let cx = 0
+      let cy = 0
+      for (let i = 0, j = outerProjected.length - 1; i < outerProjected.length; j = i++) {
+        const [xi, yi] = outerProjected[i]
+        const [xj, yj] = outerProjected[j]
+        const cross = xj * yi - xi * yj
+        area += cross
+        cx += (xi + xj) * cross
+        cy += (yi + yj) * cross
+      }
+      const centroid = area !== 0
+        ? [cx / (3 * area), cy / (3 * area)]
+        : [minX + width / 2, minY + height / 2]
+
+      // Signed distance to the polygon edge: positive inside, negative outside
+      const segmentDistSq = (px, py, [ax, ay], [bx, by]) => {
+        let x = ax
+        let y = ay
+        let dx = bx - x
+        let dy = by - y
+        if (dx !== 0 || dy !== 0) {
+          const t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy)
+          if (t > 1) {
+            x = bx
+            y = by
+          } else if (t > 0) {
+            x += dx * t
+            y += dy * t
+          }
+        }
+        dx = px - x
+        dy = py - y
+        return dx * dx + dy * dy
+      }
+      const edgeDistance = (px, py) => {
+        let inside = false
+        let minDistSq = Infinity
+        projected.forEach(ring => {
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const a = ring[i]
+            const b = ring[j]
+            if ((a[1] > py) !== (b[1] > py) && px < ((b[0] - a[0]) * (py - a[1])) / (b[1] - a[1]) + a[0]) {
+              inside = !inside
+            }
+            minDistSq = Math.min(minDistSq, segmentDistSq(px, py, a, b))
+          }
+        })
+        return (inside ? 1 : -1) * Math.sqrt(minDistSq)
+      }
+
+      const makeCell = (x, y, h) => {
+        const d = edgeDistance(x, y)
+        const score = d - centroidPull * Math.hypot(x - centroid[0], y - centroid[1])
+        // Best score any point in this cell could reach
+        return { x, y, h, d, score, max: score + h * Math.SQRT2 * (1 + centroidPull) }
+      }
+
+      const queue = []
+      const push = cell => {
+        let lo = 0
+        let hi = queue.length
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1
+          if (queue[mid].max < cell.max) lo = mid + 1
+          else hi = mid
+        }
+        queue.splice(lo, 0, cell)
+      }
+
+      let h = cellSize / 2
+      for (let x = minX; x < maxX; x += cellSize) {
+        for (let y = minY; y < maxY; y += cellSize) {
+          push(makeCell(x + h, y + h, h))
+        }
+      }
+
+      let bestCell = makeCell(centroid[0], centroid[1], 0)
+      const bboxCell = makeCell(minX + width / 2, minY + height / 2, 0)
+      if (bboxCell.score > bestCell.score) bestCell = bboxCell
+
+      const precision = Math.max(width, height) / 400
+      let iterations = 0
+      while (queue.length && iterations < 5000) {
+        iterations += 1
+        const cell = queue.pop()
+        if (cell.d > 0 && cell.score > bestCell.score) bestCell = cell
+        if (cell.max - bestCell.score <= precision) continue
+        h = cell.h / 2
+        push(makeCell(cell.x - h, cell.y - h, h))
+        push(makeCell(cell.x + h, cell.y - h, h))
+        push(makeCell(cell.x - h, cell.y + h, h))
+        push(makeCell(cell.x + h, cell.y + h, h))
+      }
+
+      if (!(bestCell.d > 0)) return null
+      const latLng = projection.unproject(L.point(bestCell.x, bestCell.y))
+      return [latLng.lat, latLng.lng]
+    },
+
     // Get a country’s visual center, preferring provided label coordinates
     getCountryCenter(iso2) {
       if (!iso2) return null
@@ -3495,15 +3628,21 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const stats = this.computeRingAreaAndCentroid(outerRing)
         if (!stats?.centroid) return
         if (!best || (stats.area ?? 0) > (best.area ?? 0)) {
-          best = stats
+          best = { ...stats, ring: outerRing }
         }
       })
+
+      const bestRings = best ? polygons.find(rings => rings?.[0] === best.ring) : null
+      const visualCenter = bestRings ? this.findVisualCenter(bestRings) : null
+      if (visualCenter) {
+        center = visualCenter
+      }
 
       const centroidPoint = best?.centroid
         ? { lat: best.centroid[0], lng: best.centroid[1] }
         : null
 
-      if (centroidPoint && this.pointInPolygons(centroidPoint, polygons)) {
+      if (!center && centroidPoint && this.pointInPolygons(centroidPoint, polygons)) {
         center = [centroidPoint.lat, centroidPoint.lng]
       }
 
@@ -6818,8 +6957,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const center = this.getCountryCenter(iso2)
         if (!center) return
 
+        // Inline layout: this HTML is injected by Leaflet, so the scoped styles never reach it.
+        // The box is centred on its anchor so the number sits right on the country's centre.
         const badgeHtml = `
-          <div class="price-badge price-badge--${this.heatmapType}">
+          <div class="price-badge price-badge--${this.heatmapType}" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; white-space:nowrap; line-height:1;">
             <div class="price-badge__value" style="font-weight:bold; color: white;">${formatValue(value)}</div>
           </div>
         `
@@ -6828,8 +6969,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
           icon: L.divIcon({
             className: 'price-badge-icon',
             html: badgeHtml,
-            iconSize: [72, 48],
-            iconAnchor: [20, 5]
+            iconSize: [72, 24],
+            iconAnchor: [36, 12]
           }),
           interactive: false,
           keyboard: false,
