@@ -741,7 +741,7 @@ const FLOW_LATEST_UNSUPPORTED_ISO2 = new Set(['TR'])
 
 const SUPPORTED_CAPACITY_ISO2 = new Set([
   'AL','AT','BA','BE','BG','CH','CZ','DE','DK','EE','ES','FI','FR','GB',
-  'GR','HR','HU','IE','IT','LT','LU','LV','NL','NO','PL','PT','RO','SE','SI','SK'
+  'GR','HR','HU','IE','IT','LT','LU','LV','NL','NO','PL','PT','RO','SE','SI','SK','TR'
 ])
 
 // Generation uses same countries as capacity for now
