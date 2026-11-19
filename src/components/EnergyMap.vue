@@ -2715,6 +2715,42 @@ export default {
       return timeline[clampedIndex] ?? null
     },
 
+    // Move the time slider (and with it every chart's dashed cursor line) to the
+    // timeline entry closest to the given timestamp.
+    seekToTimestamp(timestamp) {
+      const timeline = this.getAnimationTimeline()
+      if (!timeline.length || !Number.isFinite(timestamp)) return
+
+      let nearestIndex = 0
+      let nearestDistance = Infinity
+      timeline.forEach((ts, index) => {
+        const distance = Math.abs(Number(ts) - timestamp)
+        if (distance < nearestDistance) {
+          nearestDistance = distance
+          nearestIndex = index
+        }
+      })
+
+      if (this.isPlaying) this.pauseAnimation()
+      this.jumpToTick(Math.min(nearestIndex, this.maxTimeIndex))
+    },
+
+    handleChartCursorClick(event, chart) {
+      const area = chart?.chartArea
+      const xScale = chart?.scales?.x
+      if (!area || !xScale || !Number.isFinite(event?.x)) return
+      if (event.x < area.left || event.x > area.right || event.y < area.top || event.y > area.bottom) return
+
+      this.seekToTimestamp(xScale.getValueForPixel(event.x))
+    },
+
+    handleChartCursorHover(event, chart) {
+      const area = chart?.chartArea
+      if (!area || !chart.canvas) return
+      const inside = event.x >= area.left && event.x <= area.right && event.y >= area.top && event.y <= area.bottom
+      chart.canvas.style.cursor = inside ? 'pointer' : 'default'
+    },
+
     applyGenerationCursor(chart, timestamp, style = {}) {
       if (!chart) return
 
@@ -5312,11 +5348,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 mode: 'nearest',
                 axis: 'x',
                 intersect: false,
-                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                backgroundColor: 'rgba(15, 23, 42, 0.75)',
                 titleColor: '#f8fafc',
                 bodyColor: '#e2e8f0',
                 borderColor: 'rgba(148, 163, 184, 0.35)',
-                borderWidth: 1
+                borderWidth: 1,
+                callbacks: {
+                  label: context => `${Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(context.parsed.y)} EUR/MWh`
+                }
               },
               generationCursor: {
                 timestamp: this.getGenerationCursorTimestamp(),
@@ -5325,7 +5364,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 dash: [5, 4]
               }
             },
-            interaction: { mode: 'nearest', axis: 'x', intersect: false }
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            onClick: (event, _elements, chart) => this.handleChartCursorClick(event, chart),
+            onHover: (event, _elements, chart) => this.handleChartCursorHover(event, chart)
           }
         }
 
@@ -7603,11 +7644,14 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             tooltip: {
               mode: 'index',
               intersect: false,
-              backgroundColor: 'rgba(15, 23, 42, 0.92)',
+              backgroundColor: 'rgba(15, 23, 42, 0.75)',
               titleColor: '#f8fafc',
               bodyColor: '#e2e8f0',
               borderColor: 'rgba(148, 163, 184, 0.35)',
-              borderWidth: 1
+              borderWidth: 1,
+              callbacks: {
+                label: context => `${Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(context.parsed.y)} EUR/MWh`
+              }
             }
           },
           interaction: { mode: 'index', intersect: false }
