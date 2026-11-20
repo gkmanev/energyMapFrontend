@@ -261,15 +261,15 @@
               <div class="custom-slider">
                 <!-- Native range input for smooth dragging -->
                 <input
-                  v-model="currentTimeIndex"
                   type="range"
                   :min="0"
                   :max="maxTimeIndex"
+                  :value="currentTimeIndex"
                   :disabled="!hasTimeData || isRefreshing"
                   class="smooth-range-slider"
                   aria-label="Time"
                   :aria-valuetext="currentTimeDisplay"
-                  @input="onSliderChange"
+                  @input="onSliderInput"
                   @change="onSliderChange"
                 />
 
@@ -342,15 +342,15 @@
               <div class="custom-slider">
                 <!-- Native range input for smooth dragging -->
                 <input
-                  v-model="currentTimeIndex"
                   type="range"
                   :min="0"
                   :max="maxTimeIndex"
+                  :value="currentTimeIndex"
                   :disabled="!hasTimeData || isRefreshing"
                   class="smooth-range-slider"
                   aria-label="Time"
                   :aria-valuetext="currentTimeDisplay"
-                  @input="onSliderChange"
+                  @input="onSliderInput"
                   @change="onSliderChange"
                   @pointerdown="onSliderPointerDown"
                   @pointerup="onSliderPointerUp"
@@ -425,15 +425,15 @@
               <div class="custom-slider">
                 <!-- Native range input for smooth dragging -->
                 <input
-                  v-model="currentTimeIndex"
                   type="range"
                   :min="0"
                   :max="maxTimeIndex"
+                  :value="currentTimeIndex"
                   :disabled="!hasTimeData || isRefreshing"
                   class="smooth-range-slider"
                   aria-label="Time"
                   :aria-valuetext="currentTimeDisplay"
-                  @input="onSliderChange"
+                  @input="onSliderInput"
                   @change="onSliderChange"
                 />
 
@@ -607,22 +607,20 @@
             <div v-if="modal.meta" class="netflow-summary">
               <div class="netflow-summary-item">
                 <span class="netflow-summary-label">Latest net flow</span>
-                <span class="netflow-summary-value" :class="{ 'is-import': (modal.meta.latestNet || 0) < 0 }">
+                <!-- net > 0 = net import (green), net < 0 = net export (red) -->
+                <span class="netflow-summary-value" :class="{ 'is-export': (modal.meta.latestNet || 0) < 0 }">
                   {{ formatMegawatts(Math.abs(modal.meta.latestNet || 0)) }} MW
-                  <small>{{ (modal.meta.latestNet || 0) >= 0 ? 'export' : 'import' }}</small>
+                  <small>{{ (modal.meta.latestNet || 0) >= 0 ? 'import' : 'export' }}</small>
                 </span>
               </div>
               <div class="netflow-summary-item">
-                <span class="netflow-summary-label">Peak export</span>
-                <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakExport || 0) }} MW</span>
-              </div>
-              <div class="netflow-summary-item">
-                <span class="netflow-summary-label">Peak import</span>
+                <span class="netflow-summary-label">Peak net import</span>
                 <span class="netflow-summary-value">{{ formatMegawatts(modal.meta.peakImport || 0) }} MW</span>
               </div>
-            </div>
-            <div v-if="modal.meta?.latestTimestamp" class="netflow-updated">
-              Updated: {{ modal.meta.latestTimestamp }}
+              <div class="netflow-summary-item">
+                <span class="netflow-summary-label">Peak net export</span>
+                <span class="netflow-summary-value is-export">{{ formatMegawatts(modal.meta.peakExport || 0) }} MW</span>
+              </div>
             </div>
           </div>
 
@@ -1482,8 +1480,10 @@ export default {
       
       const result = {}
       const timestamp = Number(this.currentTimestamp)
+      // At the "Now" step, some countries' latest bucket (e.g. today's daily price) isn't
+      // published yet, so fall back to their most recent value instead of rendering gray.
       const useNearestValue = this.selectedTimeRange === 'months'
-        || (this.selectedTimeRange === 'hours' && this.currentTimeIndex === this.maxTimeIndex)
+        || this.currentTimeIndex === this.maxTimeIndex
 
       const findNearestValue = (timeData) => {
         if (!timeData) return undefined
@@ -3443,53 +3443,31 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.flowsData = out
     },
 
-    buildCountryNetFlowsSeries(iso2) {
-      if (!iso2 || !this.flowsData) return []
-
-      const relevantEdges = Object.entries(this.flowsData).filter(([key]) => {
-        if (!key.includes('-')) return false
-        const [a, b] = key.split('-')
-        return a === iso2 || b === iso2
+    // Country net cross-border flows from /api/flows/country-range/ over the same
+    // window as the generation chart. Returns [{ ts, imports, exports, net }]
+    // ascending, where net > 0 means net imports.
+    async fetchCountryNetFlows(iso2) {
+      const { start, end } = this.getGenerationRangeDates()
+      // The endpoint supports 15m, h and d; longer ranges fall back to daily buckets
+      const resolution = this.selectedTimeRange === 'hours' ? 'h' : 'd'
+      const params = new URLSearchParams({
+        country: iso2,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        resolution
       })
-      if (!relevantEdges.length) return []
+      const { data: response } = await axios.get(buildApiUrl(`flows/country-range/?${params.toString()}`))
+      const items = Array.isArray(response) ? response : (response?.items || response?.data || [])
 
-      const timestampsSet = new Set()
-      relevantEdges.forEach(([, series]) => {
-        Object.keys(series || {}).forEach(ts => timestampsSet.add(Number(ts)))
-      })
-      const timestamps = Array.from(timestampsSet).filter(Number.isFinite).sort((a, b) => a - b)
-
-      return timestamps.map(ts => {
-        let imports = 0
-        let exports = 0
-
-        relevantEdges.forEach(([key, series]) => {
-          const [a, b] = key.split('-')
-          const value = Number(series?.[ts])
-          if (!Number.isFinite(value) || value === 0) return
-
-          if (iso2 === a) {
-            if (value > 0) {
-              exports += value
-            } else {
-              imports += Math.abs(value)
-            }
-          } else if (iso2 === b) {
-            if (value > 0) {
-              imports += value
-            } else {
-              exports += Math.abs(value)
-            }
-          }
-        })
-
-        return {
-          ts,
-          imports,
-          exports,
-          net: exports - imports
-        }
-      }).filter(point => (point.imports || 0) > 0 || (point.exports || 0) > 0)
+      return items
+        .map(item => ({
+          ts: Date.parse(item.datetime_utc),
+          imports: Number(item.imports_mw) || 0,
+          exports: Number(item.exports_mw) || 0,
+          net: Number(item.net_mw) || 0
+        }))
+        .filter(point => Number.isFinite(point.ts))
+        .sort((a, b) => a.ts - b.ts)
     },
 
     normalizeLayerPolygons(latlngs) {
@@ -4026,6 +4004,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
       this.separateModalResizeState = {}
     },
 
+
+    // Replaces v-model on the range inputs. v-model writes el.value before Vue patches
+    // :max, so when the index and max grow in the same tick (e.g. Hours -> Days:
+    // 23 -> 30) the browser clamped the thumb to the old max and it stuck there.
+    // A plain :value binding placed after :max is patched in order. Number() also keeps
+    // currentTimeIndex numeric (v-model stored strings, which broke === maxTimeIndex checks).
+    onSliderInput(event) {
+      this.currentTimeIndex = Number(event.target.value)
+      this.onSliderChange()
+    },
 
     onSliderChange() {
       // const slider = this.$el.querySelector('.enhanced-time-slider');
@@ -4614,19 +4602,17 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         }else if (type === 'netflows') {
           const iso2 = this.getCountryISO2ByName(country)
           if (!iso2) throw new Error('Country not found')
-          const series = this.buildCountryNetFlowsSeries(iso2)
+          const series = await this.fetchCountryNetFlows(iso2)
           if (!series.length) {
             throw new Error('No cross-border flow data available')
           }
           data = series
+          // net > 0 means net imports, net < 0 means net exports
           const latestPoint = series[series.length - 1] || {}
-          const peakExport = series.reduce((max, point) => Math.max(max, point.exports || 0), 0)
-          const peakImport = series.reduce((max, point) => Math.max(max, point.imports || 0), 0)
+          const peakImport = series.reduce((max, point) => Math.max(max, point.net), 0)
+          const peakExport = series.reduce((max, point) => Math.max(max, -point.net), 0)
           modal.meta = {
             latestNet: latestPoint.net ?? 0,
-            latestTimestamp: latestPoint.ts
-              ? new Date(latestPoint.ts).toLocaleString()
-              : '',
             peakExport,
             peakImport
           }
@@ -4651,8 +4637,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
     },
 
     async refreshVisibleGenerationModals() {
+      // Net flows use the same time window as generation, so reload them together
       const visibleGenerationModals = this.separateModals.filter(
-        modal => modal.visible && modal.type === 'generation'
+        modal => modal.visible && (modal.type === 'generation' || modal.type === 'netflows')
       )
       if (!visibleGenerationModals.length) return
 
@@ -5318,7 +5305,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               interaction: {
                 mode: 'index',
                 intersect: false
-              }
+              },
+              // Same as the price chart: clicking a point moves the time slider and cursor line
+              onClick: (event, _elements, chart) => this.handleChartCursorClick(event, chart),
+              onHover: (event, _elements, chart) => this.handleChartCursorHover(event, chart)
             }
           };
 
@@ -5467,41 +5457,39 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         const series = Array.isArray(modal.data) ? modal.data : []
         if (!series.length) return
 
-        const exportsData = series.map(point => ({ x: point.ts, y: point.exports || 0 }))
-        const importsData = series.map(point => ({ x: point.ts, y: -(point.imports || 0) }))
-        const netData = series.map(point => ({ x: point.ts, y: point.net || 0 }))
+        // One bar per bucket, straight from the backend's net_mw:
+        // > 0 (net import) is green, < 0 (net export) is red
+        const netData = series.map(point => ({
+          x: point.ts,
+          y: point.net || 0,
+          imports: point.imports,
+          exports: point.exports
+        }))
+        const barColor = (point, alpha) => {
+          const rgb = (point?.y || 0) >= 0 ? '34,197,94' : '239,68,68'
+          return `rgba(${rgb},${alpha})`
+        }
+
+        // Same x window as the generation chart so the timeline cursor lines up
+        const timeline = this.getAnimationTimeline()
+        const timestamps = netData.map(point => point.x)
+        const xMin = Math.min(timeline.length ? timeline[0] : Infinity, timestamps[0])
+        const xMax = Math.max(timeline.length ? timeline[timeline.length - 1] : -Infinity, timestamps[timestamps.length - 1])
+        const formatMw = value => Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
 
         const cfg = {
           type: 'bar',
           data: {
             datasets: [
               {
-                label: 'Exports',
-                data: exportsData,
-                backgroundColor: 'rgba(34,197,94,0.75)',
-                borderColor: 'rgba(34,197,94,1)',
-                borderWidth: 1,
-                stack: 'flows'
-              },
-              {
-                label: 'Imports',
-                data: importsData,
-                backgroundColor: 'rgba(248,113,113,0.75)',
-                borderColor: 'rgba(239,68,68,1)',
-                borderWidth: 1,
-                stack: 'flows'
-              },
-              {
                 label: 'Net flow',
                 data: netData,
-                type: 'line',
-                borderColor: '#facc15',
-                backgroundColor: 'rgba(250,204,21,0.2)',
-                pointRadius: 0,
-                borderWidth: 2,
-                fill: false,
-                tension: 0.25,
-                yAxisID: 'y'
+                backgroundColor: ctx => barColor(ctx.raw, 0.75),
+                borderColor: ctx => barColor(ctx.raw, 1),
+                hoverBackgroundColor: ctx => barColor(ctx.raw, 0.95),
+                borderWidth: 1,
+                categoryPercentage: 0.9,
+                barPercentage: 0.9
               }
             ]
           },
@@ -5513,7 +5501,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             scales: {
               x: {
                 type: 'time',
-                time: { unit: 'hour', tooltipFormat: 'dd/MM HH:mm' },
+                time: this.getGenerationChartTimeConfig(),
+                min: xMin,
+                max: xMax,
+                offset: true,
                 grid: {
                   color: 'rgba(148, 163, 184, 0.14)',
                   drawBorder: false
@@ -5524,12 +5515,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 beginAtZero: true,
                 title: {
                   display: true,
-                  text: 'MW',
+                  text: '← Net export · Net import → (MW)',
                   color: '#f8fafc',
-                  font: { size: 12, weight: 600 }
+                  font: { size: 11, weight: 600 }
                 },
                 grid: {
-                  color: 'rgba(148, 163, 184, 0.12)',
+                  color: ctx => ctx.tick?.value === 0 ? 'rgba(226, 232, 240, 0.45)' : 'rgba(148, 163, 184, 0.12)',
                   drawBorder: false
                 },
                 ticks: {
@@ -5543,19 +5534,24 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 display: false
               },
               tooltip: {
-                mode: 'index',
+                mode: 'nearest',
+                axis: 'x',
                 intersect: false,
+                displayColors: false,
                 backgroundColor: 'rgba(15, 23, 42, 0.92)',
                 titleColor: '#f8fafc',
                 bodyColor: '#e2e8f0',
                 borderColor: 'rgba(148, 163, 184, 0.35)',
                 borderWidth: 1,
                 callbacks: {
-                  label(context) {
-                    const label = context.dataset?.label || ''
-                    const value = context.parsed.y || 0
-                    const magnitude = Math.abs(value)
-                    return `${label}: ${Intl.NumberFormat().format(magnitude)} MW`
+                  label: context => {
+                    const point = context.raw || {}
+                    const net = Number(point.y) || 0
+                    return [
+                      `Net ${net >= 0 ? 'import' : 'export'}: ${formatMw(Math.abs(net))} MW`,
+                      `Imports: ${formatMw(point.imports || 0)} MW`,
+                      `Exports: ${formatMw(point.exports || 0)} MW`
+                    ]
                   }
                 }
               },
@@ -5566,7 +5562,10 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                 dash: [5, 4]
               }
             },
-            interaction: { mode: 'index', intersect: false }
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            // Same as the other time charts: clicking moves the time slider and cursor line
+            onClick: (event, _elements, chart) => this.handleChartCursorClick(event, chart),
+            onHover: (event, _elements, chart) => this.handleChartCursorHover(event, chart)
           }
         }
 
@@ -6664,8 +6663,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
                   priceModalId = vm.createSeparateModal(name, 'prices', 'Energy Prices')
                 }
                 vm.createSeparateModal(name, 'powerflow', 'Energy Power Flow')
-                // Net Imports vs Exports chart hidden; re-enable with:
-                // vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
+                vm.createSeparateModal(name, 'netflows', 'Net Imports vs Exports')
 
                 if (!vm.isLargeModalViewport) {
                   const activeModalId = vm.heatmapType === 'prices'
@@ -10715,7 +10713,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
 .netflow-summary-value {
   font-size: 18px;
   font-weight: 600;
-  color: #34d399;
+  color: #4ade80;
 }
 
 .netflow-summary-value small {
@@ -10726,7 +10724,7 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   text-transform: uppercase;
 }
 
-.netflow-summary-value.is-import {
+.netflow-summary-value.is-export {
   color: #f87171;
 }
 
@@ -10734,12 +10732,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1;
   min-height: 280px;
   min-width: 0;
-}
-
-.netflow-updated {
-  font-size: 10px;
-  color: rgba(148, 163, 184, 0.75);
-  text-align: right;
 }
 
 .mobile-bottom-panel {
