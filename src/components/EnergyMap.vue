@@ -632,25 +632,33 @@
               <div class="chart-container generation-chart">
                 <canvas :id="'separate-chart-' + modal.id"></canvas>
               </div>
-              <div v-if="modal.meta" class="generation-total">
-                <span class="generation-total-label">Total output</span>
-                <span class="generation-total-value">{{ formatMegawatts(modal.meta.totalGeneration) }} MW</span>
+              <!-- Live readout: follows the chart hover, falls back to the latest reading -->
+              <div v-if="modal.readout" class="generation-readout">
+                <div class="generation-readout-header">
+                  <span class="generation-total-label">
+                    {{ modal.readout.isHover ? modal.readout.label : 'Latest' }}
+                  </span>
+                  <span class="generation-readout-total">
+                    Total <strong>{{ formatMegawatts(modal.readout.total) }} MW</strong>
+                  </span>
+                </div>
+                <ul class="generation-legend">
+                  <li v-for="row in modal.readout.rows" :key="row.name">
+                    <button
+                      type="button"
+                      class="generation-legend-row"
+                      :class="{ 'is-hidden': row.hidden, 'is-zero': !row.hidden && row.value <= 0 }"
+                      :title="row.hidden ? `Show ${row.name}` : `Hide ${row.name}`"
+                      @click="toggleGenerationTech(modal, row.name)"
+                    >
+                      <span class="generation-tech-color" :style="{ backgroundColor: row.color }"></span>
+                      <span class="generation-legend-name">{{ row.name }}</span>
+                      <span class="generation-legend-value">{{ formatMegawatts(row.value) }}</span>
+                      <span class="generation-legend-share">{{ row.hidden ? '–' : formatPercent(row.share) }}</span>
+                    </button>
+                  </li>
+                </ul>
               </div>
-              <div
-                v-if="modal.meta && modal.meta.topTechnologies.length"
-                class="generation-top-techs"
-              >
-              <div
-                v-for="tech in modal.meta.topTechnologies"
-                :key="tech.name"
-                class="generation-tech-pill"
-              >
-                <span class="generation-tech-color" :style="{ backgroundColor: tech.color }"></span>
-                <span class="generation-tech-name">{{ tech.name }}</span>
-                <span class="generation-tech-value">{{ formatMegawatts(tech.value) }} MW</span>
-                <span class="generation-tech-share">({{ formatPercent(tech.share) }})</span>
-              </div>
-            </div>
           </div>
 
           <!-- Capacity modal: enriched layout with summary + breakdown -->
@@ -2777,6 +2785,82 @@ export default {
         .forEach(modal => this.applyGenerationCursor(modal.chart, timestamp))
     },
 
+    // Chart.js external tooltip handler for the generation modal: instead of drawing a
+    // tooltip over the chart, store the hovered reading for the readout panel
+    handleGenerationHover(modal, chart, tooltip) {
+      const point = tooltip?.opacity ? tooltip.dataPoints?.[0] : null
+      if (!point) {
+        if (modal.hoverReading) {
+          modal.hoverReading = null
+          this.updateGenerationReadout(modal)
+        }
+        return
+      }
+
+      const index = point.dataIndex
+      if (modal.hoverReading?.index === index) return
+
+      // All technology datasets share one timeline, so read every one at this index
+      // (hidden datasets are not in dataPoints, but their values still belong in the list)
+      const values = {}
+      chart.data.datasets.forEach(dataset => {
+        if (dataset.stack !== 'gen') return
+        values[dataset.label] = Number(dataset.data[index]?.y) || 0
+      })
+
+      modal.hoverReading = {
+        index,
+        label: tooltip.title?.[0] || '',
+        values
+      }
+      this.updateGenerationReadout(modal)
+    },
+
+    updateGenerationReadout(modal) {
+      const items = modal?.meta?.legendItems
+      if (!items) {
+        modal.readout = null
+        return
+      }
+
+      const hover = modal.hoverReading
+      const hidden = modal.hiddenTechs || []
+      const rows = items.map(item => ({
+        name: item.name,
+        color: item.color,
+        value: hover ? (hover.values[item.name] || 0) : item.value,
+        hidden: hidden.includes(item.name),
+        share: 0
+      }))
+
+      // Total and shares follow what is visible in the stacked chart
+      const total = rows.reduce((sum, row) => (row.hidden ? sum : sum + row.value), 0)
+      rows.forEach(row => {
+        row.share = !row.hidden && total > 0 ? (row.value / total) * 100 : 0
+      })
+
+      modal.readout = {
+        isHover: Boolean(hover),
+        label: hover?.label || '',
+        total,
+        rows
+      }
+    },
+
+    toggleGenerationTech(modal, name) {
+      const hidden = modal.hiddenTechs || []
+      const isHidden = hidden.includes(name)
+      modal.hiddenTechs = isHidden ? hidden.filter(tech => tech !== name) : [...hidden, name]
+
+      const chart = modal.chart
+      const datasetIndex = chart?.data.datasets.findIndex(dataset => dataset.label === name) ?? -1
+      if (datasetIndex >= 0) {
+        chart.setDatasetVisibility(datasetIndex, isHidden)
+        chart.update()
+      }
+      this.updateGenerationReadout(modal)
+    },
+
     async updateCapacityModalGenerationValues() {
       if (!this.separateModals.length) return
       const timestamp = Number(this.currentTimestamp)
@@ -4074,6 +4158,9 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
         data: null,
         forecastData: null,
         meta: null,
+        readout: null,
+        hoverReading: null,
+        hiddenTechs: [],
         capacityView: 'bar',
         priceView: 'chart',
         priceHeatmapWindow: null,
@@ -5105,10 +5192,12 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             techSummaries.push({
               name: tech,
               value: latestValue,
-              color: color.border
+              color: color.border,
+              hasData: data.some(point => point.y > 0)
             });
             datasets.push({
               label: tech,
+              hidden: (modal.hiddenTechs || []).includes(tech),
               data,
               borderColor: color.border,
               backgroundColor: color.fill,
@@ -5143,12 +5232,16 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             .slice()
             .sort((a, b) => (b.value || 0) - (a.value || 0));
 
-          const legendItems = sortedSummaries.map(entry => ({
-            name: entry.name,
-            value: entry.value || 0,
-            share: totalGeneration > 0 ? (entry.value / totalGeneration) * 100 : 0,
-            color: entry.color
-          }));
+          // Order is fixed by the latest reading so rows don't jump around while hovering;
+          // technologies with no output in the whole period are left out
+          const legendItems = sortedSummaries
+            .filter(entry => entry.hasData)
+            .map(entry => ({
+              name: entry.name,
+              value: entry.value || 0,
+              share: totalGeneration > 0 ? (entry.value / totalGeneration) * 100 : 0,
+              color: entry.color
+            }));
 
           const timeConfig = this.getGenerationChartTimeConfig();
           const forecastSummary = this.summarizeTodayForecast(forecastSeries);
@@ -5209,16 +5302,11 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
               plugins: {
                 legend: { display: false },
                 tooltip: {
-                  position: 'cursorLeft',
+                  // The values are shown in the readout panel under the chart instead
+                  enabled: false,
                   mode: 'index',
                   intersect: false,
-                  backgroundColor: 'rgba(15, 23, 42, 0.92)',
-                  titleColor: '#f8fafc',
-                  bodyColor: '#e2e8f0',
-                  borderColor: 'rgba(148, 163, 184, 0.35)',
-                  borderWidth: 1,
-                  xAlign: 'right',
-                  caretPadding: 10
+                  external: ({ chart, tooltip }) => this.handleGenerationHover(modal, chart, tooltip)
                 },
                 generationCursor: {
                   timestamp: this.getGenerationCursorTimestamp(),
@@ -5234,6 +5322,8 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
             }
           };
 
+          modal.hoverReading = null;
+          this.updateGenerationReadout(modal);
           modal.chart = markRaw(new Chart(ctx, cfg));
           this.updateGenerationCursorLines();
       }
@@ -10322,11 +10412,6 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   flex: 1;
   min-height: 0;
 }
-.generation-total {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 .generation-forecast {
   display: flex;
   flex-direction: column;
@@ -10366,38 +10451,91 @@ buildPowerFlowForCountry(iso2, ts = Number(this.currentTimestamp)) {
   letter-spacing: 0.04em;
   color: rgba(148, 163, 184, 0.85);
 }
-.generation-total-value {
-  font-size: 22px;
+.generation-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.generation-readout-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 18px;
+}
+.generation-readout-total {
+  font-size: 12px;
+  color: rgba(203, 213, 245, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+.generation-readout-total strong {
+  font-size: 15px;
   font-weight: 600;
   color: #f8fafc;
 }
-.generation-top-techs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.generation-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  column-gap: 14px;
+  row-gap: 1px;
+  /* Long technology lists scroll instead of squeezing the chart */
+  max-height: 132px;
+  overflow-y: auto;
 }
-.generation-tech-pill {
-  display: inline-flex;
+.generation-legend-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto 42px;
   align-items: center;
   gap: 6px;
-  border-radius: 999px;
-  padding: 5px 12px;
-  background: rgba(15, 23, 42, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.32), 0 10px 24px rgba(15, 23, 42, 0.45);
-  font-size: 11px;
+  width: 100%;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: #e2e8f0;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.generation-legend-row:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+.generation-legend-row:focus-visible {
+  outline: 1px solid rgba(148, 163, 184, 0.6);
+}
+.generation-legend-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.generation-legend-value,
+.generation-legend-share {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.generation-legend-share {
+  color: rgba(226, 232, 240, 0.65);
+  font-size: 10px;
+}
+.generation-legend-row.is-zero {
+  opacity: 0.45;
+}
+.generation-legend-row.is-hidden {
+  opacity: 0.4;
+}
+.generation-legend-row.is-hidden .generation-legend-name {
+  text-decoration: line-through;
 }
 .generation-tech-color {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.45);
-}
-.generation-tech-share {
-  color: rgba(226, 232, 240, 0.75);
-  font-size: 10px;
 }
 .generation-updated {
   font-size: 10px;
