@@ -1,9 +1,5 @@
 <template>
   <div class="ph-card">
-    <div v-if="stats" class="ph-header">
-      <div class="ph-avg">{{ formatPrice(stats.avg) }} <span>€/MWh avg</span></div>
-    </div>
-
     <div ref="plot" class="ph-plot">
       <div v-if="loading" class="ph-status">Loading prices…</div>
       <div v-else-if="error" class="ph-status ph-error">{{ error }}</div>
@@ -44,7 +40,7 @@ const MODES = {
     gridLabel: '15-min',
     rowTicks: [0, 1, 2, 3],
     rowLabel: row => `:${String(row * 15).padStart(2, '0')}`,
-    strips: [{ label: 'Average', unit: 'period' }, { label: 'Hourly', unit: 'hour' }]
+    strips: [{ label: 'Hourly', unit: 'hour' }]
   },
   days: {
     column: 'day',
@@ -52,7 +48,7 @@ const MODES = {
     gridLabel: 'Hourly',
     rowTicks: [0, 6, 12, 18, 23],
     rowLabel: row => `${String(row).padStart(2, '0')}:00`,
-    strips: [{ label: 'Average', unit: 'period' }, { label: 'Daily', unit: 'day' }]
+    strips: []
   },
   months: {
     column: 'day',
@@ -60,11 +56,7 @@ const MODES = {
     gridLabel: 'Hourly',
     rowTicks: [0, 6, 12, 18, 23],
     rowLabel: row => `${String(row).padStart(2, '0')}:00`,
-    strips: [
-      { label: 'Average', unit: 'period' },
-      { label: 'Monthly', unit: 'month' },
-      { label: 'Daily', unit: 'day' }
-    ]
+    strips: []
   },
   years: {
     column: 'day',
@@ -72,11 +64,7 @@ const MODES = {
     gridLabel: 'Hourly',
     rowTicks: [0, 6, 12, 18, 23],
     rowLabel: row => `${String(row).padStart(2, '0')}:00`,
-    strips: [
-      { label: 'Average', unit: 'period' },
-      { label: 'Yearly', unit: 'year' },
-      { label: 'Monthly', unit: 'month' }
-    ]
+    strips: []
   }
 }
 
@@ -85,7 +73,6 @@ const LEFT = 48
 const RIGHT = 56
 const SECTION_LABEL = 16
 const STRIP = 26
-const PERIOD_STRIP = 16
 const TICKS = 14
 const GAP = 10
 const MIN_GRID = 120
@@ -119,7 +106,6 @@ const addUnit = (unit, ts, n = 1) => {
 }
 
 const bucketStarts = (unit, start, end) => {
-  if (unit === 'period') return [start]
   const starts = []
   for (let ts = floorTo(unit, start); ts < end; ts = addUnit(unit, ts)) starts.push(ts)
   return starts
@@ -223,7 +209,7 @@ export default {
         slots.forEach((value, i) => {
           if (value === null) return
           const slotTs = columns[Math.floor(i / rowCount)] + (i % rowCount) * mode.slotMs
-          const index = strip.unit === 'period' ? 0 : bucketIndex(starts, slotTs)
+          const index = bucketIndex(starts, slotTs)
           if (index < 0) return
           stripSums[index] += value
           stripCounts[index] += 1
@@ -247,7 +233,7 @@ export default {
         if (v > max) max = v
       }
       if (min === Infinity) return null
-      return { avg: this.model.strips[0].values[0], min, max }
+      return { min, max }
     },
 
     colorScale() {
@@ -283,17 +269,12 @@ export default {
   },
 
   methods: {
-    formatPrice(value) {
-      return Number.isFinite(value) ? value.toFixed(1) : '–'
-    },
-
     getLayout(width, height) {
       const plotWidth = Math.max(10, width - LEFT - RIGHT)
       let y = 4
-      const strips = this.model.strips.map(strip => {
-        const isPeriod = strip.unit === 'period'
-        const section = { label: y, top: y + SECTION_LABEL, height: isPeriod ? PERIOD_STRIP : STRIP }
-        y = section.top + section.height + (isPeriod ? 0 : TICKS) + GAP
+      const strips = this.model.strips.map(() => {
+        const section = { label: y, top: y + SECTION_LABEL, height: STRIP }
+        y = section.top + section.height + TICKS + GAP
         return section
       })
       const gridTop = y + SECTION_LABEL
@@ -400,9 +381,7 @@ export default {
           ctx.fillStyle = color(v)
           ctx.fillRect(LEFT + i * cellWidth, section.top, Math.ceil(cellWidth), section.height)
         })
-        if (strip.unit !== 'period') {
-          drawTicks(strip.unit, strip.starts, cellWidth, section.top + section.height)
-        }
+        drawTicks(strip.unit, strip.starts, cellWidth, section.top + section.height)
       })
 
       const { grid } = layout
@@ -433,7 +412,7 @@ export default {
       const { min, max } = this.stats
       const barX = width - RIGHT + 14
       const barWidth = 10
-      const top = layout.strips[0].top
+      const top = layout.strips[0]?.top ?? layout.grid.top
       const bottom = layout.grid.top + layout.grid.height
       const domainMin = Math.min(min, 0)
       const domainMax = Math.max(max, 1)
@@ -483,7 +462,6 @@ export default {
       const outline = (x, y, w, h) => ctx.strokeRect(x + 0.75, y + 0.75, Math.max(w, 2) - 1.5, h - 1.5)
 
       this.model.strips.forEach((strip, s) => {
-        if (strip.unit === 'period') return
         const index = bucketIndex(strip.starts, ts)
         if (index < 0) return
         const cellWidth = layout.plotWidth / strip.values.length
@@ -570,21 +548,6 @@ export default {
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 18px 40px rgba(8, 15, 32, 0.48);
   color: #e2e8f0;
-}
-
-.ph-header {
-  text-align: right;
-}
-
-.ph-avg {
-  font-size: 20px;
-  font-weight: 500;
-  color: #f8fafc;
-}
-
-.ph-avg span {
-  font-size: 13px;
-  color: rgba(226, 232, 240, 0.8);
 }
 
 .ph-plot {
